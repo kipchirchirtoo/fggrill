@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import db from '../../db';
+import { InventoryStocktakePostingService } from '../../modules/inventory';
 import { logger } from '../../utils/logger';
 import { isGlobalRole } from '../../utils/branchIsolation';
 import { getActiveShiftMode } from '../../services/shiftConfigService';
@@ -40,6 +41,15 @@ const num = (v: any): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+const withKitchenPostingFields = (record: any) => ({
+  ...record,
+  document_id: record.document_id ?? null,
+  document_number: record.document_number ?? null,
+  posted_at: record.posted_at ?? null,
+  posting_status: record.posting_status ?? null,
+  reversal_of_document_id: record.reversal_of_document_id ?? null,
+});
 
 const slugSku = (name: string): string => {
   return 'KITCHEN-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -105,6 +115,7 @@ const getPreviousKitchenClosingByInvId = async (
        FROM public.kitchen_stocktake_items ki
        JOIN public.kitchen_stocktake_shifts ks ON ks.id = ki.shift_id
        WHERE ks.branch_id = $1
+         AND ks.status = 'approved'
          AND ki.inventory_item_id = ANY($2)
          AND (ks.stocktake_date < $3 OR (ks.stocktake_date = $3 AND ks.shift < $4))
        ORDER BY ki.inventory_item_id, ks.stocktake_date DESC, ks.shift DESC`,
@@ -998,7 +1009,8 @@ const getPreviousKitchenStocktakeSeedRows = async (
          FROM public.kitchen_stocktake_items kti
          JOIN public.kitchen_stocktake_shifts ks ON ks.id = kti.shift_id
          LEFT JOIN public.inventory_items ii ON ii.id = kti.inventory_item_id
-        WHERE ks.branch_id = $1
+       WHERE ks.branch_id = $1
+          AND ks.status = 'approved'
           AND (ks.stocktake_date < $2 OR (ks.stocktake_date = $2 AND ks.shift < $3))
         ORDER BY COALESCE(kti.inventory_item_id::text, LOWER(TRIM(kti.item_name))),
                  ks.stocktake_date DESC,
@@ -1471,6 +1483,126 @@ const buildKitchenStocktakeContext = async (
   };
 };
 
+const resolveRestaurantOutlet = async (branchId: number): Promise<any | null> => {
+  const { data, error } = await supabase
+    .from('pos_outlets')
+    .select('id, name, outlet_type')
+    .eq('branch_id', branchId)
+    .in('outlet_type', ['restaurant'])
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+};
+
+const approveKitchenSession = async (
+  existing: any,
+  actorId: string | null | undefined,
+  idempotencyKey: string,
+) => {
+  const context = await buildKitchenStocktakeContext(
+    existing.branch_id,
+    existing.stocktake_date,
+    existing.shift,
+    existing,
+  );
+  const sourceByName = new Map<string, any>(
+    (context.rows || []).map((row: any) => [String(row.item_name || '').trim().toLowerCase(), row]),
+  );
+  const sessionItems = (existing.items || []) as any[];
+  const restaurantOutlet = await resolveRestaurantOutlet(existing.branch_id);
+  const postingLocation = restaurantOutlet?.id
+    ? {
+        branchId: existing.branch_id,
+        locationCode: `OUTLET-${existing.branch_id}-${String(restaurantOutlet.id).toUpperCase()}`,
+        locationName: restaurantOutlet.name || 'Restaurant',
+        locationType: 'pos_outlet' as const,
+        outletId: String(restaurantOutlet.id),
+      }
+    : {
+        branchId: existing.branch_id,
+        departmentCode: 'KITCHEN',
+        locationCode: `DEPT-${existing.branch_id}-KITCHEN`,
+        locationName: 'Kitchen Department',
+        locationType: 'department' as const,
+      };
+
+  const alreadyApprovedWithDocument = existing.status === 'approved' && existing.document_id ? existing : null;
+  const reviewedBy = alreadyApprovedWithDocument?.reviewed_by || actorId || null;
+  const reviewedAt = alreadyApprovedWithDocument?.reviewed_at || new Date().toISOString();
+
+  let posting = null;
+  if (!alreadyApprovedWithDocument) {
+    posting = await InventoryStocktakePostingService.postApproval({
+      actorId: actorId || '',
+      branchId: existing.branch_id,
+      documentReason: `Kitchen stocktake approval ${existing.stocktake_date} shift ${existing.shift}`,
+      idempotencyKey,
+      lines: sessionItems.map((item: any) => {
+        const source = sourceByName.get(String(item.item_name || '').trim().toLowerCase());
+        return {
+          itemName: source?.item_name || item.item_name,
+          itemSku: source?.item_sku,
+          metadata: { kitchen_stocktake_shift_id: existing.id, kitchen_shift: existing.shift },
+          physicalQuantity: num(item.closing_qty),
+          systemQuantity: num(source?.system_qty),
+          unitCost: num(source?.cost_price),
+        };
+      }).filter((row: any) => row.itemSku),
+      location: postingLocation,
+      metadata: { branch_id: existing.branch_id, shift: existing.shift, stocktake_date: existing.stocktake_date },
+      scope: 'kitchen',
+      sourceId: String(existing.id),
+      sourceTable: 'kitchen_stocktake_shifts',
+      stocktakeDate: existing.stocktake_date,
+    });
+  }
+
+  const documentFields = posting ? {
+    document_id: posting.document.document_id,
+    document_number: posting.document.document_number,
+    posted_at: posting.document.posted_at,
+    posting_status: posting.document.posting_status,
+    reversal_of_document_id: posting.document.reversal_of_document_id,
+  } : {
+    document_id: alreadyApprovedWithDocument?.document_id ?? null,
+    document_number: alreadyApprovedWithDocument?.document_number ?? null,
+    posted_at: alreadyApprovedWithDocument?.posted_at ?? null,
+    posting_status: alreadyApprovedWithDocument?.posting_status ?? null,
+    reversal_of_document_id: alreadyApprovedWithDocument?.reversal_of_document_id ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from('kitchen_stocktake_shifts')
+    .update({ status: 'approved', reviewed_by: reviewedBy, reviewed_at: reviewedAt, ...documentFields })
+    .eq('id', existing.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+
+  if (sessionItems.length > 0) {
+    try {
+      await db.query(
+        `UPDATE public.pos_outlet_items poi
+         SET current_stock = kti.closing_qty::numeric,
+             updated_at    = NOW()
+         FROM (VALUES ${sessionItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
+               AS kti(item_name, closing_qty)
+         JOIN public.pos_outlets po ON po.branch_id = $${sessionItems.length * 2 + 1}
+                                   AND po.outlet_type = 'restaurant'
+         WHERE poi.outlet_id = po.id
+           AND LOWER(TRIM(poi.name)) = LOWER(TRIM(kti.item_name))`,
+        [...sessionItems.flatMap((it: any) => [it.item_name, num(it.closing_qty)]), existing.branch_id],
+      );
+    } catch (err) {
+      logger.warn('approveKitchenSession: pos_outlet_items sync failed:', (err as Error).message);
+    }
+  }
+
+  return { data, posting };
+};
+
 /**
  * Sync the kitchen stocktake shift for a branch/date into the unified
  * stock_counts / stock_count_items tables. This is the canonical source used
@@ -1644,39 +1776,13 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
       return;
     }
 
-    const savedItems = (existing.items || []) as any[];
-    const now = new Date().toISOString();
-    const { data, error } = await supabase
-      .from('kitchen_stocktake_shifts')
-      .update({ status: 'approved', reviewed_by: req.user?.id || null, reviewed_at: existing.reviewed_at || now })
-      .eq('id', req.params.id)
-      .select('*')
-      .single();
-    if (error) throw error;
+    const { data } = await approveKitchenSession(
+      existing,
+      req.user?.id || null,
+      req.header('Idempotency-Key') || `kitchen-stocktake-approve-${existing.branch_id}-${existing.stocktake_date}-${existing.shift}`,
+    );
 
-    // Re-apply closing counts to pos_outlet_items so approval is the
-    // authoritative stock-update trigger (submit already does this too,
-    // but approval confirms the accountant has verified the counts).
-    if (savedItems.length > 0) {
-      try {
-        await db.query(
-          `UPDATE public.pos_outlet_items poi
-           SET current_stock = kti.closing_qty::numeric,
-               updated_at    = NOW()
-           FROM (VALUES ${savedItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
-                 AS kti(item_name, closing_qty)
-           JOIN public.pos_outlets po ON po.branch_id = $${savedItems.length * 2 + 1}
-                                     AND po.outlet_type = 'restaurant'
-           WHERE poi.outlet_id = po.id
-             AND LOWER(TRIM(poi.name)) = LOWER(TRIM(kti.item_name))`,
-          [...savedItems.flatMap((it: any) => [it.item_name, num(it.closing_qty)]), existing.branch_id]
-        );
-      } catch (err) {
-        logger.warn('approveKitchenStocktake: pos_outlet_items sync failed:', (err as Error).message);
-      }
-    }
-
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data: withKitchenPostingFields(data) });
   } catch (error) {
     logger.error('approveKitchenStocktake failed:', error);
     next(error);
@@ -1864,7 +1970,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
 
     res.status(200).json({
       success: true,
-      data: {
+      data: withKitchenPostingFields({
         branch_id: branchId,
         stocktake_date: stocktakeDate,
         shift: context.shift,
@@ -1883,10 +1989,10 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
         cheps_on_duty: (shiftRow?.cheps_on_duty?.length ? shiftRow.cheps_on_duty : context.auto_cheps_on_duty) ?? [],
         confirmation_name: shiftRow?.confirmation_name ?? context.auto_confirmation_name ?? null,
         status: shiftRow?.status ?? 'draft',
-        items: context.rows,
+        items: context.rows.map((item: any) => ({ ...item, issuance: 0 })),
         stocktake_variance_large_pct: largePct,
         stocktake_variance_extreme_pct: extremePct,
-      },
+      }),
     });
   } catch (error) {
     logger.error('getKitchenStocktake failed:', error);
@@ -1993,32 +2099,9 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     });
     await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.shift, shiftRow.status, itemsForSync);
 
-    if (savedItems && savedItems.length > 0) {
-      try {
-        await db.query(
-          `UPDATE public.pos_outlet_items poi
-           SET current_stock = kti.closing_qty::numeric,
-               updated_at    = NOW()
-           FROM (VALUES ${savedItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
-                AS kti(item_name, closing_qty)
-           JOIN public.pos_outlets po
-             ON po.branch_id  = $${savedItems.length * 2 + 1}
-            AND po.outlet_type = 'restaurant'
-           WHERE poi.outlet_id = po.id
-             AND LOWER(TRIM(poi.name)) = LOWER(TRIM(kti.item_name))`,
-          [
-            ...savedItems.flatMap((it: any) => [it.item_name, num(it.closing_qty)]),
-            branchId,
-          ]
-        );
-      } catch (err) {
-        logger.warn('kitchen stocktake: failed to sync closing counts to restaurant pos_outlet_items:', (err as Error).message);
-      }
-    }
-
     res.status(200).json({
       success: true,
-      data: {
+      data: withKitchenPostingFields({
         ...shiftRow,
         shift_mode: context.shift_mode,
         shift_label: context.shift_label,
@@ -2033,8 +2116,8 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
         dispenser_name: shiftRow.dispenser_name ?? context.auto_dispenser_name ?? null,
         cheps_on_duty: (shiftRow.cheps_on_duty?.length ? shiftRow.cheps_on_duty : context.auto_cheps_on_duty) ?? [],
         confirmation_name: shiftRow.confirmation_name ?? context.auto_confirmation_name ?? null,
-        items: itemsForSync,
-      },
+        items: itemsForSync.map((item: any) => ({ ...item, issuance: 0 })),
+      }),
     });
   } catch (error) {
     logger.error('saveKitchenStocktake failed:', error);

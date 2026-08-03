@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth';
+import { optionalIdempotency } from '../middleware/idempotency';
 import { UserRole } from '../models/User';
 import { validateModuleAccess, enforceBranchScoping, SourceModule } from '../middleware/moduleAccess';
 import multer from 'multer';
@@ -319,18 +320,33 @@ router.get('/branch-stock', authorize(branchRoles), getBranchStock);
 router.get('/branch-stock/low', authorize(branchRoles), getLowStockItems);
 router.post('/branch-stock/out', authorize(branchRoles), recordStockOut);
 router.post('/branch-stock/adjustment', authorize(branchRoles), updateBranchStock);
-router.post('/branch-stock/receive-supplier', authorize(branchRoles), receiveFromSupplier);
+router.post(
+  '/branch-stock/receive-supplier',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.receive-supplier' }),
+  receiveFromSupplier,
+);
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 router.post('/stock-ledger/export', authorize(branchRoles), exportStockLedger);
 
 // Enterprise inventory controls
 router.get('/department-accounts', authorize(branchRoles), getDepartmentAccounts);
 router.post('/department-accounts/seed', authorize(managerRoles), seedDepartmentAccounts);
-router.post('/department-issues', authorize(branchRoles), recordDepartmentIssue);
+router.post(
+  '/department-issues',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.department-issues' }),
+  recordDepartmentIssue,
+);
 router.post('/department-requests', authorize(branchRoles), createDepartmentRequestLog);
 router.get('/department-requests', authorize(branchRoles), getDepartmentRequestLogs);
 router.get('/department-requests/:id/request.pdf', authorize(branchRoles), printDepartmentRequestDocument);
-router.post('/department-requests/:id/issue', authorize(branchRoles), issueDepartmentRequestLog);
+router.post(
+  '/department-requests/:id/issue',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.department-request-issue' }),
+  issueDepartmentRequestLog,
+);
 router.get('/department-requests/:id', authorize(branchRoles), getDepartmentRequestLog);
 router.get('/department-consumption', authorize(branchRoles), getDepartmentConsumption);
 router.get('/department-issue-journals', authorize(branchRoles), getDepartmentIssueJournals);
@@ -346,7 +362,12 @@ router.put('/pos-inventory-mappings', authorize(managerRoles), upsertPosInventor
 router.get('/stock-requests/approved', authorize(centralRoles), getApprovedRequests);
 router.get('/stock-requests/pending', authorize(managerRoles), getPendingRequests); // Allow branch managers to see pending requests
 router.get('/stock-requests/branch-performance/:branchId', authorize(branchAccountantRoles), getBranchPerformance);
-router.post('/stock-requests', authorize(branchRoles), createStockRequest);
+router.post(
+  '/stock-requests',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.stock-requests' }),
+  createStockRequest,
+);
 router.get('/stock-requests', authorize(branchRoles), getStockRequests);
 router.get('/stock-requests/:id/:document(request|approval).pdf', authorize(branchRoles), printStockRequestDocument);
 router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
@@ -358,10 +379,20 @@ router.put('/stock-requests/:id/reject', authorize(branchAccountantRoles), rejec
 router.patch('/stock-requests/:id/items/:itemId/issue', authorize(centralRoles), setItemIssueQty);
 
 // Confirm dispatch (central storekeeper)
-router.post('/stock-requests/:id/confirm-dispatch', authorize(centralRoles), confirmDispatch);
+router.post(
+  '/stock-requests/:id/confirm-dispatch',
+  authorize(centralRoles),
+  optionalIdempotency({ scope: 'store.stock-request-dispatch' }),
+  confirmDispatch,
+);
 
 // Direct Issues
-router.post('/direct-issues', authorize(centralRoles), createDirectIssue);
+router.post(
+  '/direct-issues',
+  authorize(centralRoles),
+  optionalIdempotency({ scope: 'store.direct-issues' }),
+  createDirectIssue,
+);
 router.get('/direct-issues', authorize(branchRoles), getDirectIssues);
 
 // Backorders
@@ -371,18 +402,38 @@ router.get('/backorders', authorize(branchRoles), getBackorders);
 router.post('/dispatch-notes', authorize(centralRoles), createDispatch);
 router.get('/dispatch-notes', authorize(centralRoles), getDispatchHistory);
 router.get('/dispatch-notes/:id/:document(packing|dispatch|receipt).pdf', authorize(branchRoles), printDispatchDocument);
-router.put('/dispatch-notes/:id/dispatch', authorize(centralRoles), dispatchItems);
+router.put(
+  '/dispatch-notes/:id/dispatch',
+  authorize(centralRoles),
+  optionalIdempotency({ scope: 'store.dispatch-send' }),
+  dispatchItems,
+);
 router.put('/dispatch-notes/:id/logistics', authorize(centralRoles), updateDispatchLogistics);
 
 // Incoming dispatches (Branch receives)
 router.get('/incoming-dispatches', authorize(branchRoles), getIncomingDispatches);
-router.put('/dispatch-notes/:id/confirm', authorize(branchRoles), confirmDelivery);
+router.put(
+  '/dispatch-notes/:id/confirm',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.dispatch-confirm' }),
+  confirmDelivery,
+);
 
 // Branch transfers (Branch → Branch)
-router.post('/branch-transfers', authorize(branchRoles), createBranchTransfer);
+router.post(
+  '/branch-transfers',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.branch-transfers' }),
+  createBranchTransfer,
+);
 router.get('/branch-transfers/outgoing', authorize(branchRoles), getOutgoingBranchTransfers);
 router.get('/branch-transfers/incoming', authorize(branchRoles), getIncomingBranchTransfers);
-router.put('/branch-transfers/:id/confirm', authorize(branchRoles), confirmBranchTransferReceipt);
+router.put(
+  '/branch-transfers/:id/confirm',
+  authorize(branchRoles),
+  optionalIdempotency({ scope: 'store.branch-transfer-confirm' }),
+  confirmBranchTransferReceipt,
+);
 
 // Dashboard routes
 router.get('/dashboard/central', authorize(centralRoles), getCentralDashboard);
@@ -437,13 +488,13 @@ router.route('/suppliers/:id')
 
 router.route('/stock-takes')
   .get(authorize(staffRoles), getStockTakes)
-  .post(authorize(stockTakeOwnerRoles), createStockTake);
+  .post(authorize(stockTakeOwnerRoles), optionalIdempotency({ scope: 'store.stock-takes' }), createStockTake);
 
 router.get('/stock-takes/:id', authorize(staffRoles), getStockTake);
-router.put('/stock-takes/:id', authorize(stockTakeOwnerRoles), updateStockTake);
+router.put('/stock-takes/:id', authorize(stockTakeOwnerRoles), optionalIdempotency({ scope: 'store.stock-take-update' }), updateStockTake);
 router.get('/stock-takes/:id/items', authorize(staffRoles), getStockTakeItems);
-router.put('/stock-takes/:id/complete', authorize(stockTakeOwnerRoles), completeStockTake);
-router.post('/stock-takes/:id/submit-accountant', authorize(stockTakeOwnerRoles), submitStockTakeToAccountant);
+router.put('/stock-takes/:id/complete', authorize(stockTakeOwnerRoles), optionalIdempotency({ scope: 'store.stock-take-complete' }), completeStockTake);
+router.post('/stock-takes/:id/submit-accountant', authorize(stockTakeOwnerRoles), optionalIdempotency({ scope: 'store.stock-take-submit-accountant' }), submitStockTakeToAccountant);
 router.post('/stock-takes/:id/accountant-review', authorize(accountantRoles), reviewStockTakeByAccountant);
 router.post('/stock-takes/:id/auditor-finalize', authorize(auditorRoles), finalizeStockTakeByAuditor);
 router.put('/stock-take-items/:id', authorize(staffRoles), updateStockTakeItem);
@@ -473,7 +524,7 @@ router.get('/central-spoilage/summary', authorize(staffRoles), getSpoilageSummar
 router.get('/central-spoilage/items', authorize(staffRoles), getSpoilageItems);
 router.post('/central-spoilage', authorize(managerRoles), createSpoilageRecord);
 router.get('/central-spoilage/:id', authorize(staffRoles), getSpoilageRecord);
-router.patch('/central-spoilage/:id/status', authorize(auditorRoles), updateSpoilageStatus);
+router.patch('/central-spoilage/:id/status', authorize(auditorRoles), optionalIdempotency({ scope: 'store.central-spoilage-status' }), updateSpoilageStatus);
 
 // =====================================================
 // KITCHEN USAGE TRACKING ROUTES

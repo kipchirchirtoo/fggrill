@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../data/branch_storekeeper_repository.dart';
+import '../requisitions/data/store_requisition_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & model
@@ -102,7 +102,7 @@ class _BranchStockRequestScreenState
   Future<void> _loadData() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final repo = ref.read(storeRequisitionRepositoryProvider);
       final catalog = await repo.masterCatalog(limit: 500);
       if (!mounted) return;
       setState(() {
@@ -317,7 +317,7 @@ class _BranchStockRequestScreenState
 
     setState(() => _saving = true);
     try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final repo = ref.read(storeRequisitionRepositoryProvider);
       await repo.createStockRequest({
         'request_type': 'ROUTINE',
         'priority': _priority,

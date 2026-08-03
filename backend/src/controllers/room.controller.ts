@@ -407,13 +407,28 @@ export const updateRoomStatus = async (
   try {
     const { status, notes } = req.body;
 
+    // GET /rooms returns a *computed* effective status (resolveEffectiveRoomState)
+    // that ranks the housekeeping status (hk_status) above rooms.status. So a
+    // manual status change here must also normalise hk_status, otherwise e.g.
+    // "Mark available" is silently overridden back to "cleaning" on the next
+    // refresh whenever the room still carries a checkout / vacant_dirty /
+    // cleaning_in_progress housekeeping status left over from the last checkout.
+    const hkStatusByRoomStatus: Record<string, string> = {
+      available: 'vacant_clean',
+      cleaning: 'cleaning_in_progress',
+      dirty: 'vacant_dirty',
+    };
+    const mappedHkStatus = hkStatusByRoomStatus[String(status).toLowerCase()];
+
     const { data: room, error } = await supabase
       .from('rooms')
       .update({
         status,
         notes,
         updated_at: new Date().toISOString(),
-        ...(status === 'cleaning' ? { last_cleaned: new Date().toISOString() } : {})
+        ...(status === 'cleaning' ? { last_cleaned: new Date().toISOString() } : {}),
+        ...(mappedHkStatus ? { hk_status: mappedHkStatus } : {}),
+        ...(status === 'available' ? { cleaning_priority: null } : {}),
       })
       .eq('id', req.params.id)
       .select()

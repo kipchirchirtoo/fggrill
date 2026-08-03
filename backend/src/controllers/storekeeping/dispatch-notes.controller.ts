@@ -900,7 +900,12 @@ export const dispatchItems = async (
         if (notes) updates.notes = notes;
 
         // Perform validation, status update, and stock deduction centrally
-        const result = await BranchInventoryService.dispatchItems(id, userId, updates);
+        const result = await BranchInventoryService.dispatchItems(
+            id,
+            userId,
+            updates,
+            req.idempotencyKey || null
+        );
 
         res.status(200).json({
             success: true,
@@ -935,7 +940,8 @@ export const confirmDelivery = async (
             id,
             req.user?.id,
             items,
-            notes
+            notes,
+            req.idempotencyKey || null
         );
 
         res.status(200).json({

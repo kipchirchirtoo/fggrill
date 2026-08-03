@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Compact Excel-style number input cell.
 class EditableCell extends StatefulWidget {
   final int? value;
-  final ValueChanged<int?> onChanged;
   final bool readOnly;
   final FocusNode? focusNode;
   final VoidCallback? onNext;
+  final ValueChanged<int?> onChanged;
 
   const EditableCell({
     super.key,
     required this.value,
-    required this.onChanged,
     required this.readOnly,
+    required this.onChanged,
     this.focusNode,
     this.onNext,
   });
@@ -23,116 +22,147 @@ class EditableCell extends StatefulWidget {
 }
 
 class _EditableCellState extends State<EditableCell> {
-  late final TextEditingController _ctrl;
-  bool _isFocused = false;
+  final TextEditingController _controller = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(
-        text: widget.value != null ? '${widget.value}' : '');
-    widget.focusNode?.addListener(_onFocus);
-  }
-
-  void _onFocus() {
-    if (mounted) {
-      setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
-    }
+    _controller.text = _valueText(widget.value);
+    widget.focusNode?.addListener(_handleFocusChange);
   }
 
   @override
-  void didUpdateWidget(covariant EditableCell old) {
-    super.didUpdateWidget(old);
-    if (old.value != widget.value) {
-      final s = widget.value != null ? '${widget.value}' : '';
-      if (_ctrl.text != s) {
-        _ctrl.text = s;
-        _ctrl.selection = TextSelection.collapsed(offset: s.length);
-      }
+  void didUpdateWidget(covariant EditableCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      widget.focusNode?.addListener(_handleFocusChange);
     }
-    if (old.focusNode != widget.focusNode) {
-      old.focusNode?.removeListener(_onFocus);
-      widget.focusNode?.addListener(_onFocus);
+
+    final nextText = _valueText(widget.value);
+    if (_controller.text != nextText) {
+      _controller.text = nextText;
+      _controller.selection = TextSelection.collapsed(offset: nextText.length);
     }
   }
 
   @override
   void dispose() {
-    widget.focusNode?.removeListener(_onFocus);
-    _ctrl.dispose();
+    widget.focusNode?.removeListener(_handleFocusChange);
+    _controller.dispose();
     super.dispose();
   }
 
-  void _parse(String text) {
-    if (text.isEmpty) { widget.onChanged(null); return; }
-    final v = int.tryParse(text);
-    widget.onChanged(v != null && v >= 0 ? v : null);
+  String _valueText(int? value) => value == null ? '' : value.toString();
+
+  void _handleFocusChange() {
+    if (widget.focusNode?.hasFocus == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+      });
+    }
+  }
+
+  void _handleChanged(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      widget.onChanged(null);
+      return;
+    }
+    widget.onChanged(int.tryParse(trimmed));
+  }
+
+  void _moveNext() {
+    widget.onNext?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    final accent = const Color(0xFF217346); // Excel green
+    final theme = Theme.of(context);
+
     if (widget.readOnly) {
-      return Text(
-        widget.value != null ? '${widget.value}' : '—',
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700),
+      return Container(
+        height: 46,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Text(
+          widget.value?.toString() ?? '—',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0F172A),
+          ),
+        ),
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 62,
-          height: 22,
-          child: TextField(
-            controller: _ctrl,
-            focusNode: widget.focusNode,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: _parse,
-            onSubmitted: (_) => widget.onNext?.call(),
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: '—',
-              hintStyle: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-              filled: true,
-              fillColor: _isFocused
-                  ? const Color(0xFFE8F5E9)
-                  : Colors.grey.shade50,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(2),
-                borderSide: BorderSide(
-                  color: _isFocused ? accent : Colors.grey.shade300,
-                  width: _isFocused ? 1.5 : 0.8,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(2),
-                borderSide: BorderSide(color: accent, width: 1.5),
+    return SizedBox(
+      width: 120,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter): _moveNext,
+          const SingleActivator(LogicalKeyboardKey.numpadEnter): _moveNext,
+        },
+        child: TextField(
+          controller: _controller,
+          focusNode: widget.focusNode,
+          keyboardType: TextInputType.number,
+          textInputAction:
+              widget.onNext == null ? TextInputAction.done : TextInputAction.next,
+          textAlign: TextAlign.center,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0F172A),
+          ),
+          decoration: InputDecoration(
+            hintText: '0',
+            hintStyle: TextStyle(
+              color: Colors.grey.shade400,
+              fontWeight: FontWeight.w600,
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.6,
               ),
             ),
           ),
+          onTap: () {
+            _controller.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: _controller.text.length,
+            );
+          },
+          onChanged: _handleChanged,
+          onEditingComplete: _moveNext,
+          onSubmitted: (_) => _moveNext(),
         ),
-        if (widget.onNext != null) ...[
-          const SizedBox(width: 2),
-          GestureDetector(
-            onTap: widget.onNext,
-            child: Icon(
-              Icons.arrow_downward_rounded,
-              size: 12,
-              color: _isFocused ? accent : Colors.grey.shade400,
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }

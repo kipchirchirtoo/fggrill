@@ -283,40 +283,49 @@ class _MasterSideNav<T> extends ConsumerWidget {
 
                   return Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: shouldUseCompactHeader ? 8 : 16,
+                      horizontal: shouldUseCompactHeader ? 6 : 16,
                     ),
                     child: shouldUseCompactHeader
-                        ? Stack(
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Align(
-                                alignment: Alignment.center,
-                                child: _Logo(
-                                  initials: sidebarInitials ?? initials,
-                                ),
-                              ),
-                              if (canToggle)
-                                Align(
-                                  alignment: Alignment.topRight,
-                                  child: IconButton(
-                                    tooltip: shouldUseCompactHeader &&
-                                            !isCollapsed
-                                        ? 'Collapse sidebar'
-                                        : 'Expand sidebar',
-                                    onPressed: onToggleCollapsed,
-                                    icon: Icon(
-                                      shouldUseCompactHeader && !isCollapsed
-                                          ? Icons.keyboard_double_arrow_left
-                                          : Icons.keyboard_double_arrow_right,
-                                      size: 18,
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 28,
-                                      minHeight: 28,
+                              _Logo(initials: sidebarInitials ?? initials),
+                              if (canToggle) ...[
+                                const SizedBox(height: 4),
+                                Tooltip(
+                                  message: shouldUseCompactHeader &&
+                                          !isCollapsed
+                                      ? 'Collapse sidebar'
+                                      : 'Expand sidebar',
+                                  child: InkWell(
+                                    onTap: onToggleCollapsed,
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: (palette?.surface ??
+                                                Colors.white)
+                                            .withValues(alpha: 0.96),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: borderColor,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        shouldUseCompactHeader &&
+                                                !isCollapsed
+                                            ? Icons.keyboard_double_arrow_left
+                                            : Icons.keyboard_double_arrow_right,
+                                        size: 13,
+                                        color: palette?.text ??
+                                            AppColors.kTextPrimary,
+                                      ),
                                     ),
                                   ),
                                 ),
+                              ],
                             ],
                           )
                         : Row(

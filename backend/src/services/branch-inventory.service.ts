@@ -14,6 +14,7 @@ import {
   getCentralWarehouseRecord,
 } from './inventory-warehouse.service';
 import { KYOGONG_BRANCH_STORE_CUTOVER_AT } from './kyogong-branch-cutover.service';
+import { StoreTransferPostingService } from '../modules/inventory';
 
 // ============================================================
 // TYPES
@@ -1581,7 +1582,8 @@ export async function dispatchItems(
     driver_phone?: string;
     estimated_delivery?: string;
     notes?: string;
-  }
+  },
+  idempotencyKey?: string | null,
 ) {
   try {
     // Validate dispatch ID
@@ -1669,58 +1671,19 @@ export async function dispatchItems(
       );
     }
 
-    // Deduct from central warehouse stock and add to in-transit in bulk
-    const bulkItems = dispatch.items.map((item: any) => ({
-      sku: item.item_sku,
-      qty: Number(item.dispatched_quantity || 0)
-    }));
-
-    logger.info(`Executing bulk dispatch stock deduction for dispatch ${dispatch.dispatch_number} via RPC...`);
-    const { error: bulkStockError } = await supabase
-      .rpc('bulk_dispatch_stock_out', {
-        p_dispatch_id: dispatchId,
-        p_dispatcher_id: dispatcherId || null,
-        p_items: bulkItems
-      });
-
-    if (bulkStockError) {
-      logger.error('Bulk dispatch stock out RPC failed:', bulkStockError);
-      throw bulkStockError;
-    }
-
-    // Best-effort foundation analytics logging
-    for (const item of dispatch.items) {
-      try {
-        const { data: simpleItem } = await supabase
-          .from('simple_items')
-          .select('item_name, description, quantity')
-          .eq('sku', item.item_sku)
-          .maybeSingle();
-
-        await recordFoundationMovementBestEffort({
-          movementType: 'branch_requisition_dispatch',
-          sku: item.item_sku,
-          itemName: simpleItem?.item_name || simpleItem?.description || item.item_sku,
-          quantity: item.dispatched_quantity,
-          sourceBranchId: dispatch.from_branch_id,
-          destinationBranchId: dispatch.to_branch_id,
-          sourceLocation: branchStoreLocation(dispatch.from_branch_id, 'Central Store', true),
-          destinationLocation: transitLocation(dispatchId, dispatch.dispatch_number, dispatch.to_branch_id),
-          actorId: dispatcherId,
-          documentType: 'dispatch_document',
-          documentReference: dispatch.dispatch_number,
-          reason: `Dispatch ${dispatch.dispatch_number} to branch ${dispatch.to_branch_id}`,
-          knownSourceLegacyQuantity: simpleItem?.quantity ?? item.dispatched_quantity,
-          metadata: {
-            dispatch_id: dispatchId,
-            stock_request_id: dispatch.stock_request_id,
-            to_branch_id: dispatch.to_branch_id
-          }
-        });
-      } catch (itemError: any) {
-        logger.warn(`Foundation logging failed for item ${item.item_sku}:`, itemError?.message);
-      }
-    }
+    const postingResult = await StoreTransferPostingService.postDispatchToTransit({
+      actorId: dispatcherId,
+      destinationBranchId: dispatch.to_branch_id,
+      dispatchId,
+      dispatchNumber: dispatch.dispatch_number,
+      fromBranchId: dispatch.from_branch_id,
+      idempotencyKey: idempotencyKey || `compat-dispatch-${dispatchId}`,
+      items: dispatch.items,
+      notes: updates?.notes || dispatch.dispatch_notes || dispatch.notes || null,
+      sourceTable: 'dispatch_notes',
+      sourceTableId: dispatchId,
+      sourceType: dispatch.source_warehouse_id ? 'central_store' : 'branch_store',
+    });
 
     // Prepare update data
     const updateData: any = {
@@ -1780,7 +1743,8 @@ export async function dispatchItems(
       success: true,
       dispatch_id: dispatchId,
       dispatch_number: dispatch.dispatch_number,
-      status: 'IN_TRANSIT'
+      status: 'IN_TRANSIT',
+      ...postingResult.document,
     };
   } catch (error) {
     logger.error(`Error in dispatchItems:`, error);
@@ -1866,7 +1830,8 @@ export async function confirmDelivery(
   dispatchId: string,
   receiverId: string,
   receivedItems: { id: string; received_quantity: number; damaged_quantity?: number; missing_quantity?: number; discrepancy_reason?: string }[],
-  deliveryNotes?: string
+  deliveryNotes?: string,
+  idempotencyKey?: string | null,
 ) {
   // Get dispatch details
   const { data: dispatch, error: noteError } = await supabase
@@ -1892,97 +1857,40 @@ export async function confirmDelivery(
   if (noteItemsError) throw noteItemsError;
   dispatch.items = noteItems || [];
 
-  // Map receivedItems to the format expected by the database RPC
-  const bulkItems = receivedItems.map((item: any) => {
-    const itemId = item.id || item.item_id;
-    const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
-    if (!dispatchItem) return null;
+  const acceptedItems = receivedItems
+    .map((item: any) => {
+      const itemId = item.id || item.item_id;
+      const dispatchItem = dispatch.items.find((dispatchLine: any) => dispatchLine.id === itemId);
+      if (!dispatchItem) return null;
 
-    const receivedQty = Math.max(0, Math.round(
-      Number(item.received_quantity ?? item.quantity ?? 0)
-    ));
-    const damagedQty = Math.max(0, Number(item.damaged_quantity ?? item.damaged ?? 0)) || 0;
-    const missingQty = Math.max(0, Number(item.missing_quantity ?? item.missing ?? 0)) || 0;
-    const reason = item.discrepancy_reason || item.note || '';
+      const receivedQty = Math.max(0, Math.round(
+        Number(item.received_quantity ?? item.quantity ?? 0),
+      ));
+      const damagedQty = Math.max(0, Number(item.damaged_quantity ?? item.damaged ?? 0)) || 0;
+      const acceptedQty = Math.max(0, receivedQty - damagedQty);
+      if (acceptedQty <= 0) return null;
 
-    return {
-      id: itemId,
-      received_qty: receivedQty,
-      damaged_qty: damagedQty,
-      missing_qty: missingQty,
-      reason
-    };
-  }).filter(Boolean);
+      return {
+        item_name: dispatchItem.item_name || dispatchItem.item_sku,
+        item_sku: dispatchItem.item_sku,
+        quantity_received: acceptedQty,
+      };
+    })
+    .filter(Boolean) as Array<{ item_name: string; item_sku: string; quantity_received: number }>;
 
-  logger.info(`Executing bulk confirm delivery for dispatch ${dispatch.dispatch_number} via RPC...`);
-  const { error: bulkConfirmError } = await supabase
-    .rpc('bulk_confirm_delivery', {
-      p_dispatch_id: dispatchId,
-      p_receiver_id: receiverId || null,
-      p_items: bulkItems
-    });
-
-  if (bulkConfirmError) {
-    logger.error('Bulk confirm delivery RPC failed:', bulkConfirmError);
-    throw bulkConfirmError;
-  }
-
-  // Best-effort foundation analytics logging
-  for (const receivedItem of receivedItems) {
-    const itemId = receivedItem.id || (receivedItem as any).item_id;
-    if (!itemId) continue;
-
-    const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
-    if (!dispatchItem) continue;
-
-    const receivedQty = Math.max(0, Math.round(
-      Number((receivedItem as any).received_quantity ?? (receivedItem as any).quantity ?? 0)
-    ));
-    const damagedQty = Math.max(0, Number((receivedItem as any).damaged_quantity ?? (receivedItem as any).damaged ?? 0)) || 0;
-    const acceptedQty = Math.max(0, receivedQty - damagedQty);
-    const missingQty = Math.max(0, Number((receivedItem as any).missing_quantity ?? (receivedItem as any).missing ?? 0)) || 0;
-    const receiptStatus =
-      damagedQty > 0 ? 'damaged'
-        : missingQty > 0 ? 'missing'
-          : receivedQty === dispatchItem.dispatched_quantity ? 'matched'
-            : receivedQty > 0 ? 'partially_matched'
-              : 'rejected';
-
-    if (acceptedQty > 0) {
-      try {
-        const { data: simpleItem } = await supabase
-          .from('simple_items')
-          .select('item_name, description')
-          .eq('sku', dispatchItem.item_sku)
-          .maybeSingle();
-
-        await recordFoundationMovementBestEffort({
-          movementType: 'transfer',
-          sku: dispatchItem.item_sku,
-          itemName: simpleItem?.item_name || simpleItem?.description || dispatchItem.item_sku,
-          quantity: acceptedQty,
-          sourceBranchId: dispatch.to_branch_id,
-          destinationBranchId: dispatch.to_branch_id,
-          sourceLocation: transitLocation(dispatchId, dispatch.dispatch_number, dispatch.to_branch_id),
-          destinationLocation: branchStoreLocation(dispatch.to_branch_id),
-          actorId: receiverId,
-          documentType: 'receipt_verification',
-          documentReference: dispatch.dispatch_number,
-          reason: `Branch receipt confirmation for ${dispatch.dispatch_number}`,
-          knownSourceLegacyQuantity: acceptedQty,
-          metadata: {
-            dispatch_id: dispatchId,
-            stock_request_id: dispatch.stock_request_id,
-            damaged_quantity: damagedQty,
-            missing_quantity: missingQty,
-            receipt_status: receiptStatus
-          }
-        });
-      } catch (itemError: any) {
-        logger.warn(`Foundation logging failed for item ${dispatchItem.item_sku}:`, itemError?.message);
-      }
-    }
-  }
+  const postingResult = acceptedItems.length > 0
+    ? await StoreTransferPostingService.postTransitReceipt({
+      actorId: receiverId,
+      dispatchId,
+      dispatchNumber: dispatch.dispatch_number,
+      idempotencyKey: idempotencyKey || `compat-delivery-${dispatchId}`,
+      items: acceptedItems,
+      notes: deliveryNotes || null,
+      receivingBranchId: dispatch.to_branch_id,
+      sourceTable: 'dispatch_notes',
+      sourceTableId: dispatchId,
+    })
+    : null;
 
   // Clear in-transit
   await supabase
@@ -2050,7 +1958,17 @@ export async function confirmDelivery(
 
   logger.info(`Dispatch ${dispatch.dispatch_number ?? dispatchId} confirmed at branch`);
 
-  return { status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED' };
+  return {
+    status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED',
+    ...(postingResult?.document || {
+      document_id: null,
+      document_number: null,
+      document_type: null,
+      posted_at: null,
+      posting_status: null,
+      reversal_of_document_id: null,
+    }),
+  };
 }
 
 /**

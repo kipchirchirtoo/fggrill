@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
-import { updateBranchStock, resolveBranchStockSource } from './branch-inventory.service';
+import { StoreTransferPostingService } from '../modules/inventory';
+import { resolveBranchStockSource } from './branch-inventory.service';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
@@ -26,7 +27,8 @@ export async function initiateTransfer(
   userId: string,
   items: TransferItem[],
   notes?: string,
-  urgency?: 'NORMAL' | 'URGENT'
+  urgency?: 'NORMAL' | 'URGENT',
+  idempotencyKey?: string | null,
 ): Promise<Record<string, unknown>> {
   if (fromBranchId === toBranchId) {
     throw new AppError('Cannot transfer stock to the same branch', 400);
@@ -84,19 +86,6 @@ export async function initiateTransfer(
         throw new AppError(`Insufficient stock for item ${sku}. Available: ${stockSource.available}, Requested: ${qty}`, 400);
       }
 
-      // Deduct stock immediately
-      await updateBranchStock(
-        fromBranchId,
-        sku,
-        -qty,
-        'BRANCH_TRANSFER_DISPATCH',
-        userId,
-        'branch_stock_transfers',
-        transfer.id,
-        transferNumber,
-        `Branch transfer ${transferNumber} to branch #${toBranchId}`
-      );
-
       transferItems.push({
         transfer_id: transfer.id,
         item_sku: sku,
@@ -113,8 +102,25 @@ export async function initiateTransfer(
       throw itemsError;
     }
 
+    const postingResult = await StoreTransferPostingService.postDispatchToTransit({
+      actorId: userId,
+      destinationBranchId: toBranchId,
+      dispatchId: transfer.id,
+      dispatchNumber: transferNumber,
+      fromBranchId,
+      idempotencyKey: idempotencyKey || `compat-branch-transfer-dispatch-${transfer.id}`,
+      items: transferItems.map((item) => ({
+        item_sku: String(item.item_sku || ''),
+        dispatched_quantity: Number(item.quantity_dispatched || 0),
+      })),
+      notes: notes || null,
+      sourceTable: 'branch_stock_transfers',
+      sourceTableId: transfer.id,
+      sourceType: 'branch_store',
+    });
+
     logger.info(`Branch stock transfer ${transferNumber} initiated by ${userId}`);
-    return { ...transfer, items: transferItems };
+    return { ...transfer, items: transferItems, ...postingResult.document };
   } catch (error) {
     // If any item fails, update transfer to show it had error (in a transaction system we would roll back,
     // but since we deduct stock incrementally, we update status to document issues)
@@ -133,7 +139,8 @@ export async function confirmTransferReceipt(
   transferId: string,
   userId: string,
   itemsReceived: ReceiptItem[],
-  notes?: string
+  notes?: string,
+  idempotencyKey?: string | null,
 ): Promise<Record<string, unknown>> {
   // Fetch transfer and its items
   const { data: transfer, error: fetchError } = await supabase
@@ -153,6 +160,7 @@ export async function confirmTransferReceipt(
   let hasDiscrepancy = false;
   const updates = [];
   const varianceLogs = [];
+  const acceptedItems: Array<{ item_sku: string; quantity_received: number }> = [];
 
   for (const item of transfer.items) {
     const rec = itemsReceived.find(r => 
@@ -171,18 +179,12 @@ export async function confirmTransferReceipt(
         .eq('id', item.id)
     );
 
-    // Add stock to destination branch immediately
-    await updateBranchStock(
-      transfer.to_branch_id,
-      item.item_sku,
-      qtyReceived,
-      'BRANCH_TRANSFER_RECEIPT',
-      userId,
-      'branch_stock_transfers',
-      transfer.id,
-      transfer.transfer_number,
-      `Branch transfer receipt ${transfer.transfer_number} from branch #${transfer.from_branch_id}`
-    );
+    if (qtyReceived > 0) {
+      acceptedItems.push({
+        item_sku: item.item_sku,
+        quantity_received: qtyReceived,
+      });
+    }
 
     // If quantity received differs from dispatched, log discrepancies
     if (qtyReceived !== Number(item.quantity_dispatched)) {
@@ -220,6 +222,20 @@ export async function confirmTransferReceipt(
   // Commit items updates
   await Promise.all(updates);
 
+  const postingResult = acceptedItems.length > 0
+    ? await StoreTransferPostingService.postTransitReceipt({
+      actorId: userId,
+      dispatchId: transfer.id,
+      dispatchNumber: transfer.transfer_number,
+      idempotencyKey: idempotencyKey || `compat-branch-transfer-receipt-${transfer.id}`,
+      items: acceptedItems,
+      notes: notes || null,
+      receivingBranchId: transfer.to_branch_id,
+      sourceTable: 'branch_stock_transfers',
+      sourceTableId: transfer.id,
+    })
+    : null;
+
   // Write exceptions/variance logs
   if (varianceLogs.length > 0) {
     const { error: varError } = await supabase
@@ -250,5 +266,15 @@ export async function confirmTransferReceipt(
   }
 
   logger.info(`Branch stock transfer ${transfer.transfer_number} confirmed received by ${userId} with status ${finalStatus}`);
-  return updatedTx;
+  return {
+    ...updatedTx,
+    ...(postingResult?.document || {
+      document_id: null,
+      document_number: null,
+      document_type: null,
+      posted_at: null,
+      posting_status: null,
+      reversal_of_document_id: null,
+    }),
+  };
 }

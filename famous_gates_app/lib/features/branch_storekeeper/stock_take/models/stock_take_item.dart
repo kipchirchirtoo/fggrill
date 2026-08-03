@@ -27,18 +27,15 @@ class StockTakeItem {
     required this.category,
   });
 
-  /// Real additions/restocks into the outlet during the period. `sdds` is
-  /// stored negated by the data mappers (a historical quirk), so `adds`
-  /// exposes the true positive quantity for display and totals.
   int get adds => -sdds;
 
-  /// Total stock available before sales = opening + additions.
   int get total => openingStock + adds;
 
-  /// Closing = total available − sales (opening + adds − sales). Equivalent to
-  /// the original `openingStock - sales - sdds` since `sdds == -adds`.
   int get closingStock => total - sales;
+
   int get variance => (physicalCount ?? 0) - closingStock;
+
+  static const Object _unset = Object();
 
   StockTakeItem copyWith({
     String? id,
@@ -48,10 +45,10 @@ class StockTakeItem {
     int? openingStock,
     int? sales,
     int? sdds,
-    int? physicalCount,
-    String? reason,
-    String? explanation,
-    String? actionTaken,
+    Object? physicalCount = _unset,
+    Object? reason = _unset,
+    Object? explanation = _unset,
+    Object? actionTaken = _unset,
     String? category,
   }) {
     return StockTakeItem(
@@ -62,13 +59,81 @@ class StockTakeItem {
       openingStock: openingStock ?? this.openingStock,
       sales: sales ?? this.sales,
       sdds: sdds ?? this.sdds,
-      physicalCount: physicalCount ?? this.physicalCount,
-      reason: reason ?? this.reason,
-      explanation: explanation ?? this.explanation,
-      actionTaken: actionTaken ?? this.actionTaken,
+      physicalCount: identical(physicalCount, _unset)
+          ? this.physicalCount
+          : physicalCount as int?,
+      reason: identical(reason, _unset) ? this.reason : reason as String?,
+      explanation: identical(explanation, _unset)
+          ? this.explanation
+          : explanation as String?,
+      actionTaken: identical(actionTaken, _unset)
+          ? this.actionTaken
+          : actionTaken as String?,
       category: category ?? this.category,
     );
   }
+}
+
+const Set<String> _storeStocktakeBarKeywords = {
+  'bar drinks',
+  'soft drink',
+  'soft drinks',
+  'energy drink',
+  'energy drinks',
+  'beer',
+  'beers',
+  'cider',
+  'ciders',
+  'wine',
+  'wines',
+  'cognac',
+  'whisky',
+  'whiskey',
+  'vodka',
+  'gin',
+  'rum',
+  'tequila',
+  'brandy',
+  'condom',
+  'condoms',
+  'tots',
+  'liqueur',
+  'spirits',
+  'champagne',
+  'cocktail',
+  'bar stock',
+};
+
+String _normalizedInventoryText(dynamic value) => '$value'
+    .toLowerCase()
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .trim();
+
+bool _hasStoreStocktakeBarKeyword(String text) {
+  final normalized = _normalizedInventoryText(text);
+  return _storeStocktakeBarKeywords.any(normalized.contains);
+}
+
+bool isAllowedStoreStocktakeItem({
+  required String category,
+  required String sku,
+  required String name,
+  String storeType = '',
+}) {
+  final normalizedStoreType = _normalizedInventoryText(storeType);
+  if (normalizedStoreType == 'bar store') return false;
+  if (normalizedStoreType.isNotEmpty && normalizedStoreType != 'foodstuffs') {
+    return false;
+  }
+
+  if (_hasStoreStocktakeBarKeyword(category) ||
+      _hasStoreStocktakeBarKeyword(sku) ||
+      _hasStoreStocktakeBarKeyword(name)) {
+    return false;
+  }
+
+  return true;
 }
 
 String getBarCategory(String name) {

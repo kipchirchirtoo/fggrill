@@ -5,8 +5,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import * as BranchStockTransferService from '../../services/branch-stock-transfer.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
 
 // ============================================================
@@ -123,19 +125,9 @@ export const recordStockOut = async (
       notes || reason
     );
 
-    // Auto-sync to bar stock if reason/department targets bar
-    const department = (reason || '').toLowerCase();
-    if (department.includes('bar') || ['sports_bar', 'main_bar', 'executive_bar', 'bar'].includes(department)) {
-      const { recordBarStockMovement } = await import('../../services/unified-bar-stock.service');
-      await recordBarStockMovement({
-        branchId,
-        sku: item_sku,
-        quantityDelta: Math.abs(quantity),
-        movementType: 'dispatch_receive',
-        notes: `Issued from store: ${notes || reason}`,
-        performedBy: req.user?.id
-      }).catch((err: any) => logger.warn('recordStockOut: bar sync failed:', err?.message));
-    }
+    // Keep generic stock-out as a branch-store deduction only.
+    // POS outlet stock must increase only through the dedicated
+    // Stock Out & Requisitions / pos_outlet_issue workflow.
 
     res.status(200).json({
       success: true,
@@ -588,7 +580,7 @@ export const dispatchItems = async (
         driver_phone: resolvedDriverPhone,
         estimated_delivery,
         notes
-      });
+      }, req.idempotencyKey || null);
 
       logger.info(`Dispatch ${dispatch.dispatch_number} successfully sent by ${req.user.email}`);
 
@@ -788,7 +780,8 @@ export const confirmDelivery = async (
       id,
       req.user?.id,
       items,
-      notes
+      notes,
+      req.idempotencyKey || null
     );
 
     res.status(200).json({
@@ -1087,14 +1080,140 @@ export const getStockMovements = async (
 };
 
 export const createBranchTransfer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  res.status(200).json({ success: true, message: 'Branch transfer created' });
+  try {
+    const userId = req.user?.id;
+    const isCentral = isGlobalRole(req.user?.role);
+    const fromBranchId = Number(req.body?.from_branch_id || req.user?.branch_id || 0);
+    const toBranchId = Number(req.body?.to_branch_id || req.body?.destination_branch_id || 0);
+    const notes = req.body?.notes || req.body?.note || null;
+    const urgency = String(req.body?.urgency || 'NORMAL').toUpperCase() === 'URGENT' ? 'URGENT' : 'NORMAL';
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+
+    if (!userId) {
+      throw new AppError('User authentication required', 401);
+    }
+    if (!fromBranchId || !toBranchId || items.length === 0) {
+      throw new AppError('From branch, destination branch, and items are required', 400);
+    }
+    if (!isCentral && fromBranchId !== req.user?.branch_id) {
+      throw new AppError('You can only create transfers from your own branch', 403);
+    }
+
+    const normalizedItems = items.map((item: any, index: number) => {
+      const itemSku = String(item.item_sku || item.sku || '').trim();
+      const dispatchedQuantity = Number(item.dispatched_quantity ?? item.quantity ?? item.qty ?? 0);
+      if (!itemSku) {
+        throw new AppError(`Item ${index + 1} is missing a SKU`, 400);
+      }
+      if (!Number.isFinite(dispatchedQuantity) || dispatchedQuantity <= 0) {
+        throw new AppError(`Item ${index + 1} (${itemSku}) must have a dispatched quantity greater than zero`, 400);
+      }
+
+      return {
+        item_sku: itemSku,
+        dispatched_quantity: dispatchedQuantity,
+      };
+    });
+
+    const transfer = await BranchStockTransferService.initiateTransfer(
+      fromBranchId,
+      toBranchId,
+      userId,
+      normalizedItems,
+      notes,
+      urgency,
+      req.idempotencyKey || null,
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Branch transfer created',
+      data: transfer,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 export const getOutgoingBranchTransfers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  res.status(200).json({ success: true, data: [] });
+  try {
+    const isCentral = isGlobalRole(req.user?.role);
+    const branchId = Number(req.query.branch_id || req.user?.branch_id || 0);
+
+    if (!branchId) {
+      throw new AppError('Branch ID required', 400);
+    }
+
+    const effectiveBranchId = isCentral ? branchId : Number(req.user?.branch_id || 0);
+    const { data, error } = await supabase
+      .from('branch_stock_transfers')
+      .select(`
+        *,
+        from_branch:branches!from_branch_id(id, name, code),
+        to_branch:branches!to_branch_id(id, name, code),
+        items:branch_stock_transfer_items(*)
+      `)
+      .eq('from_branch_id', effectiveBranchId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data: data || [] });
+  } catch (error) {
+    next(error);
+  }
 };
 export const getIncomingBranchTransfers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  res.status(200).json({ success: true, data: [] });
+  try {
+    const isCentral = isGlobalRole(req.user?.role);
+    const branchId = Number(req.query.branch_id || req.user?.branch_id || 0);
+
+    if (!branchId) {
+      throw new AppError('Branch ID required', 400);
+    }
+
+    const effectiveBranchId = isCentral ? branchId : Number(req.user?.branch_id || 0);
+    const { data, error } = await supabase
+      .from('branch_stock_transfers')
+      .select(`
+        *,
+        from_branch:branches!from_branch_id(id, name, code),
+        to_branch:branches!to_branch_id(id, name, code),
+        items:branch_stock_transfer_items(*)
+      `)
+      .eq('to_branch_id', effectiveBranchId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data: data || [] });
+  } catch (error) {
+    next(error);
+  }
 };
 export const confirmBranchTransferReceipt = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  res.status(200).json({ success: true, message: 'Branch transfer confirmed' });
+  try {
+    const { id } = req.params;
+    const items = req.body?.items_received || req.body?.received_items || req.body?.items || [];
+    const notes = req.body?.notes || req.body?.delivery_notes || req.body?.discrepancy_notes || null;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError('Received items are required', 400);
+    }
+
+    const result = await BranchStockTransferService.confirmTransferReceipt(
+      id,
+      req.user?.id,
+      items,
+      notes,
+      req.idempotencyKey || null,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Branch transfer confirmed',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
 };

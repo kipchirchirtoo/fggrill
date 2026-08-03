@@ -15,7 +15,11 @@ import '../../../core/widgets/app_notifier.dart';
 import 'kitchen_prep_batches_screen.dart';
 
 class KitchenSessionsScreen extends ConsumerStatefulWidget {
-  const KitchenSessionsScreen({super.key});
+  const KitchenSessionsScreen({super.key, this.onBack});
+
+  /// When provided (e.g. mounted as a Branch Storekeeper dashboard section),
+  /// a Back control is shown at the top of the screen.
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<KitchenSessionsScreen> createState() =>
@@ -477,6 +481,7 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Kitchen Shift Sessions'),
+            actions: [
               IconButton(
                 icon: const Icon(Icons.history_outlined),
                 tooltip: 'Kitchen Session History',
@@ -939,6 +944,7 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
           return SingleChildScrollView(
             child: Column(
               children: [
+                _backButton(),
                 _buildHeaderCard(activeShift, items, isWriteUser),
                 _buildChannelStockIssuanceDashboard(
                   activeShift,
@@ -954,6 +960,7 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         return SingleChildScrollView(
           child: Column(
             children: [
+              _backButton(),
               _buildHeaderCard(activeShift, items, isWriteUser),
               _buildChannelStockIssuanceDashboard(
                 activeShift,
@@ -965,6 +972,21 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _backButton() {
+    if (widget.onBack == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back, size: 18),
+          label: const Text('Back'),
+        ),
+      ),
     );
   }
 
@@ -3599,6 +3621,12 @@ class _KitchenIssueStockScreenState
                                                   width: 240,
                                                   child: DropdownButtonFormField<String>(
                                                     value: line.selectedRecipeId,
+                                                    // Fill the 240px slot so the
+                                                    // item's ellipsis engages
+                                                    // instead of overflowing the
+                                                    // Row (text + arrow) by a
+                                                    // sub-pixel.
+                                                    isExpanded: true,
                                                     decoration: const InputDecoration(
                                                       labelText: 'Link to Recipe Standard',
                                                       isDense: true,

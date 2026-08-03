@@ -194,6 +194,9 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                             const SizedBox(height: 20),
                             _buildSummaryRow(summary, data),
                             const SizedBox(height: 20),
+                            _buildChannelControls(data ?? const <String, dynamic>{}),
+                            _buildWastageCard(data ?? const <String, dynamic>{}),
+                            _buildUnmatchedCard(data ?? const <String, dynamic>{}),
                             _buildSheetCard(rows),
                           ],
                         ],
@@ -206,6 +209,234 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
           },
         );
       },
+    );
+  }
+
+  num _cNum(dynamic v) {
+    if (v is num) return v;
+    return num.tryParse('${v ?? ''}'.replaceAll(',', '').trim()) ?? 0;
+  }
+
+  String _cMoney(dynamic v) => 'KES ${NumberFormat('#,##0.00').format(_cNum(v))}';
+
+  String _methodLabel(String method) {
+    switch (method) {
+      case 'recipe_standard':
+        return 'POS sales standard (expected vs actual)';
+      case 'cost_per_pax':
+        return 'Net cost ÷ confirmed pax';
+      case 'cost_margin':
+        return 'Cost, revenue, food-cost %, margin, cost/guest';
+      case 'cost_margin_returns':
+        return 'Cost − returns, margin, cost/guest';
+      case 'menu_x_served':
+        return 'Menu standard × staff served';
+      case 'wastage_approval':
+        return 'Approved / pending loss';
+      default:
+        return method;
+    }
+  }
+
+  Widget _buildChannelControls(Map<String, dynamic> data) {
+    final channels = ((data['channel_controls'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    if (channels.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Channel Controls',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text(
+            'Each issue channel controlled by the method appropriate to it.',
+            style: TextStyle(color: Colors.black54, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: channels.map(_channelControlCard).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _channelControlCard(Map<String, dynamic> c) {
+    final revenue = _cNum(c['revenue']);
+    final foodCostPct = c['food_cost_pct'];
+    final grossMargin = c['gross_margin'];
+    final costPerGuest = c['cost_per_guest'];
+    final pax = _cNum(c['pax']);
+    final returns = _cNum(c['returns']);
+    final wastage = _cNum(c['wastage_cost']);
+    final metrics = <List<String>>[
+      ['Issued cost', _cMoney(c['issued_cost'])],
+      if (returns > 0) ['Returns', _cMoney(returns)],
+      ['Net cost', _cMoney(c['net_cost'])],
+      if (revenue > 0) ['Revenue', _cMoney(revenue)],
+      if (foodCostPct != null)
+        ['Food cost %', '${_cNum(foodCostPct).toStringAsFixed(1)}%'],
+      if (grossMargin != null) ['Gross margin', _cMoney(grossMargin)],
+      if (pax > 0) ['Pax', pax.toStringAsFixed(0)],
+      if (costPerGuest != null) ['Cost / guest', _cMoney(costPerGuest)],
+      if (wastage > 0) ['Wastage', _cMoney(wastage)],
+    ];
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${c['channel_name'] ?? c['channel_code'] ?? ''}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Color(0xFF0F172A))),
+            const SizedBox(height: 2),
+            Text(_methodLabel('${c['control_method'] ?? ''}'),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+            const SizedBox(height: 12),
+            ...metrics.map((m) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(m[0],
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF475569))),
+                      Text(m[1],
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A))),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWastageCard(Map<String, dynamic> data) {
+    final raw = data['wastage'];
+    if (raw is! Map) return const SizedBox.shrink();
+    final w = Map<String, dynamic>.from(raw);
+    final approved = _cNum(w['approved_cost']);
+    final pending = _cNum(w['pending_cost']);
+    final entries = (w['entries'] as List?)?.whereType<Map>().toList() ?? const [];
+    if (approved == 0 && pending == 0 && entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.delete_outline, color: Color(0xFFB45309)),
+              const SizedBox(width: 8),
+              const Text('Wastage / Spoilage',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('Approved ${_cMoney(approved)}   Pending ${_cMoney(pending)}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, color: Color(0xFF9A3412))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Kept separate from unexplained variance. Requires accountant approval.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF9A3412)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnmatchedCard(Map<String, dynamic> data) {
+    final list = ((data['unmatched_pos_items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.help_outline, color: Color(0xFFB91C1C)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('POS items needing food-control config',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Sold but not linked to a recipe / inventory / direct item. Register them in Food Control Standards so their consumption is controlled.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF991B1B)),
+          ),
+          const SizedBox(height: 12),
+          ...list.map((u) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text('${u['item_name'] ?? 'Unmapped POS item'}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13, color: Color(0xFF7F1D1D))),
+                    ),
+                    Text('${_cNum(u['portions_sold']).toStringAsFixed(2)} sold',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF7F1D1D))),
+                  ],
+                ),
+              )),
+        ],
+      ),
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
@@ -19,6 +20,7 @@ class BranchStorekeeperRepository {
 
   final Dio _dio;
   final Ref _ref;
+  static const _uuid = Uuid();
 
   Future<String> get _branchId async {
     final storage = _ref.read(secureStorageProvider);
@@ -42,8 +44,20 @@ class BranchStorekeeperRepository {
     return Options(headers: {'Authorization': 'Bearer $token'});
   }
 
-  Future<Options> _requestOptions({ResponseType? responseType}) async {
-    return (await _authOptions).copyWith(responseType: responseType);
+  Future<Options> _requestOptions({
+    ResponseType? responseType,
+    bool idempotent = false,
+    String? scope,
+  }) async {
+    final options = await _authOptions;
+    final headers = <String, dynamic>{...?(options.headers ?? const {})};
+    if (idempotent) {
+      headers['Idempotency-Key'] = '${scope ?? 'store'}-${_uuid.v4()}';
+    }
+    return options.copyWith(
+      headers: headers,
+      responseType: responseType,
+    );
   }
 
   Map<String, dynamic> _map(dynamic data) {
@@ -251,7 +265,10 @@ class BranchStorekeeperRepository {
           ...data,
           ...await _branchQuery(),
         },
-        options: await _authOptions);
+        options: await _requestOptions(
+          idempotent: true,
+          scope: 'department-issue',
+        ));
     return _unwrapMap(response.data);
   }
 
@@ -545,7 +562,10 @@ class BranchStorekeeperRepository {
           ...data,
           ...await _branchQuery(),
         },
-        options: await _authOptions);
+        options: await _requestOptions(
+          idempotent: true,
+          scope: 'receive-supplier',
+        ));
     return _unwrapMap(response.data);
   }
 
@@ -798,7 +818,10 @@ class BranchStorekeeperRepository {
             if (branchId.isNotEmpty)
               'requesting_branch_id': int.tryParse(branchId),
           },
-          options: await _authOptions);
+          options: await _requestOptions(
+            idempotent: true,
+            scope: 'stock-request',
+          ));
     } on DioException catch (e) {
       throw apiErrorMessage(e, fallback: 'Stock request failed');
     }
@@ -1064,7 +1087,10 @@ class BranchStorekeeperRepository {
     final response = await _dio.post(
       '/store/department-requests',
       data: data,
-      options: await _authOptions,
+      options: await _requestOptions(
+        idempotent: true,
+        scope: 'department-request-log',
+      ),
     );
     return _unwrapMap(response.data);
   }
@@ -1073,7 +1099,10 @@ class BranchStorekeeperRepository {
     await _dio.post(
       '/store/department-requests/$id/issue',
       data: {if (notes != null && notes.isNotEmpty) 'notes': notes},
-      options: await _authOptions,
+      options: await _requestOptions(
+        idempotent: true,
+        scope: 'department-request-issue',
+      ),
     );
   }
 
@@ -1976,7 +2005,10 @@ class BranchStorekeeperRepository {
         if (confirmationName != null) 'confirmation_name': confirmationName,
         'submit': submit,
       },
-      options: await _authOptions,
+      options: await _requestOptions(
+        idempotent: true,
+        scope: 'kitchen-stocktake',
+      ),
     );
     return _unwrapMap(response.data);
   }
@@ -2118,7 +2150,10 @@ class BranchStorekeeperRepository {
           'responsible_staff_id': responsibleStaffId,
         'charge_to_staff': chargeToStaff,
       },
-      options: await _authOptions,
+      options: await _requestOptions(
+        idempotent: true,
+        scope: 'spoilage',
+      ),
     );
     return _unwrapMap(response.data);
   }

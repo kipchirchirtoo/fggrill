@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/screen_size.dart';
@@ -187,12 +188,126 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
               DashboardTab(
                   label: 'Stock Out',
                   icon: PhosphorIcons.arrowUpRight(),
-                  content: const _StoreResourceTab(
-                    title: 'Stock Out',
-                    endpoint: '/store/branch-stock/out',
-                    fields: ['item_sku', 'quantity', 'reason', 'notes'],
-                  )),
+                  content: const _IssueWorkbenchTab()),
             ],
+    );
+  }
+}
+
+class _IssueWorkbenchTab extends StatelessWidget {
+  const _IssueWorkbenchTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: ScreenSize.p(context),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                    child: Icon(
+                      PhosphorIcons.arrowsLeftRight(),
+                      color: AppColors.kPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Issue Workbench',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Branch receipts increase branch stock first. Use the Stock Out & Requisitions workbench to issue from branch store into POS outlets or departments.',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: const [
+                  _IssueRuleChip('Central / supplier receipt → Branch Stock'),
+                  _IssueRuleChip('Branch Storekeeper issue → POS Outlet Stock'),
+                  _IssueRuleChip('Department issue → Department consumption'),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.kSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Open the dedicated issue screen to select the destination, match the outlet item, add quantities, and post the movement correctly.',
+                        style: TextStyle(
+                          color: AppColors.kTextSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    FilledButton.icon(
+                      onPressed: () => context.go('/store/stock-out'),
+                      icon: Icon(PhosphorIcons.arrowUpRight()),
+                      label: const Text('Open Workbench'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IssueRuleChip extends StatelessWidget {
+  const _IssueRuleChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.kPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppColors.kPrimary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+      ),
     );
   }
 }

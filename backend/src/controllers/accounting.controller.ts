@@ -1268,6 +1268,9 @@ export const updateEventOrder = async (
           : undefined),
       charge_per_pax: req.body.charge_per_pax !== undefined ? Number(req.body.charge_per_pax) : undefined,
       total_amount: req.body.total_amount !== undefined ? Number(req.body.total_amount) : undefined,
+      // Unused stock returned after the event — reduces net food cost in the
+      // per-channel food controls. Undefined is stripped by supabase-js.
+      returns_value: req.body.returns_value !== undefined ? Number(req.body.returns_value) : undefined,
       amount_paid: req.body.amount_paid !== undefined ? Number(req.body.amount_paid) : undefined,
       payment_status: req.body.payment_status,
       payment_method: req.body.payment_method,
@@ -1943,6 +1946,8 @@ export const completeEventOrder = async (
         status: 'completed',
         closed_at: new Date().toISOString(),
         closed_by: req.user?.id || null,
+        // Capture unused-stock returns at close (Outside Catering / events).
+        ...(req.body?.returns_value !== undefined ? { returns_value: Number(req.body.returns_value) } : {}),
       })
       .eq('id', id);
 

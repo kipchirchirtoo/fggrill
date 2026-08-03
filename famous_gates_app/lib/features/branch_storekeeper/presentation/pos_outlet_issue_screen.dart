@@ -19,6 +19,7 @@ import '../data/branch_storekeeper_repository.dart';
 class PosOutletIssueScreen extends ConsumerStatefulWidget {
   const PosOutletIssueScreen({
     super.key,
+    this.compact = false,
     required this.outlets,
     required this.selectedOutletId,
     required this.onSelectOutlet,
@@ -34,6 +35,7 @@ class PosOutletIssueScreen extends ConsumerStatefulWidget {
   });
 
   final List<Map<String, dynamic>> outlets;
+  final bool compact;
   final String? selectedOutletId;
   final ValueChanged<String> onSelectOutlet;
   final List<Map<String, dynamic>> branchStock;
@@ -51,9 +53,7 @@ class PosOutletIssueScreen extends ConsumerStatefulWidget {
       _PosOutletIssueScreenState();
 }
 
-class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen> {
   bool _bulkIssuingBar = false;
 
   static const _barOutlets = {
@@ -63,18 +63,6 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
     'sports_bar': 'Sports Bar',
     'kyogong_sports_bar': 'Sports Bar',
   };
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   BranchStorekeeperRepository get _repo =>
       ref.read(branchStorekeeperRepositoryProvider);
@@ -90,31 +78,143 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Material(
-          color: AppColors.kSurface,
-          child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            tabs: const [
-              Tab(text: 'Issue Stock'),
-              Tab(text: 'Outlet Production Ledger'),
-              Tab(text: 'Issue History'),
-            ],
+    return _simpleIssueStockTab(compact: widget.compact);
+  }
+
+  Widget _simpleIssueStockTab({bool compact = false}) {
+    final outlets = widget.outlets;
+    final selected = _selectedOutlet;
+    final selectedId = selected == null ? null : _outletId(selected);
+    final query = widget.search.trim().toLowerCase();
+    final branchRows = widget.branchStock.where((item) {
+      if (query.isEmpty) return true;
+      final haystack = [
+        _itemName(item),
+        _optionSku(item),
+        item['category'],
+        item['unit_of_measure'],
+        item['unit'],
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+    final isBarSelected = selected != null &&
+        (_outletType(selected).contains('bar') ||
+            _barOutlets.containsKey(_outletType(selected)) ||
+            widget.outletDisplayName(selected).toLowerCase().contains('bar'));
+
+    final children = [
+        _SectionCard(
+          title: 'Select Outlet',
+          child: outlets.isEmpty
+              ? const _EmptyState('No POS outlets configured.')
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: outlets.map((outlet) {
+                    final id = _outletId(outlet);
+                    final rows = widget.stockForOutlet(id);
+                    return ChoiceChip(
+                      selected: id == selectedId,
+                      label: Text(
+                        '${widget.outletDisplayName(outlet)} (${rows.length})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      avatar: const Icon(Icons.storefront_outlined, size: 18),
+                      onSelected: (_) => widget.onSelectOutlet(id),
+                    );
+                  }).toList(),
+                ),
+        ),
+        _SectionCard(
+          title: 'Search Stock',
+          child: TextField(
+            controller: TextEditingController(text: widget.search)
+              ..selection =
+                  TextSelection.collapsed(offset: widget.search.length),
+            decoration: InputDecoration(
+              labelText: selected == null
+                  ? 'Search stock by item, SKU or category'
+                  : 'Search stock to issue to ${widget.outletDisplayName(selected)}',
+              prefixIcon: const Icon(Icons.search),
+            ),
+            onChanged: widget.onSearchChanged,
           ),
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _issueStockTab(),
-              _productionLedgerTab(),
-              _issueHistoryTab(),
-            ],
+        _SectionCard(
+          title: selected == null
+              ? 'Branch Stock'
+              : 'Stock for ${widget.outletDisplayName(selected)}',
+          child: _RecordList(
+            emptyText: selected == null
+                ? 'No outlet selected'
+                : 'No branch stock available for outlet issue',
+            children: branchRows.take(150).map((item) {
+              final qty = _num(item['quantity']);
+              return _RecordTile(
+                icon: PhosphorIcons.package(),
+                title: _itemName(item),
+                subtitle:
+                    '${_optionSku(item)} | ${item['category'] ?? '-'} | Available ${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'}',
+                trailing: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      _money(qty * _num(item['cost_price'] ?? item['unit_price'])),
+                      style: const TextStyle(
+                        color: AppColors.kTextSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: selected == null
+                        ? null
+                        : () => _showIssueForm(selected, presetOutput: item),
+                    child: const Text('Issue'),
+                  ),
+                ],
+              );
+            }).toList(),
           ),
+        ),
+      ];
+
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children
+            .expand((child) => [child, const SizedBox(height: 12)])
+            .toList()
+          ..removeLast(),
+      );
+    }
+
+    return _Page(
+      title: 'POS Outlet Issue',
+      subtitle: '',
+      actions: [
+        _RefreshButton(onPressed: widget.onRefresh),
+        FilledButton.icon(
+          onPressed: selected == null ? null : () => _showIssueForm(selected),
+          icon: Icon(
+            isBarSelected ? Icons.local_bar_outlined : PhosphorIcons.package(),
+          ),
+          label: Text(
+            isBarSelected ? 'Transfer to Bar' : 'Issue to POS Outlet',
+          ),
+          style: isBarSelected
+              ? FilledButton.styleFrom(backgroundColor: Colors.amber.shade700)
+              : null,
         ),
       ],
+      children: children,
     );
   }
 
@@ -533,7 +633,9 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                             FilledButton.icon(
                               style: FilledButton.styleFrom(
                                   backgroundColor: Colors.amber.shade700),
-                              onPressed: () => _tabController.animateTo(0),
+                              onPressed: selectedOutlet == null
+                                  ? null
+                                  : () => _showIssueForm(selectedOutlet),
                               icon: const Icon(Icons.storefront_outlined,
                                   size: 16),
                               label: const Text('Go to POS Outlet Issue'),

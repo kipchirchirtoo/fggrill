@@ -38,6 +38,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
     super.initState();
     // Schedule initial load after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final provider = widget.stockTakeType == StockTakeType.bar
           ? barStockTakeProvider
           : storeStockTakeProvider;
@@ -73,11 +74,22 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
     final branchName = user?.branchName ?? 'Famous Gates';
     final isStorekeeper = user?.role == 'branch_storekeeper';
 
+    final scopedItems = widget.stockTakeType == StockTakeType.store
+        ? state.items.where((item) {
+            return isAllowedStoreStocktakeItem(
+              category: item.category,
+              sku: item.sku,
+              name: item.productName,
+            );
+          }).toList()
+        : state.items;
+
     // Categories list for filter bar
-    final categories = state.items.map((i) => itemCategoryName(i)).toSet().toList()..sort();
+    final categories =
+        scopedItems.map((i) => itemCategoryName(i)).toSet().toList()..sort();
 
     // Filter items based on local search & category (not date/location which require backend refresh)
-    final filteredItems = state.items.where((item) {
+    final filteredItems = scopedItems.where((item) {
       final matchesSearch = _localSearch.isEmpty ||
           item.productName.toLowerCase().contains(_localSearch.toLowerCase()) ||
           item.sku.toLowerCase().contains(_localSearch.toLowerCase());
@@ -87,6 +99,8 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
 
       return matchesSearch && matchesCategory;
     }).toList();
+    final countedLines =
+        filteredItems.where((item) => item.physicalCount != null).length;
 
     // Sort items so beers are on one side (first), then other categories, and then by name
     final sortedItems = List<StockTakeItem>.from(filteredItems)
@@ -202,45 +216,51 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Shift info banner — shows which cashier shift this stocktake is for
-          if (state.currentShift != null || (!state.isLoading && state.items.isEmpty))
-            _buildShiftBanner(context, state),
-          // Filter Bar
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: FilterBar(
-              search: _localSearch,
-              selectedCategory: _localCategory,
-              categories: categories,
-              selectedLocation: _localLocation.isEmpty
-                  ? (widget.stockTakeType == StockTakeType.bar ? 'main_bar' : 'branch_store')
-                  : _localLocation,
-              hasExecutiveBar: state.hasExecutiveBar,
-              selectedDate: _localDate.isEmpty
-                  ? DateTime.now().toIso8601String().split('T')[0]
-                  : _localDate,
-              isBarType: widget.stockTakeType == StockTakeType.bar,
-              onSearchChanged: (v) => setState(() => _localSearch = v),
-              onCategoryChanged: (v) => setState(() => _localCategory = v),
-              onLocationChanged: (v) => setState(() => _localLocation = v),
-              onDateChanged: (v) => setState(() => _localDate = v),
-              onApply: () {
-                notifier.loadData(
-                  date: _localDate,
-                  location: _localLocation,
-                );
-              },
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          children: [
+            // Shift info banner — shows which cashier shift this stocktake is for
+            if (state.currentShift != null || (!state.isLoading && state.items.isEmpty))
+              _buildShiftBanner(context, state),
+            if (isStorekeeper)
+              _buildBlindCountBanner(
+                countedLines: countedLines,
+                totalLines: filteredItems.length,
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: FilterBar(
+                search: _localSearch,
+                selectedCategory: _localCategory,
+                categories: categories,
+                selectedLocation: _localLocation.isEmpty
+                    ? (widget.stockTakeType == StockTakeType.bar ? 'main_bar' : 'branch_store')
+                    : _localLocation,
+                hasExecutiveBar: state.hasExecutiveBar,
+                selectedDate: _localDate.isEmpty
+                    ? DateTime.now().toIso8601String().split('T')[0]
+                    : _localDate,
+                isBarType: widget.stockTakeType == StockTakeType.bar,
+                onSearchChanged: (v) => setState(() => _localSearch = v),
+                onCategoryChanged: (v) => setState(() => _localCategory = v),
+                onLocationChanged: (v) => setState(() => _localLocation = v),
+                onDateChanged: (v) => setState(() => _localDate = v),
+                onApply: () {
+                  notifier.loadData(
+                    date: _localDate,
+                    location: _localLocation,
+                  );
+                },
+              ),
             ),
-          ),
-
-          // Main Spreadsheet Grid Area
-          Expanded(
-            child: Padding(
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: state.isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? SizedBox(
+                      height: 320,
+                      child: const Center(child: CircularProgressIndicator()),
+                    )
                   : StockTable(
                       items: sortedItems,
                       isReadOnly: state.isSubmitted,
@@ -253,40 +273,41 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
                       },
                     ),
             ),
-          ),
-
-          // Summary Section Card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: SummaryCard(
-              totalOpening: totalOpening,
-              totalSales: totalSales,
-              totalSdds: totalSdds,
-              expectedClosing: expectedClosing,
-              physicalCount: physicalCount,
-              totalVariance: totalVariance,
-              isStorekeeper: isStorekeeper,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: SummaryCard(
+                totalOpening: totalOpening,
+                totalSales: totalSales,
+                totalSdds: totalSdds,
+                expectedClosing: expectedClosing,
+                physicalCount: physicalCount,
+                totalVariance: totalVariance,
+                isStorekeeper: isStorekeeper,
+                totalItems: filteredItems.length,
+                countedLines: countedLines,
+              ),
             ),
-          ),
-
-          // Bottom Action Bar
-          BottomActionBar(
-            isReadOnly: state.isSubmitted,
-            isSubmitting: state.isSubmitting,
-            onSaveDraft: () async {
-              await notifier.saveDraft();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Stock take draft saved locally.'),
-                    backgroundColor: Colors.teal,
-                  ),
-                );
-              }
-            },
-            onSubmit: () => _confirmSubmit(context, state, notifier),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: BottomActionBar(
+                isReadOnly: state.isSubmitted,
+                isSubmitting: state.isSubmitting,
+                onSaveDraft: () async {
+                  await notifier.saveDraft();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Stock take draft saved locally.'),
+                        backgroundColor: Colors.teal,
+                      ),
+                    );
+                  }
+                },
+                onSubmit: () => _confirmSubmit(context, state, notifier),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -366,6 +387,78 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
               backgroundColor: const Color(0xFF1565C0),
             ),
             child: const Text('Confirm & Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlindCountBanner({
+    required int countedLines,
+    required int totalLines,
+  }) {
+    final remaining = totalLines - countedLines < 0 ? 0 : totalLines - countedLines;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.visibility_off_outlined,
+              color: Color(0xFF1565C0),
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Blind count mode',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Only physical count is shown. Press Enter after each number to jump to the next line.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$countedLines / $totalLines counted · $remaining remaining',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
           ),
         ],
       ),

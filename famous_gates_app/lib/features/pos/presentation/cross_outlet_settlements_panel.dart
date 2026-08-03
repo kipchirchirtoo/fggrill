@@ -13,13 +13,16 @@ Future<void> showCrossOutletSettlementsPanel(BuildContext context) {
     barrierDismissible: true,
     builder: (_) => const Dialog(
       insetPadding: EdgeInsets.all(24),
-      child: SizedBox(width: 720, child: CrossOutletClearancesTab()),
+      child: SizedBox(
+          width: 720, child: CrossOutletClearancesTab(isDialog: true)),
     ),
   );
 }
 
 class CrossOutletClearancesTab extends ConsumerStatefulWidget {
-  const CrossOutletClearancesTab({super.key});
+  const CrossOutletClearancesTab({super.key, this.isDialog = false});
+
+  final bool isDialog;
 
   @override
   ConsumerState<CrossOutletClearancesTab> createState() =>
@@ -148,82 +151,90 @@ class _CrossOutletClearancesTabState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      height: 560,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.sync_alt),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Cross-Outlet Settlements',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-                IconButton(
-                    onPressed: _busy ? null : _load,
-                    icon: const Icon(Icons.refresh)),
+    final canClose = widget.isDialog && (ModalRoute.of(context)?.canPop ?? false);
+
+    final content = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.sync_alt),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Cross-Outlet Settlements',
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                  onPressed: _busy ? null : _load,
+                  icon: const Icon(Icons.refresh)),
+              if (canClose)
                 IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close)),
-              ],
-            ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Pending confirmation'),
-                  selected: _filter == 'pending',
-                  onSelected: (_) {
-                    setState(() => _filter = 'pending');
-                    _load();
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: _filter == 'all',
-                  onSelected: (_) {
-                    setState(() => _filter = 'all');
-                    _load();
-                  },
-                ),
-              ],
-            ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: const Text('Pending confirmation'),
+                selected: _filter == 'pending',
+                onSelected: (_) {
+                  setState(() => _filter = 'pending');
+                  _load();
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('All'),
+                selected: _filter == 'all',
+                onSelected: (_) {
+                  setState(() => _filter = 'all');
+                  _load();
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Text('Failed to load: $_error',
-                            style: const TextStyle(color: Colors.red)))
-                    : _items.isEmpty
-                        ? Center(
-                            child: Text(
-                                _filter == 'pending'
-                                    ? 'Nothing to confirm — you\'re all settled.'
-                                    : 'No cross-outlet settlements yet.',
-                                style: const TextStyle(color: Colors.grey)))
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _items.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (_, i) =>
-                                _settlementCard(_items[i], theme),
-                          ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        const Divider(height: 1),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(
+                      child: Text('Failed to load: $_error',
+                          style: const TextStyle(color: Colors.red)))
+                  : _items.isEmpty
+                      ? Center(
+                          child: Text(
+                              _filter == 'pending'
+                                  ? 'Nothing to confirm — you\'re all settled.'
+                                  : 'No cross-outlet settlements yet.',
+                              style: const TextStyle(color: Colors.grey)))
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _items.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (_, i) =>
+                              _settlementCard(_items[i], theme),
+                        ),
+        ),
+      ],
     );
+
+    if (widget.isDialog) {
+      return SizedBox(
+        height: 560,
+        child: content,
+      );
+    }
+    return content;
   }
 
   Widget _settlementCard(CrossOutletSettlement s, ThemeData theme) {

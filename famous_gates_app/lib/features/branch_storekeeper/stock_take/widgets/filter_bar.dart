@@ -37,25 +37,28 @@ class FilterBar extends StatefulWidget {
 }
 
 class _FilterBarState extends State<FilterBar> {
-  late final TextEditingController _searchCtrl;
+  // Constructed at declaration (not `late` + initState) so a hot reload —
+  // which does not re-run initState — can never hit a LateInitializationError.
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _searchCtrl = TextEditingController(text: widget.search);
+    _searchController.text = widget.search;
   }
 
   @override
   void didUpdateWidget(covariant FilterBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.search != widget.search && _searchCtrl.text != widget.search) {
-      _searchCtrl.text = widget.search;
+    if (oldWidget.search != widget.search &&
+        _searchController.text != widget.search) {
+      _searchController.text = widget.search;
     }
   }
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -64,182 +67,148 @@ class _FilterBarState extends State<FilterBar> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: isDark ? theme.colorScheme.surface : Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            // Search field
-            SizedBox(
-              width: 280,
-              height: 44,
-              child: TextField(
-                controller: _searchCtrl,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search product name or SKU...',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  suffixIcon: _searchCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            widget.onSearchChanged('');
-                          },
-                        )
-                      : null,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surface : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x080F172A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 14,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 320,
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search item name or SKU',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          setState(_searchController.clear);
+                          widget.onSearchChanged('');
+                        },
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 1.4,
                   ),
                 ),
-                onChanged: widget.onSearchChanged,
               ),
+              onChanged: (value) {
+                setState(() {});
+                widget.onSearchChanged(value);
+              },
             ),
-
-            // Category Filter
+          ),
+          _buildDropdownFilter(
+            context: context,
+            label: 'Category',
+            value: widget.selectedCategory,
+            icon: Icons.grid_view_outlined,
+            items: [
+              const DropdownMenuItem(
+                value: 'all',
+                child: Text('All Categories'),
+              ),
+              ...widget.categories.map(
+                (category) => DropdownMenuItem(
+                  value: category,
+                  child: Text(category),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) widget.onCategoryChanged(value);
+            },
+          ),
+          if (widget.isBarType)
             _buildDropdownFilter(
-              label: 'Category',
-              value: widget.selectedCategory,
-              icon: Icons.grid_view_outlined,
+              context: context,
+              label: 'Outlet',
+              value: widget.selectedLocation,
+              icon: Icons.storefront_outlined,
               items: [
-                const DropdownMenuItem(value: 'all', child: Text('All Categories')),
-                ...widget.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                const DropdownMenuItem(
+                  value: 'main_bar',
+                  child: Text('Main Bar'),
+                ),
+                if (widget.hasExecutiveBar)
+                  const DropdownMenuItem(
+                    value: 'executive_bar',
+                    child: Text('Executive Bar'),
+                  ),
               ],
-              onChanged: (v) {
-                if (v != null) widget.onCategoryChanged(v);
+              onChanged: (value) {
+                if (value != null) widget.onLocationChanged(value);
               },
-            ),
-
-            // Location/Outlet Filter (Only editable for Bar stocktake)
-            if (widget.isBarType)
-              _buildDropdownFilter(
-                label: 'Outlet',
-                value: widget.selectedLocation,
-                icon: Icons.storefront_outlined,
-                items: [
-                  const DropdownMenuItem(value: 'main_bar', child: Text('Main Bar')),
-                  if (widget.hasExecutiveBar)
-                    const DropdownMenuItem(value: 'executive_bar', child: Text('Executive Bar')),
-                ],
-                onChanged: (v) {
-                  if (v != null) widget.onLocationChanged(v);
-                },
-              )
-            else
-              _buildDropdownFilter(
-                label: 'Store',
-                value: widget.selectedLocation,
-                icon: Icons.store_outlined,
-                items: const [
-                  DropdownMenuItem(value: 'branch_store', child: Text('Main Store')),
-                ],
-                onChanged: null, // read-only
-              ),
-
-            // Date Filter
-            InkWell(
-              onTap: () async {
-                DateTime initial;
-                try {
-                  initial = DateFormat('yyyy-MM-dd').parse(widget.selectedDate);
-                } catch (_) {
-                  initial = DateTime.now();
-                }
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: initial,
-                  firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
-                );
-                if (picked != null) {
-                  final formatted = DateFormat('yyyy-MM-dd').format(picked);
-                  widget.onDateChanged(formatted);
-                }
-              },
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
+            )
+          else
+            _buildDropdownFilter(
+              context: context,
+              label: 'Store',
+              value: widget.selectedLocation,
+              icon: Icons.store_outlined,
+              items: const [
+                DropdownMenuItem(
+                  value: 'branch_store',
+                  child: Text('Main Store'),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(Icons.calendar_month_outlined, size: 18, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Date',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          () {
-                            try {
-                              return DateFormat('d MMM yyyy')
-                                  .format(DateFormat('yyyy-MM-dd').parse(widget.selectedDate));
-                            } catch (_) {
-                              return DateFormat('d MMM yyyy').format(DateTime.now());
-                            }
-                          }(),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_drop_down, size: 18),
-                  ],
-                ),
+              ],
+              onChanged: null,
+            ),
+          _buildDateControl(context),
+          FilledButton.icon(
+            onPressed: widget.onApply,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(140, 52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
-
-            // Apply Filters button
-            ElevatedButton.icon(
-              onPressed: widget.onApply,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.primaryColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(120, 44),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              icon: const Icon(Icons.filter_alt_outlined, size: 18),
-              label: const Text(
-                'Apply Filters',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+            icon: const Icon(Icons.filter_alt_outlined, size: 18),
+            label: const Text(
+              'Apply Filters',
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildDropdownFilter({
+    required BuildContext context,
     required String label,
     required String value,
     required IconData icon,
@@ -247,41 +216,40 @@ class _FilterBarState extends State<FilterBar> {
     required ValueChanged<String?>? onChanged,
   }) {
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFF8FAFC),
+        border: Border.all(color: const Color(0xFFD0D7E2)),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(icon, size: 18, color: Colors.grey.shade600),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   color: Colors.grey.shade600,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               SizedBox(
-                height: 20,
+                height: 22,
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: value,
                     items: items,
                     onChanged: onChanged,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: Theme.of(context).textTheme.bodyMedium?.color,
                     ),
                     icon: const Icon(Icons.arrow_drop_down, size: 16),
@@ -291,6 +259,76 @@ class _FilterBarState extends State<FilterBar> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateControl(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        DateTime initial;
+        try {
+          initial = DateFormat('yyyy-MM-dd').parse(widget.selectedDate);
+        } catch (_) {
+          initial = DateTime.now();
+        }
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: initial,
+          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+        );
+        if (picked != null) {
+          final formatted = DateFormat('yyyy-MM-dd').format(picked);
+          widget.onDateChanged(formatted);
+        }
+      },
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          border: Border.all(color: const Color(0xFFD0D7E2)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_month_outlined, size: 18, color: Colors.grey.shade600),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Date',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  () {
+                    try {
+                      return DateFormat('d MMM yyyy').format(
+                        DateFormat('yyyy-MM-dd').parse(widget.selectedDate),
+                      );
+                    } catch (_) {
+                      return DateFormat('d MMM yyyy').format(DateTime.now());
+                    }
+                  }(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
       ),
     );
   }

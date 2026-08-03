@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../data/branch_storekeeper_repository.dart';
+import '../../stocktakes/data/store_stocktake_repository.dart';
 import '../models/stock_take_item.dart';
 
 enum StockTakeType { bar, store }
@@ -95,34 +95,64 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           extremePct: 10.0,
         ));
 
-  String get _draftKey =>
-      'stock_take_draft_${_type.name}_${state.locationFilter}_${state.dateFilter}';
+  String _draftKeyFor(String locationFilter, String dateFilter) =>
+      'stock_take_draft_${_type.name}_${locationFilter}_$dateFilter';
 
-  Future<File> _getDraftFile() async {
+  StockTakeState? _safeState() {
+    if (!mounted) return null;
+    try {
+      return state;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _replaceState(StockTakeState nextState) {
+    if (!mounted) return;
+    try {
+      state = nextState;
+    } catch (_) {}
+  }
+
+  void _updateState(StockTakeState Function(StockTakeState current) transform) {
+    final current = _safeState();
+    if (current == null) return;
+    try {
+      state = transform(current);
+    } catch (_) {}
+  }
+
+  Future<File> _getDraftFileFor({
+    required String locationFilter,
+    required String dateFilter,
+  }) async {
     final dir = await getApplicationDocumentsDirectory();
     final draftsDir = Directory('${dir.path}/fggrill_drafts');
     if (!draftsDir.existsSync()) {
       await draftsDir.create(recursive: true);
     }
-    return File('${draftsDir.path}/$_draftKey.json');
+    final draftKey = _draftKeyFor(locationFilter, dateFilter);
+    return File('${draftsDir.path}/$draftKey.json');
   }
 
   Future<void> loadData({
     String? date,
     String? location,
   }) async {
-    final targetDate = date ?? state.dateFilter;
-    final targetLoc = location ?? state.locationFilter;
+    if (!mounted) return;
+    final currentState = state;
+    final targetDate = date ?? currentState.dateFilter;
+    final targetLoc = location ?? currentState.locationFilter;
 
-    state = state.copyWith(
+    _replaceState(currentState.copyWith(
       isLoading: true,
       errorMessage: null,
       dateFilter: targetDate,
       locationFilter: targetLoc,
-    );
+    ));
 
     try {
-      final repo = _ref.read(branchStorekeeperRepositoryProvider);
+      final repo = _ref.read(storeStocktakeRepositoryProvider);
       List<StockTakeItem> loadedItems = [];
       bool submitted = false;
       double largeVal = 3.0;
@@ -133,6 +163,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           barLocation: targetLoc,
           date: targetDate,
         );
+        if (!mounted) return;
         largeVal = double.tryParse((response['stocktake_variance_large_pct'] ?? '').toString()) ?? 3.0;
         extremeVal = double.tryParse((response['stocktake_variance_extreme_pct'] ?? '').toString()) ?? 10.0;
         final records = _unwrapResponseList(response);
@@ -161,7 +192,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           shiftInfo = {'shift_id': responseShiftId};
         }
 
-        state = state.copyWith(currentShift: shiftInfo);
+        if (!mounted) return;
+        _updateState((current) => current.copyWith(currentShift: shiftInfo));
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
         loadedItems = records.map((r) {
@@ -195,6 +227,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         final response = await repo.storeStocktakeRecords(
           date: targetDate,
         );
+        if (!mounted) return;
         largeVal = double.tryParse((response['stocktake_variance_large_pct'] ?? '').toString()) ?? 3.0;
         extremeVal = double.tryParse((response['stocktake_variance_extreme_pct'] ?? '').toString()) ?? 10.0;
         final records = _unwrapResponseList(response);
@@ -221,45 +254,67 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           shiftInfo = {'shift_id': responseShiftId};
         }
 
-        state = state.copyWith(currentShift: shiftInfo);
+        if (!mounted) return;
+        _updateState((current) => current.copyWith(currentShift: shiftInfo));
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
-        loadedItems = records.map((r) {
-          final isSubmittedRow = r['physical_quantity'] != null;
-          // Use opening_stock when available (new backend), fall back to system_quantity/quantity
-          final opening  = _toInt(r['opening_stock']  ?? r['system_quantity'] ?? r['quantity'] ?? 0);
-          final sales    = _toInt(r['sales']           ?? 0);
-          final additions = _toInt(r['additions']      ?? 0);
-          // SDDS = negative additions (same convention as bar stocktake)
-          final sdds = _toInt(r['sdds'] ?? 0) != 0
-              ? _toInt(r['sdds'])
-              : -additions;
+        loadedItems = records
+            .where((r) {
+              final category =
+                  '${r['category'] ?? r['item']?['category'] ?? 'Other'}';
+              final sku = '${r['sku'] ?? r['item']?['sku'] ?? ''}';
+              final name = '${r['item_name'] ?? r['name'] ?? 'Item'}';
+              final storeType =
+                  '${r['store_type'] ?? r['item']?['store_type'] ?? ''}';
+              return isAllowedStoreStocktakeItem(
+                category: category,
+                sku: sku,
+                name: name,
+                storeType: storeType,
+              );
+            })
+            .map((r) {
+              final isSubmittedRow = r['physical_quantity'] != null;
+              final opening = _toInt(
+                r['opening_stock'] ?? r['system_quantity'] ?? r['quantity'] ?? 0,
+              );
+              final sales = _toInt(r['sales'] ?? 0);
+              final additions = _toInt(r['additions'] ?? 0);
+              final sdds = _toInt(r['sdds'] ?? 0) != 0
+                  ? _toInt(r['sdds'])
+                  : -additions;
 
-          return StockTakeItem(
-            id: '${r['item_id'] ?? r['id']}',
-            sku: '${r['sku'] ?? r['item']?['sku'] ?? ''}',
-            productName: '${r['item_name'] ?? r['name'] ?? 'Item'}',
-            imageUrl: '',
-            openingStock: opening,
-            sales: sales,
-            sdds: sdds,
-            physicalCount: isSubmittedRow
-                ? _toInt(r['physical_quantity'])
-                : null,
-            reason: r['notes'] ?? r['reason_for_variance'],
-            explanation: r['explanation'] ?? r['notes'] ?? r['reason_for_variance'],
-            actionTaken: r['action_taken'],
-            category: '${r['category'] ?? r['item']?['category'] ?? 'Other'}',
-          );
-        }).toList();
+              return StockTakeItem(
+                id: '${r['item_id'] ?? r['id']}',
+                sku: '${r['sku'] ?? r['item']?['sku'] ?? ''}',
+                productName: '${r['item_name'] ?? r['name'] ?? 'Item'}',
+                imageUrl: '',
+                openingStock: opening,
+                sales: sales,
+                sdds: sdds,
+                physicalCount:
+                    isSubmittedRow ? _toInt(r['physical_quantity']) : null,
+                reason: r['notes'] ?? r['reason_for_variance'],
+                explanation:
+                    r['explanation'] ?? r['notes'] ?? r['reason_for_variance'],
+                actionTaken: r['action_taken'],
+                category: '${r['category'] ?? r['item']?['category'] ?? 'Other'}',
+              );
+            })
+            .toList();
       }
 
       // If not submitted, apply local draft values if they exist
       if (!submitted) {
         try {
-          final file = await _getDraftFile();
+          final file = await _getDraftFileFor(
+            locationFilter: targetLoc,
+            dateFilter: targetDate,
+          );
+          if (!mounted) return;
           if (file.existsSync()) {
             final draftStr = await file.readAsString();
+            if (!mounted) return;
             if (draftStr.isNotEmpty) {
               final Map<String, dynamic> draftMap = json.decode(draftStr);
               loadedItems = loadedItems.map((item) {
@@ -286,6 +341,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       if (_type == StockTakeType.bar) {
         try {
           final outlets = await repo.posOutlets();
+          if (!mounted) return;
           hasExec = outlets.any((outlet) {
             final type =
                 '${outlet['outlet_type'] ?? outlet['type'] ?? ''}'.trim();
@@ -299,27 +355,30 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         }
       }
 
-      state = state.copyWith(
+      if (!mounted) return;
+      _updateState((current) => current.copyWith(
         items: loadedItems,
         isLoading: false,
         isSubmitted: submitted,
         hasExecutiveBar: hasExec,
         largePct: largeVal,
         extremePct: extremeVal,
-      );
+      ));
     } catch (e) {
-      state = state.copyWith(
+      if (!mounted) return;
+      _updateState((current) => current.copyWith(
         isLoading: false,
         errorMessage: 'Failed to load stocktake data: $e',
-      );
+      ));
     }
   }
 
   void updatePhysicalCount(String id, int? count) {
+    if (!mounted) return;
     if (state.isSubmitted) return;
 
-    state = state.copyWith(
-      items: state.items.map((item) {
+    _updateState((current) => current.copyWith(
+      items: current.items.map((item) {
         if (item.id == id) {
           final updated = item.copyWith(physicalCount: count);
           // If variance becomes 0, clear the reason
@@ -330,35 +389,40 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         }
         return item;
       }).toList(),
-    );
+    ));
   }
 
   void updateReason(String id, String? reason) {
+    if (!mounted) return;
     if (state.isSubmitted) return;
 
-    state = state.copyWith(
-      items: state.items.map((item) {
+    _updateState((current) => current.copyWith(
+      items: current.items.map((item) {
         if (item.id == id) {
           return item.copyWith(reason: reason);
         }
         return item;
       }).toList(),
-    );
+    ));
   }
 
   void updateSearch(String query) {
-    state = state.copyWith(search: query);
+    if (!mounted) return;
+    _updateState((current) => current.copyWith(search: query));
   }
 
   void updateCategoryFilter(String category) {
-    state = state.copyWith(categoryFilter: category);
+    if (!mounted) return;
+    _updateState((current) => current.copyWith(categoryFilter: category));
   }
 
   Future<void> saveDraft() async {
+    if (!mounted) return;
     if (state.isSubmitted) return;
+    final snapshot = state;
 
     final draftMap = <String, Map<String, dynamic>>{};
-    for (final item in state.items) {
+    for (final item in snapshot.items) {
       if (item.physicalCount != null || item.reason != null) {
         draftMap[item.id] = {
           'physical': item.physicalCount,
@@ -368,7 +432,10 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
     }
 
     try {
-      final file = await _getDraftFile();
+      final file = await _getDraftFileFor(
+        locationFilter: snapshot.locationFilter,
+        dateFilter: snapshot.dateFilter,
+      );
       if (draftMap.isEmpty) {
         if (file.existsSync()) await file.delete();
       } else {
@@ -378,13 +445,15 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
   }
 
   Future<bool> submitStockTake() async {
+    if (!mounted) return false;
     if (state.isSubmitted) return false;
+    final snapshot = state;
 
     // Validation
     final List<String> errors = [];
     final itemsToSubmit = <Map<String, dynamic>>[];
 
-    for (final item in state.items) {
+    for (final item in snapshot.items) {
       if (item.physicalCount == null) {
         errors.add('${item.productName} has no physical count.');
         continue;
@@ -398,46 +467,63 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
     }
 
     if (errors.isNotEmpty) {
-      state = state.copyWith(errorMessage: errors.join('\n'));
+      if (!mounted) return false;
+      _updateState((current) => current.copyWith(errorMessage: errors.join('\n')));
       return false;
     }
 
     if (itemsToSubmit.isEmpty) {
-      state = state.copyWith(errorMessage: 'Please enter at least one count to submit.');
+      if (!mounted) return false;
+      _updateState((current) => current.copyWith(
+            errorMessage: 'Please enter at least one count to submit.',
+          ));
       return false;
     }
 
-    state = state.copyWith(isSubmitting: true, errorMessage: null);
+    if (!mounted) return false;
+    _updateState(
+      (current) => current.copyWith(isSubmitting: true, errorMessage: null),
+    );
 
     try {
-      final repo = _ref.read(branchStorekeeperRepositoryProvider);
+      final repo = _ref.read(storeStocktakeRepositoryProvider);
 
       if (_type == StockTakeType.bar) {
-        final shiftId = state.currentShift?['shift_id'] as String?;
+        final shiftId = snapshot.currentShift?['shift_id'] as String?;
         await repo.submitBarStocktake(
-          barLocation: state.locationFilter,
+          barLocation: snapshot.locationFilter,
           items: itemsToSubmit,
-          stocktakeDate: state.dateFilter,
+          stocktakeDate: snapshot.dateFilter,
           shiftId: shiftId,
         );
       } else {
-        final shiftId = state.currentShift?['shift_id'] as String?;
+        final shiftId = snapshot.currentShift?['shift_id'] as String?;
         await repo.submitStoreStocktake(
           items: itemsToSubmit,
-          stocktakeDate: state.dateFilter,
+          stocktakeDate: snapshot.dateFilter,
           shiftId: shiftId,
         );
       }
+      if (!mounted) return false;
 
       // Submission succeeded, clear draft file
       try {
-        final file = await _getDraftFile();
+        final file = await _getDraftFileFor(
+          locationFilter: snapshot.locationFilter,
+          dateFilter: snapshot.dateFilter,
+        );
         if (file.existsSync()) await file.delete();
       } catch (_) {}
 
-      state = state.copyWith(isSubmitting: false, isSubmitted: true);
+      if (!mounted) return false;
+      _updateState(
+        (current) => current.copyWith(isSubmitting: false, isSubmitted: true),
+      );
       // Reload state from server
-      await loadData();
+      await loadData(
+        date: snapshot.dateFilter,
+        location: snapshot.locationFilter,
+      );
       return true;
     } catch (e) {
       // Extract the server error message from Dio response body if available.
@@ -448,13 +534,17 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           msg = 'Submission failed: ${data['message']}';
         }
       } catch (_) {}
-      state = state.copyWith(isSubmitting: false, errorMessage: msg);
+      if (!mounted) return false;
+      _updateState(
+        (current) => current.copyWith(isSubmitting: false, errorMessage: msg),
+      );
       return false;
     }
   }
 
   void clearError() {
-    state = state.copyWith(errorMessage: null);
+    if (!mounted) return;
+    _updateState((current) => current.copyWith(errorMessage: null));
   }
 
   int _toInt(dynamic v) {
@@ -479,6 +569,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
 // Providers
 final barStockTakeProvider =
     StateNotifierProvider.autoDispose<StockTakeNotifier, StockTakeState>((ref) {
+  ref.keepAlive();
   final notifier = StockTakeNotifier(ref, StockTakeType.bar);
   ref.onDispose(() {
     // Optionally auto-save draft on dispose
@@ -489,6 +580,7 @@ final barStockTakeProvider =
 
 final storeStockTakeProvider =
     StateNotifierProvider.autoDispose<StockTakeNotifier, StockTakeState>((ref) {
+  ref.keepAlive();
   final notifier = StockTakeNotifier(ref, StockTakeType.store);
   ref.onDispose(() {
     notifier.saveDraft();

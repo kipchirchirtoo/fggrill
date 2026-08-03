@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../../../core/widgets/sticky_horizontal_scrollbar.dart';
-import '../data/branch_storekeeper_repository.dart';
+import '../stocktakes/data/store_stocktake_repository.dart';
 import 'record_spoilage_screen.dart';
 
 class KitchenStocktakeScreen extends ConsumerStatefulWidget {
@@ -83,7 +83,7 @@ class _KitchenStocktakeScreenState
   }
 
   Future<Map<String, dynamic>> _load() async {
-    final repo = ref.read(branchStorekeeperRepositoryProvider);
+    final repo = ref.read(storeStocktakeRepositoryProvider);
     final data =
         await repo.kitchenStocktake(date: _dateStr, shift: _selectedShift);
 
@@ -159,7 +159,7 @@ class _KitchenStocktakeScreenState
 
     setState(() => _saving = true);
     try {
-      await ref.read(branchStorekeeperRepositoryProvider).saveKitchenStocktake(
+      await ref.read(storeStocktakeRepositoryProvider).saveKitchenStocktake(
             date: _dateStr,
             shift: _selectedShift,
             items: payload,
@@ -301,6 +301,8 @@ class _KitchenStocktakeScreenState
                   padding: const EdgeInsets.all(16),
                   children: [
                     _ContextCard(data: data),
+                    const SizedBox(height: 16),
+                    _BlindCountInfoCard(itemCount: items.length, locked: isLocked),
                     const SizedBox(height: 16),
                     if (data['fixed_catalog'] == true) ...[
                       Container(
@@ -554,7 +556,7 @@ class _ContextPill extends StatelessWidget {
   }
 }
 
-class _LedgerTable extends StatelessWidget {
+class _LedgerTable extends StatefulWidget {
   const _LedgerTable({
     required this.items,
     required this.physicalControllers,
@@ -569,6 +571,31 @@ class _LedgerTable extends StatelessWidget {
   final String Function(Map<String, dynamic> item) rowKeyFor;
   final bool locked;
 
+  @override
+  State<_LedgerTable> createState() => _LedgerTableState();
+}
+
+class _LedgerTableState extends State<_LedgerTable> {
+  List<FocusNode> _focusNodes = [];
+  int _lastItemCount = 0;
+
+  void _ensureFocusNodes(int count) {
+    if (count == _lastItemCount) return;
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    _focusNodes = List.generate(count, (_) => FocusNode());
+    _lastItemCount = count;
+  }
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
   double _toDouble(dynamic value) =>
       value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
 
@@ -578,44 +605,77 @@ class _LedgerTable extends StatelessWidget {
     return physical - systemQty;
   }
 
+  void _focusNextField(int index) {
+    if (index >= _focusNodes.length - 1) {
+      _focusNodes[index].unfocus();
+      return;
+    }
+
+    final nextNode = _focusNodes[index + 1];
+    FocusScope.of(context).requestFocus(nextNode);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = nextNode.context;
+      if (targetContext != null) {
+        Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          alignment: 0.25,
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _ensureFocusNodes(widget.items.length);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A0F172A),
+            blurRadius: 20,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: StickyHorizontalScrollbar(
-          contentWidth: locked ? 748 : 636,
+          contentWidth: widget.locked ? 780 : 670,
           child: Column(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF0F2E5E),
+                  color: Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(12),
                     topRight: Radius.circular(12),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(color: Color(0xFFE2E8F0)),
                   ),
                 ),
                 child: Row(
                   children: [
                     const _HeaderCell('#', 50),
-                    const _HeaderCell('Item', 290),
-                    const _HeaderCell('Physical Count', 160),
-                    const _HeaderCell('Unit', 96),
-                    if (locked) const _HeaderCell('Variance', 120),
+                    const _HeaderCell('Item', 308),
+                    const _HeaderCell('Physical Count', 168, alignEnd: true),
+                    const _HeaderCell('Unit', 94),
+                    if (widget.locked)
+                      const _HeaderCell('Variance', 120, alignEnd: true),
                   ],
                 ),
               ),
-              ...List.generate(items.length, (index) {
-                final item = items[index];
-                final key = rowKeyFor(item);
-                final physicalController = physicalControllers.putIfAbsent(
+              ...List.generate(widget.items.length, (index) {
+                final item = widget.items[index];
+                final key = widget.rowKeyFor(item);
+                final physicalController = widget.physicalControllers.putIfAbsent(
                   key,
                   () => TextEditingController(),
                 );
@@ -624,8 +684,7 @@ class _LedgerTable extends StatelessWidget {
                 final variance = _varianceFor(item, physicalController);
 
                 return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   decoration: BoxDecoration(
                     color: rowColor,
                     border: Border(
@@ -638,29 +697,63 @@ class _LedgerTable extends StatelessWidget {
                       _BodyCell('${index + 1}', 50),
                       _BodyCell(
                         item['item_name']?.toString() ?? '-',
-                        290,
+                        308,
                         bold: true,
                       ),
                       SizedBox(
-                        width: 160,
+                        width: 168,
                         child: TextField(
                           controller: physicalController,
-                          readOnly: locked,
+                          focusNode: _focusNodes[index],
+                          readOnly: widget.locked,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: const InputDecoration(
+                          textInputAction: index == widget.items.length - 1
+                              ? TextInputAction.done
+                              : TextInputAction.next,
+                          onTap: () {
+                            physicalController.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: physicalController.text.length,
+                            );
+                          },
+                          onSubmitted: (_) {
+                            _focusNextField(index);
+                          },
+                          decoration: InputDecoration(
                             isDense: true,
-                            border: OutlineInputBorder(),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.5,
+                              ),
+                            ),
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
+                              horizontal: 12,
+                              vertical: 14,
                             ),
                           ),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F172A),
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                       SizedBox(
-                        width: 96,
+                        width: 94,
                         child: Padding(
                           padding: const EdgeInsets.only(left: 14, top: 10),
                           child: Text(
@@ -672,11 +765,12 @@ class _LedgerTable extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (locked)
+                      if (widget.locked)
                         _BodyCell(
-                          '${variance > 0 ? '+' : ''}${formatNumber(variance)}',
+                          '${variance > 0 ? '+' : ''}${widget.formatNumber(variance)}',
                           120,
                           bold: true,
+                          alignEnd: true,
                         ),
                     ],
                   ),
@@ -691,21 +785,25 @@ class _LedgerTable extends StatelessWidget {
 }
 
 class _HeaderCell extends StatelessWidget {
-  const _HeaderCell(this.label, this.width);
+  const _HeaderCell(this.label, this.width, {this.alignEnd = false});
 
   final String label;
   final double width;
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 13,
+      child: Align(
+        alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -717,25 +815,95 @@ class _BodyCell extends StatelessWidget {
     this.value,
     this.width, {
     this.bold = false,
+    this.alignEnd = false,
   });
 
   final String value;
   final double width;
   final bool bold;
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Text(
-          value,
-          style: TextStyle(
-            color: const Color(0xFF0F172A),
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+      child: Align(
+        alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            value,
+            style: TextStyle(
+              color: const Color(0xFF0F172A),
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BlindCountInfoCard extends StatelessWidget {
+  const _BlindCountInfoCard({
+    required this.itemCount,
+    required this.locked,
+  });
+
+  final int itemCount;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              locked ? Icons.lock_outline : Icons.visibility_off_outlined,
+              color: const Color(0xFF1565C0),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              locked
+                  ? 'This stocktake is locked. Physical counts remain visible and variance is now available for review.'
+                  : 'Blind count mode is active. Enter physical count only, then press Enter to move straight to the next line.',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$itemCount item(s)',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

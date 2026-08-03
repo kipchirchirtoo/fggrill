@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/app_notifier.dart';
-import '../data/branch_storekeeper_repository.dart';
+import '../exceptions/data/store_exception_repository.dart';
 
 /// Record Spoilage — Branch Storekeeper. Shared by the bar, kitchen, and
 /// store stocktake screens (each links here with its area preselected) so
@@ -60,7 +60,7 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
   @override
   void initState() {
     super.initState();
-    ref.read(branchStorekeeperRepositoryProvider).currentBranchId().then((id) {
+    ref.read(storeExceptionRepositoryProvider).currentBranchId().then((id) {
       if (mounted) setState(() => _hasExecutiveBar = id == 1);
     });
   }
@@ -74,12 +74,12 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
 
   Future<List<Map<String, dynamic>>> _loadCandidates() {
     return ref
-        .read(branchStorekeeperRepositoryProvider)
+        .read(storeExceptionRepositoryProvider)
         .spoilageCandidates(_area);
   }
 
   Future<List<Map<String, dynamic>>> _loadStaff() {
-    return ref.read(branchStorekeeperRepositoryProvider).branchStaff();
+    return ref.read(storeExceptionRepositoryProvider).branchStaff();
   }
 
   void _onAreaChanged(String area) {
@@ -106,7 +106,7 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(branchStorekeeperRepositoryProvider).recordBranchSpoilage(
+      await ref.read(storeExceptionRepositoryProvider).recordBranchSpoilage(
             area: _area,
             itemId: '${item['id']}',
             quantity: qty,

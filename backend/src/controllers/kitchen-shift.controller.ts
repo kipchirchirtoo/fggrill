@@ -215,6 +215,22 @@ async function createKitchenShiftFromOpeningSeed(params: {
             .eq('id', params.handoverRecordId);
     }
 
+    // Recover POS sales that completed before this kitchen shift opened, so
+    // their consumption isn't lost from food control (recordKitchenConsumption
+    // skips sales made while no kitchen shift is open). Best-effort and
+    // idempotent; dynamic import avoids a circular dependency with the POS
+    // controller.
+    try {
+        const { backfillKitchenConsumptionForOpenShift } = await import('./outlet-pos.controller');
+        await backfillKitchenConsumptionForOpenShift(
+            params.branchId,
+            String(shift.id),
+            `${params.businessDate}T00:00:00.000Z`,
+        );
+    } catch (err) {
+        logger.warn('kitchen-shift open: consumption backfill failed', err as any);
+    }
+
     return shift;
 }
 
@@ -871,6 +887,12 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
     const results: any[] = [];
     for (const it of items || []) {
         if (n(it.quantity) <= 0) continue;
+        // Every issuance should carry an explicit channel. Fall back to
+        // pos_restaurant only as a safety net, and warn so a mis-wired client
+        // flow is caught instead of silently mis-attributing the cost.
+        if (!it.purpose_channel) {
+            logger.warn(`addShiftStock: issuance for ${it.name || it.sku} on shift ${shift_id} has no purpose_channel — defaulting to pos_restaurant`);
+        }
         const purposeChannel = it.purpose_channel || 'pos_restaurant';
 
         const staffIds: string[] = Array.isArray(it.responsible_staff_ids) ? it.responsible_staff_ids : [];
@@ -3784,6 +3806,15 @@ type ShiftDailyControlsApiPayload = {
     summary: Record<string, any>;
     rows: DailyControlRow[];
     standards_configured: boolean;
+    // Sold POS items with no recipe / inventory / food-control link — recorded
+    // (never dropped) but flagged so the accountant can register them.
+    unmatched_pos_items?: any[];
+    // Kitchen wastage/spoilage recorded against this shift (branch_spoilage_log),
+    // kept separate from unexplained variance.
+    wastage?: any;
+    // Per-channel control metrics (issued/net cost, revenue, food-cost %, gross
+    // margin, cost per guest, returns) computed by each channel's method.
+    channel_controls?: any[];
     frozen?: boolean;
     frozen_at?: string | null;
 };
@@ -3815,6 +3846,9 @@ function toShiftDailyControlsApiPayload(report: Awaited<ReturnType<typeof buildS
         summary: report.summary,
         rows: report.rows,
         standards_configured: report.standards_configured,
+        unmatched_pos_items: report.unmatched_pos_items,
+        wastage: report.wastage,
+        channel_controls: report.channel_controls,
     };
 }
 
@@ -3980,10 +4014,27 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             .select('id, raw_item_sku, raw_item_name, raw_quantity, raw_unit, produced_item_sku, produced_item_name, produced_quantity, produced_unit, pos_outlet_item_id, yield_type_code, is_active, branch_id')
             .eq('branch_id', shift.branch_id)
             .eq('is_active', true),
-        supabase
-            .from('kitchen_shift_pos_consumption')
-            .select('raw_item_sku, raw_item_name, raw_quantity_consumed, raw_unit, portions_sold, pos_outlet_item_id')
-            .eq('shift_id', shiftId),
+        // Paginate: a busy shift can have >1000 POS consumption rows and
+        // Supabase caps a single select at 1000, which would under-count POS
+        // expected consumption AND hide unmatched items beyond the first page.
+        // select * (not an explicit column list) so this read never errors on a
+        // DB where the match_status migration hasn't run — missing column is
+        // simply treated as 'matched'.
+        (async () => {
+            const all: any[] = [];
+            const pageSize = 1000;
+            for (let from = 0; ; from += pageSize) {
+                const { data, error } = await supabase
+                    .from('kitchen_shift_pos_consumption')
+                    .select('*')
+                    .eq('shift_id', shiftId)
+                    .range(from, from + pageSize - 1);
+                if (error) return { data: all, error };
+                all.push(...(data || []));
+                if (!data || data.length < pageSize) break;
+            }
+            return { data: all, error: null };
+        })(),
         supabase
             .from('food_control_direct_items')
             .select('stock_item_sku, stock_item_name')
@@ -4105,7 +4156,10 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     const { data: eventOrders, error: eventOrdersError } = eventRefIds.length
         ? await supabase
             .from('event_orders')
-            .select('id, pax, menu_package, package_definition_id, event_name, event_type')
+            // select * so revenue (total_amount) and returns_value are available
+            // for per-channel cost/margin controls without erroring on a DB
+            // where the returns_value migration hasn't run yet.
+            .select('*')
             .in('id', eventRefIds)
         : { data: [], error: null } as any;
 
@@ -4140,6 +4194,9 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     };
 
     for (const sale of posConsumptionList) {
+        // Unmatched sales (no recipe/inventory/food-control link) are surfaced
+        // separately for configuration, not folded into expected consumption.
+        if (String((sale as any).match_status || 'matched') === 'unmatched') continue;
         const sku = String(sale.raw_item_sku || '').trim();
         if (!controlledSkuSet.has(sku)) continue;
         const rawQtyConsumed = n(sale.raw_quantity_consumed);
@@ -4517,9 +4574,143 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         }
     );
 
+    // Sold POS items with no recipe / inventory / food-control link — grouped
+    // for the accountant to register (recipe / direct / exempt). Never dropped.
+    const unmatchedByPosId = new Map<string, any>();
+    for (const sale of posConsumptionList) {
+        if (String((sale as any).match_status || 'matched') !== 'unmatched') continue;
+        const posId = String(sale.pos_outlet_item_id || '').trim()
+            || String(sale.raw_item_sku || '').trim();
+        if (!posId) continue;
+        const existing = unmatchedByPosId.get(posId) || {
+            pos_outlet_item_id: sale.pos_outlet_item_id || null,
+            item_name: sale.raw_item_name || 'Unmapped POS item',
+            portions_sold: 0,
+        };
+        existing.portions_sold += n(sale.portions_sold);
+        unmatchedByPosId.set(posId, existing);
+    }
+    const unmatchedPosItems = [...unmatchedByPosId.values()]
+        .map((u) => ({ ...u, portions_sold: Number(u.portions_sold.toFixed(3)) }))
+        .sort((a, b) => b.portions_sold - a.portions_sold);
+
+    // Kitchen wastage recorded against THIS shift (branch_spoilage_log). Kept
+    // separate from unexplained variance per food-control policy: approved =
+    // confirmed loss, pending = awaiting accountant/manager approval.
+    const { data: kitchenSpoilage } = await supabase
+        .from('branch_spoilage_log')
+        .select('item_sku, item_name, quantity, unit, unit_cost, total_loss, reason, status')
+        .eq('branch_id', shift.branch_id)
+        .eq('area', 'kitchen')
+        .eq('kitchen_shift_id', shift.id);
+    const spoilageRows = (kitchenSpoilage || []) as any[];
+    const sumLoss = (status: string) => Number(
+        spoilageRows.filter((r) => String(r.status) === status)
+            .reduce((s, r) => s + n(r.total_loss), 0).toFixed(2)
+    );
+    const wastage = {
+        approved_cost: sumLoss('approved'),
+        pending_cost: sumLoss('pending'),
+        entries: spoilageRows.map((r) => ({
+            item_sku: r.item_sku || null,
+            item_name: r.item_name || null,
+            quantity: n(r.quantity),
+            unit: r.unit || null,
+            total_loss: n(r.total_loss),
+            reason: r.reason || null,
+            status: r.status || null,
+        })),
+    };
+
+    // ── PER-CHANNEL CONTROLS (Phase 2) ───────────────────────────────────────
+    // Each issue channel is controlled by the method appropriate to it:
+    //   POS Restaurant  → recipe/POS-sales standard (expected vs actual)
+    //   Conference/Buffet/Group/Outside Catering → net food cost, revenue,
+    //       food-cost %, gross margin, cost per guest (Outside Catering also
+    //       subtracts returns)
+    //   Accommodation Breakfast → net cost ÷ confirmed pax
+    //   Staff Meals → net cost, cost per guest (menu × served)
+    //   Wastage → approved/pending loss (separate from unexplained variance)
+    // Costs reuse kitchen_shift_items.cost_price; revenue/pax/returns come from
+    // event_orders.
+    const costBySku = new Map<string, number>();
+    for (const it of shiftItemsList) {
+        const sku = String(it.item_sku || '').trim();
+        if (sku) costBySku.set(sku, n(it.cost_price));
+    }
+    const round2 = (v: number) => Number((v || 0).toFixed(2));
+    const eventStyleChannels = ['buffet', 'conference_event', 'outside_catering', 'group_meal', 'event_order'];
+    const channelControlMethod: Record<string, string> = {
+        pos_restaurant: 'recipe_standard',
+        accommodation_breakfast: 'cost_per_pax',
+        buffet: 'cost_margin',
+        conference_event: 'cost_margin',
+        outside_catering: 'cost_margin_returns',
+        group_meal: 'cost_margin',
+        staff_meal: 'menu_x_served',
+        wastage: 'wastage_approval',
+    };
+    const controlChannelKeys = [
+        'pos_restaurant', 'accommodation_breakfast', 'buffet', 'conference_event',
+        'outside_catering', 'group_meal', 'staff_meal', 'wastage',
+    ];
+    const channelControls = controlChannelKeys.map((channel) => {
+        const adds = additionsList.filter(
+            (a: any) => String(a.purpose_channel || 'kitchen_session') === channel
+        );
+        const issuedCost = adds.reduce(
+            (s: number, a: any) => s + n(a.quantity) * (costBySku.get(String(a.item_sku || '').trim()) || 0),
+            0
+        );
+
+        let revenue = 0;
+        let pax = 0;
+        let returns = 0;
+        if (eventStyleChannels.includes(channel)) {
+            const refIds = [...new Set(adds.map((a: any) => String(a.reference_id || '').trim()).filter(Boolean))];
+            for (const rid of refIds) {
+                const eo = eventOrderById.get(rid);
+                if (!eo) continue;
+                revenue += n((eo as any).total_amount);
+                pax += n(eo.pax);
+                returns += n((eo as any).returns_value);
+            }
+        } else if (channel === 'accommodation_breakfast') {
+            pax = n(shift.breakfast_pax);
+        } else if (channel === 'staff_meal') {
+            pax = n(shift.staff_meal_pax);
+        }
+
+        const wastageCost = channel === 'wastage' ? wastage.approved_cost : 0;
+        const netCost = channel === 'wastage'
+            ? round2(wastageCost)
+            : round2(issuedCost - returns);
+        const foodCostPct = revenue > 0 ? round2((netCost / revenue) * 100) : null;
+        const grossMargin = revenue > 0 ? round2(revenue - netCost) : null;
+        const costPerGuest = pax > 0 ? round2(netCost / pax) : null;
+
+        return {
+            channel_code: channel,
+            channel_name: channelNames[channel] || channel,
+            control_method: channelControlMethod[channel] || 'recipe_standard',
+            issued_cost: round2(issuedCost),
+            returns: round2(returns),
+            wastage_cost: round2(wastageCost),
+            net_cost: netCost,
+            revenue: round2(revenue),
+            food_cost_pct: foodCostPct,
+            gross_margin: grossMargin,
+            pax,
+            cost_per_guest: costPerGuest,
+        };
+    }).filter((c) => c.issued_cost > 0 || c.revenue > 0 || c.wastage_cost > 0 || c.pax > 0);
+
     return {
         shift,
         rows,
+        unmatched_pos_items: unmatchedPosItems,
+        wastage,
+        channel_controls: channelControls,
         summary: {
             ...summary,
             total_opening_qty: Number(summary.total_opening_qty.toFixed(3)),

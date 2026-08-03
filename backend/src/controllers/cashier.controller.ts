@@ -4495,8 +4495,14 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         const search = String(req.query.search || '').trim().toLowerCase();
         const requestedDate = String(req.query.date || '').trim();
         const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '25'), 10) || 25));
-        const offset = (page - 1) * limit;
+        // limit=all (or 0) returns EVERY unpaid bill for the shift with no
+        // pagination cap — this list is meant to show the whole shift, not a page.
+        const rawLimit = String(req.query.limit ?? '25').trim().toLowerCase();
+        const noLimit = rawLimit === 'all' || rawLimit === '0';
+        const limit = noLimit
+            ? Number.MAX_SAFE_INTEGER
+            : Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 25));
+        const offset = noLimit ? 0 : (page - 1) * limit;
         const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
         let from: Date | null = null;
         let to: Date | null = null;
@@ -4823,18 +4829,17 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         // Sort final combined data
         combinedData.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime());
         const total = combinedData.length;
-        const pagedData = combinedData.slice(offset, offset + limit);
-
+        const pagedData = noLimit ? combinedData : combinedData.slice(offset, offset + limit);
 
         res.json({
             success: true,
             message: 'Unpaid bills retrieved successfully',
             data: pagedData,
             pagination: {
-                page,
-                limit,
+                page: noLimit ? 1 : page,
+                limit: noLimit ? total : limit,
                 total,
-                has_more: offset + limit < total,
+                has_more: noLimit ? false : offset + limit < total,
             }
         });
     } catch (error) {
@@ -9658,8 +9663,13 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const wantsVoidedOrders = ['voided', 'void'].includes(status);
         const search = String(req.query.search || '').trim().toLowerCase();
         const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '25'), 10) || 25));
-        const offset = (page - 1) * limit;
+        // limit=all (or 0) returns EVERY order for the open shift, no page cap.
+        const rawLimit = String(req.query.limit ?? '25').trim().toLowerCase();
+        const noLimit = rawLimit === 'all' || rawLimit === '0';
+        const limit = noLimit
+            ? Number.MAX_SAFE_INTEGER
+            : Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 25));
+        const offset = noLimit ? 0 : (page - 1) * limit;
         const requestedDate = String(req.query.date || '').trim();
         const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
         let from: Date | null = null;
@@ -10071,16 +10081,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         const total = mapped.length;
-        const paged = mapped.slice(offset, offset + limit);
+        const paged = noLimit ? mapped : mapped.slice(offset, offset + limit);
 
         res.json({
             success: true,
             data: paged,
             pagination: {
-                page,
-                limit,
+                page: noLimit ? 1 : page,
+                limit: noLimit ? total : limit,
                 total,
-                has_more: offset + limit < total,
+                has_more: noLimit ? false : offset + limit < total,
             }
         });
     } catch (error) {

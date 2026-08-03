@@ -533,6 +533,7 @@ class _EventOrderEditorDialogState
   late final TextEditingController _packageCtrl;
   late final TextEditingController _chargePerPaxCtrl;
   late final TextEditingController _totalAmountCtrl;
+  late final TextEditingController _returnsCtrl;
   late final TextEditingController _amountPaidCtrl;
   late final TextEditingController _creditDueDateCtrl;
   late final TextEditingController _notesCtrl;
@@ -581,6 +582,8 @@ class _EventOrderEditorDialogState
         TextEditingController(text: '${row['charge_per_pax'] ?? ''}');
     _totalAmountCtrl =
         TextEditingController(text: '${row['total_amount'] ?? ''}');
+    _returnsCtrl =
+        TextEditingController(text: '${row['returns_value'] ?? ''}');
     _amountPaidCtrl =
         TextEditingController(text: '${row['amount_paid'] ?? ''}');
     _creditDueDateCtrl =
@@ -606,6 +609,7 @@ class _EventOrderEditorDialogState
     _packageCtrl.dispose();
     _chargePerPaxCtrl.dispose();
     _totalAmountCtrl.dispose();
+    _returnsCtrl.dispose();
     _amountPaidCtrl.dispose();
     _creditDueDateCtrl.dispose();
     _notesCtrl.dispose();
@@ -693,6 +697,10 @@ class _EventOrderEditorDialogState
         'menu_package': _packageCtrl.text.trim(),
         'charge_per_pax': num.tryParse(_chargePerPaxCtrl.text.trim()) ?? 0,
         'total_amount': num.tryParse(_totalAmountCtrl.text.trim()) ?? 0,
+        // Only send returns when actually entered, so editing an event order
+        // still works on a DB where the returns_value migration hasn't run.
+        if (_returnsCtrl.text.trim().isNotEmpty)
+          'returns_value': num.tryParse(_returnsCtrl.text.trim()) ?? 0,
         'amount_paid': num.tryParse(_amountPaidCtrl.text.trim()) ?? 0,
         'payment_status': _paymentStatus,
         'payment_method': _paymentMethod,
@@ -938,6 +946,14 @@ class _EventOrderEditorDialogState
                             controller: _totalAmountCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: _input('Total Amount'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 180,
+                          child: TextFormField(
+                            controller: _returnsCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _input('Returns (unused stock)'),
                           ),
                         ),
                         SizedBox(

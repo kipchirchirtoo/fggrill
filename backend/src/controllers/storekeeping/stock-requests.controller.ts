@@ -4,6 +4,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import { StoreTransferPostingService } from '../../modules/inventory';
 import { isGlobalRole } from '../../utils/branchIsolation';
 import { randomUUID } from 'crypto';
 import {
@@ -1048,45 +1049,13 @@ export const confirmDispatch = async (
 
         const now = new Date().toISOString();
 
-        // Deduct stock from simple_items for each issued item
-        const deductionErrors: string[] = [];
-        let totalIssuedItems = 0;
-
-        for (const item of items) {
-            const issuedQty = Number(item.issued_qty || 0);
-            if (issuedQty <= 0) continue;
-
-            totalIssuedItems++;
-
-            // Deduct from central store stock
-            const { error: deductError } = await supabase.rpc('decrement_simple_item_qty', {
-                p_sku: item.item_sku,
-                p_qty: issuedQty
-            }).then(async (rpcResult) => {
-                if (rpcResult.error) {
-                    // Fallback: direct update if RPC not available
-                    const { data: currentItem } = await supabase
-                        .from('simple_items')
-                        .select('quantity')
-                        .eq('sku', item.item_sku)
-                        .maybeSingle();
-
-                    if (currentItem) {
-                        const newQty = Math.max(0, Number(currentItem.quantity || 0) - issuedQty);
-                        return supabase
-                            .from('simple_items')
-                            .update({ quantity: newQty, updated_at: now })
-                            .eq('sku', item.item_sku);
-                    }
-                }
-                return rpcResult;
-            });
-
-            if (deductError) {
-                logger.warn(`Failed to deduct stock for SKU ${item.item_sku}:`, deductError);
-                deductionErrors.push(item.item_sku);
-            }
-        }
+        const issuedItems = items
+            .map((item: any) => ({
+                item_name: item.item_name || item.item_sku,
+                item_sku: item.item_sku,
+                dispatched_quantity: Number(item.issued_qty || 0)
+            }))
+            .filter((item: any) => item.item_sku && item.dispatched_quantity > 0);
 
         // Mark backordered items that don't have an explicit issue_status yet
         await supabase
@@ -1125,9 +1094,12 @@ export const confirmDispatch = async (
         const timestamp = Date.now().toString().slice(-4);
         const dispatch_number = `DN-${branchCode}-${dateStr}-${timestamp}`;
 
-        // Get central warehouse
         const centralBranch = await BranchInventoryService.getCentralWarehouse();
         const fromBranchId = centralBranch?.id || null;
+
+        if (!fromBranchId) {
+            throw new AppError('Central warehouse not configured', 500);
+        }
 
         // Create dispatch note record
         const { data: dispatchNote, error: dispatchError } = await supabase
@@ -1147,18 +1119,16 @@ export const confirmDispatch = async (
             .select()
             .single();
 
-        if (dispatchError) {
-            logger.warn('Failed to create dispatch note record:', dispatchError);
-        }
+        if (dispatchError) throw dispatchError;
+        if (!dispatchNote) throw new AppError('Failed to create dispatch note record', 500);
 
         // Insert dispatch items for the dispatch note
-        if (dispatchNote && items.length > 0) {
-            const dispatchItems = items
-                .filter((item: any) => Number(item.issued_qty || 0) > 0)
+        if (dispatchNote && issuedItems.length > 0) {
+            const dispatchItems = issuedItems
                 .map((item: any) => ({
                     dispatch_id: dispatchNote.id,
                     item_sku: item.item_sku,
-                    dispatched_quantity: Number(item.issued_qty),
+                    dispatched_quantity: Number(item.dispatched_quantity),
                     status: 'DISPATCHED'
                 }));
 
@@ -1170,10 +1140,26 @@ export const confirmDispatch = async (
             }
         }
 
+        const postingResult = issuedItems.length > 0
+            ? await StoreTransferPostingService.postDispatchToTransit({
+                actorId: userId!,
+                destinationBranchId: destBranchId,
+                dispatchId: dispatchNote.id,
+                dispatchNumber: dispatch_number,
+                fromBranchId,
+                idempotencyKey: req.idempotencyKey || `compat-stock-request-dispatch-${id}`,
+                items: issuedItems,
+                notes: notes || null,
+                sourceTable: 'dispatch_notes',
+                sourceTableId: dispatchNote.id,
+                sourceType: 'central_store'
+            })
+            : null;
+
         // Build summary
-        const issuedItems = items.filter((i: any) => Number(i.issued_qty || 0) > 0);
+        const issuedSummaryItems = items.filter((i: any) => Number(i.issued_qty || 0) > 0);
         const backorderedItems = items.filter((i: any) => i.issue_status === 'backordered' || (!i.issue_status && Number(i.issued_qty || 0) === 0));
-        const totalIssuedQty = issuedItems.reduce((sum: number, i: any) => sum + Number(i.issued_qty || 0), 0);
+        const totalIssuedQty = issuedSummaryItems.reduce((sum: number, i: any) => sum + Number(i.issued_qty || 0), 0);
 
         // Notify branch storekeeper
         notificationService.notifyRole(
@@ -1198,11 +1184,19 @@ export const confirmDispatch = async (
                 dispatch_number,
                 summary: {
                     total_items: items.length,
-                    issued_items: issuedItems.length,
+                    issued_items: issuedSummaryItems.length,
                     backordered_items: backorderedItems.length,
                     total_issued_qty: totalIssuedQty,
-                    deduction_errors: deductionErrors
-                }
+                    deduction_errors: []
+                },
+                ...(postingResult?.document || {
+                    document_id: null,
+                    document_number: null,
+                    document_type: null,
+                    posting_status: null,
+                    posted_at: null,
+                    reversal_of_document_id: null
+                })
             }
         });
     } catch (error) {

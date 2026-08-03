@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { StoreReceivingPostingService } from '../../modules/inventory';
 import { logger } from '../../utils/logger';
-import { updateBranchStock, postGrnFoundationMovements } from '../../services/branch-inventory.service';
 
 const toNumber = (value: any): number => {
     const parsed = Number(value);
@@ -573,27 +573,6 @@ export const receiveFromSupplier = async (
             throw itemError;
         }
 
-        // Resolve primary store location for this branch
-        const { data: storeLocation } = await supabase
-            .from('inventory_locations')
-            .select('id')
-            .eq('branch_id', branchId)
-            .in('location_type', ['branch_store', 'central_store', 'store'])
-            .maybeSingle();
-        let locationId = storeLocation?.id || null;
-
-        if (!locationId) {
-            // Fallback: get any location for this branch
-            const { data: anyLocation } = await supabase
-                .from('inventory_locations')
-                .select('id')
-                .eq('branch_id', branchId)
-                .limit(1)
-                .maybeSingle();
-            locationId = anyLocation?.id || null;
-        }
-
-        // Prepare items array for the bulk stored procedure
         const bulkItems = (savedItems || grnItems).map((item: any) => ({
             item_id: item.item_id,
             sku: item.sku,
@@ -601,43 +580,28 @@ export const receiveFromSupplier = async (
             unit_price: Number(item.unit_price || 0)
         }));
 
-        logger.info(`Executing bulk branch stock updates for GRN ${grnNumber} via database RPC...`);
-        const { data: rpcResult, error: bulkStockError } = await supabase
-            .rpc('bulk_post_grn_stock_update', {
-                p_branch_id: branchId,
-                p_location_id: locationId,
-                p_items: bulkItems,
-                p_user_id: userId || null,
-                p_reference_id: grn.id,
-                p_reference_number: grnNumber,
-                p_remarks: remarks || ''
-            });
-
-        if (bulkStockError) {
-            logger.error('Branch bulk stock update RPC failed:', bulkStockError);
-            throw bulkStockError;
-        }
-
-        // Log each item into the Foundation Service inventory_movements audit
-        // trail (best-effort — never blocks the GRN response if this fails).
-        postGrnFoundationMovements({
-            branchId: branchId || 0,
+        const posting = await StoreReceivingPostingService.postSupplierReceipt({
             actorId: userId || '',
-            grnNumber,
+            branchId,
             grnId: grn.id,
-            items: bulkItems.map((it: any) => ({
-                sku: it.sku,
-                item_name: it.sku,
-                qty: it.qty,
-                unit_price: it.unit_price
-            }))
-        }).catch((err: any) => logger.warn('postGrnFoundationMovements (branch) failed:', err?.message));
+            grnNumber,
+            idempotencyKey: req.idempotencyKey || `compat-grn-${grn.id}`,
+            items: (savedItems || grnItems).map((item: any) => ({
+                item_name: item.item_name || item.sku,
+                quantity_accepted: item.quantity_accepted,
+                quantity_received: item.quantity_received,
+                sku: item.sku,
+                unit_price: item.unit_price
+            })),
+            remarks: remarks || '',
+            supplierId: supplier.id
+        });
 
-        const stockResults = (rpcResult || []).map((r: any) => ({
-            item_sku: r.sku,
-            quantity: r.quantity,
-            previous_stock: Number(r.prev_qty || 0),
-            new_stock: Number(r.new_qty || 0)
+        const stockResults = posting.lines.map((line) => ({
+            item_sku: line.item_sku,
+            quantity: line.quantity,
+            previous_stock: Number(line.previous_destination_quantity || 0),
+            new_stock: Number(line.new_destination_quantity || 0)
         }));
 
         const purchaseOrder = await updatePurchaseOrderReceipt(po_id, savedItems || grnItems, userId);
@@ -681,6 +645,12 @@ export const receiveFromSupplier = async (
                 received_at: receivedAt,
                 items: savedItems || grnItems,
                 items_processed: stockResults,
+                document_id: posting.document.document_id,
+                document_number: posting.document.document_number,
+                document_type: posting.document.document_type,
+                posting_status: posting.document.posting_status,
+                posted_at: posting.document.posted_at,
+                reversal_of_document_id: posting.document.reversal_of_document_id,
                 purchase_order: purchaseOrder,
                 supplier_invoice: supplierInvoice,
                 finance_status: supplierInvoice ? 'Billed' : 'Pending Bill',

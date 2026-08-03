@@ -896,8 +896,10 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
 
         const billAmt = Number(targetBill.amount || targetBill.total_amount || cashierBill?.total_amount || cashierBill?.amount || 0);
         const candidatePosIds = [
+            targetBill.source_document_id,
             targetBill.source_pos_order_id,
             targetBill.pos_bill_id,
+            cashierBill?.source_document_id,
             cashierBill?.source_pos_order_id,
             cashierBill?.pos_order_id,
             cashierBill?.order_id
@@ -1095,9 +1097,12 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             const qty = Number(item.quantity || item.qty || 1);
             const price = Number(item.unit_price || item.price || item.amount || 0);
             const total = Number(item.total_price || item.subtotal || item.line_total || (qty * price));
-            let rawItemName = item.item_name || item.name || item.description || item.title || 'Food & Beverage Item';
+            let rawItemName = item.name || item.item_name || item.description || item.title || 'Food & Beverage Item';
             if (rawItemName.startsWith('Cashier Credit Bill - CRD-')) {
-                rawItemName = 'Food & Beverage Staff Credit Order';
+                rawItemName = item.name || item.item_name || 'Food & Beverage Item';
+                if (rawItemName.startsWith('Cashier Credit Bill - CRD-')) {
+                    rawItemName = 'Food & Beverage Item';
+                }
             }
             return {
                 id: item.id || `${targetBill.id}_${idx}`,
