@@ -41,7 +41,8 @@ import {
   recordPettyCash,
   getPettyCashEntries,
   getPettyCashSummary,
-  getPettyCashCategories
+  getPettyCashCategories,
+  getPendingPOsForCashier
 } from '../controllers/kyogong/petty-cash.controller';
 
 import {
@@ -512,6 +513,22 @@ router.post('/petty-cash',
     ...PETTY_CASH_CASHIER_ROLES
   ]),
   recordPettyCash
+);
+
+// Get pending approved POs for cashier expenses
+router.get('/petty-cash/pending-pos',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_MANAGER,
+    UserRole.RECEPTIONIST,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    ...PETTY_CASH_CASHIER_ROLES
+  ]),
+  getPendingPOsForCashier
 );
 
 // ============================================

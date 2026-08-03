@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import db from '../../db';
+import { logger } from '../../utils/logger';
 import {
   isCashierStationRole,
   resolveCashierStationRole,
@@ -152,9 +154,78 @@ export const recordPettyCash = async (req: Request, res: Response) => {
       }
     }
 
+    // Deduct cash_at_hand and update total_expenses in cashier_shift_logs
+    if (shift_id) {
+      try {
+        await db.query(
+          `UPDATE cashier_shift_logs 
+           SET expense_total = COALESCE(expense_total, 0) + $1,
+               cash_at_hand = GREATEST(0, COALESCE(cash_at_hand, opening_float, 0) - $1),
+               updated_at = NOW()
+           WHERE id = $2`,
+          [amount, shift_id]
+        );
+
+        const { data: currentShift } = await supabase
+          .from('cashier_shift_logs')
+          .select('id, cash_at_hand, expense_total')
+          .eq('id', shift_id)
+          .single();
+
+        if (currentShift) {
+          const currentExp = Number(currentShift.expense_total || 0);
+          const currentCash = Number(currentShift.cash_at_hand || 0);
+          await supabase
+            .from('cashier_shift_logs')
+            .update({
+              expense_total: currentExp + Number(amount),
+              cash_at_hand: Math.max(0, currentCash - Number(amount)),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', shift_id);
+        }
+      } catch (err) {
+        logger.warn(`Failed to update cashier_shift_logs cash_at_hand for expense:`, err);
+      }
+
+      // Record PAYOUT transaction in cashier_transactions
+      try {
+        await supabase
+          .from('cashier_transactions')
+          .insert({
+            branch_id: branch_id || req.user?.branch_id,
+            cashier_shift_log_id: shift_id,
+            amount: Number(amount),
+            payment_method: 'CASH',
+            revenue_type: 'EXPENSE',
+            transaction_type: 'PAYOUT',
+            status: 'completed',
+            notes: `${finalCategory}: ${finalDescription}`,
+            source_document_type: po_reference ? 'PO' : 'PETTY_CASH',
+            recorded_by,
+            created_at: new Date().toISOString(),
+          });
+      } catch (txErr) {
+        logger.warn(`Failed to insert cashier_transaction for expense:`, txErr);
+      }
+
+      // If PO reference is supplied, update PO finance_status
+      if (po_reference) {
+        try {
+          await supabase
+            .from('purchase_orders')
+            .update({
+              finance_status: 'paid',
+              updated_at: new Date().toISOString(),
+            })
+            .or(`po_number.eq.${po_reference},id.eq.${po_reference}`);
+        } catch (_) {}
+      }
+    }
+
     res.json({
       success: true,
-      message: 'Petty cash entry recorded successfully',
+      message: 'Petty cash entry recorded successfully — cash drawer updated',
       data: entry
     });
   } catch (error: any) {
@@ -163,6 +234,68 @@ export const recordPettyCash = async (req: Request, res: Response) => {
       success: false,
       error: error.message || 'Failed to record petty cash entry'
     });
+  }
+};
+
+/**
+ * Get pending approved purchase orders for cashier petty cash recording
+ * GET /api/kyogong/petty-cash/pending-pos
+ */
+export const getPendingPOsForCashier = async (req: Request, res: Response) => {
+  try {
+    const branch_id = Number(req.query.branch_id || req.user?.branch_id);
+
+    let query = supabase
+      .from('purchase_orders')
+      .select('*')
+      .in('status', ['approved', 'APPROVED', 'received', 'RECEIVED', 'fully_received'])
+      .order('created_at', { ascending: false });
+
+    if (branch_id) {
+      query = query.eq('branch_id', branch_id);
+    }
+
+    const { data: pos, error } = await query;
+
+    if (error) {
+      const pgRes = await db.query(
+        `SELECT po.*, s.name as supplier_name 
+         FROM purchase_orders po 
+         LEFT JOIN suppliers s ON po.supplier_id = s.id 
+         WHERE LOWER(po.status) IN ('approved', 'received', 'fully_received')
+         ${branch_id ? 'AND po.branch_id = $1' : ''}
+         ORDER BY po.created_at DESC LIMIT 100`,
+        branch_id ? [branch_id] : []
+      );
+      return res.json({ success: true, data: pgRes.rows || [] });
+    }
+
+    const supplierIds = (pos || [])
+      .map((p: any) => p.supplier_id || p.vendor_id)
+      .filter(Boolean);
+
+    let supplierMap = new Map();
+    if (supplierIds.length > 0) {
+      const { data: suppliers } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .in('id', supplierIds);
+      if (suppliers) {
+        supplierMap = new Map(suppliers.map((s: any) => [s.id, s.name]));
+      }
+    }
+
+    const enriched = (pos || []).map((p: any) => ({
+      ...p,
+      supplier_name:
+        p.supplier_name ||
+        supplierMap.get(p.supplier_id || p.vendor_id) ||
+        'Supplier',
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
