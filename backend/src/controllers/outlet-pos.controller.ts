@@ -7131,7 +7131,7 @@ export const accountantResolveDisputedSettlement = async (req: Request, res: Res
   try {
     assertUser(req);
     const role = roleFor(req);
-    if (!ACCOUNTANT_ROLES.has(role) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+    if (!SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
       throw new AppError('Only the Branch Accountant or Manager can resolve disputed settlements', 403);
     }
 
@@ -7161,23 +7161,18 @@ export const accountantResolveDisputedSettlement = async (req: Request, res: Res
 
       resolutionSummary = `Option 1: Collected additional KES ${extraAmt.toLocaleString('en-KE')} via ${method?.toUpperCase()} (Ref: ${reference || room_number || 'N/A'})`;
 
-      await recordCashierTransactionSafe({
-        branchId: Number((row as any).branch_id),
-        cashierId: String(req.user.id),
-        paymentAmount: extraAmt,
-        payment_method: method,
-        payment_reference: reference || room_number || null,
-        revenueType: 'pos_master_bill_additional',
-        referenceType: 'pos_master_bills',
-        referenceId: String(master.id),
-        sourceModule: 'pos',
-        sourceDocumentType: 'pos_master_bills',
-        sourceDocumentId: String(master.id),
-        sourceDocumentNumber: String(master.master_bill_number || ''),
-        billNumber: String(master.master_bill_number || ''),
-        orderNumber: String(master.master_bill_number || ''),
-        customerName: String(master.customer_name || 'Walk-in')
-      });
+      try {
+        await supabase.from('pos_payments').insert({
+          branch_id: Number((row as any).branch_id),
+          received_by: req.user.id,
+          amount: extraAmt,
+          payment_method: method,
+          reference: reference || room_number || master?.master_bill_number || null,
+          created_at: now
+        });
+      } catch (err) {
+        logger.warn('Error inserting pos_payments row for additional master bill payment', { err });
+      }
 
       if (master?.id) {
         await supabase.from('pos_master_bills')
@@ -7205,14 +7200,18 @@ export const accountantResolveDisputedSettlement = async (req: Request, res: Res
       if (!reasonText) throw new AppError('Void/discount reason is required for Option 3', 400);
       resolutionSummary = `Option 3: Authorized manager void/discount: ${reasonText}`;
 
-      await supabase.from('pos_item_void_log').insert({
-        branch_id: Number((row as any).branch_id),
-        requested_by: (row as any).supplying_cashier_id || req.user.id,
-        approved_by: req.user.id,
-        status: 'approved',
-        reason: `Disputed master bill ${master?.master_bill_number}: ${reasonText}`,
-        created_at: now
-      }).catch(() => {});
+      try {
+        await supabase.from('pos_item_void_log').insert({
+          branch_id: Number((row as any).branch_id),
+          requested_by: (row as any).supplying_cashier_id || req.user.id,
+          approved_by: req.user.id,
+          status: 'approved',
+          reason: `Disputed master bill ${master?.master_bill_number}: ${reasonText}`,
+          created_at: now
+        });
+      } catch (err) {
+        logger.warn('Error logging pos_item_void_log for option 3', { err });
+      }
     }
 
     // Update settlement record to confirmed with resolution notes
@@ -7231,15 +7230,19 @@ export const accountantResolveDisputedSettlement = async (req: Request, res: Res
     if (updErr) throw updErr;
 
     // Audit Log entry into inventory_audit_logs for Cashier Logbook traceability
-    await supabase.from('inventory_audit_logs').insert({
-      branch_id: Number((row as any).branch_id),
-      event_type: 'MASTER_BILL_DISPUTE_RESOLVED',
-      entity_type: 'pos_master_bill_settlements',
-      entity_id: settlementId,
-      actor_id: req.user.id,
-      notes: `Master Bill ${master?.master_bill_number} dispute resolved by Accountant. ${resolutionSummary}`,
-      created_at: now
-    }).catch(() => {});
+    try {
+      await supabase.from('inventory_audit_logs').insert({
+        branch_id: Number((row as any).branch_id),
+        event_type: 'MASTER_BILL_DISPUTE_RESOLVED',
+        entity_type: 'pos_master_bill_settlements',
+        entity_id: settlementId,
+        actor_id: req.user.id,
+        notes: `Master Bill ${master?.master_bill_number} dispute resolved by Accountant. ${resolutionSummary}`,
+        created_at: now
+      });
+    } catch (err) {
+      logger.warn('Error creating inventory_audit_log for dispute resolution', { err });
+    }
 
     res.json({ success: true, message: 'Disputed settlement resolved successfully', data: mapSettlementRow(updated) });
   } catch (error) {
