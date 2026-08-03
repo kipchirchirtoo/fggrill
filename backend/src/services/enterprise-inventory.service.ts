@@ -1896,7 +1896,7 @@ async function syncIssuedStockToBar(branchId: number, itemSku: string, quantity:
       .from('pos_outlets')
       .select('id')
       .eq('branch_id', branchId)
-      .in('outlet_type', ['main_bar', 'executive_bar', 'sports_bar', 'kyogong_sports_bar', 'kyogong_executive_bar']);
+      .or('outlet_type.ilike.%bar%,outlet_type.eq.main_bar,outlet_type.eq.executive_bar,outlet_type.eq.sports_bar');
 
     if (outlets && outlets.length > 0) {
       for (const outlet of outlets) {
@@ -1908,12 +1908,12 @@ async function syncIssuedStockToBar(branchId: number, itemSku: string, quantity:
         if (drink?.id) {
           posItemQuery = posItemQuery.or(`source_item_id.eq.${drink.id},sku.eq.${itemSku}`);
         } else {
-          posItemQuery = posItemQuery.eq('sku', itemSku);
+          posItemQuery = posItemQuery.or(`sku.eq.${itemSku},id.eq.${itemSku}`);
         }
 
-        const { data: posItem } = await posItemQuery.maybeSingle();
+        const { data: posItems } = await posItemQuery;
 
-        if (posItem?.id) {
+        for (const posItem of posItems || []) {
           const newPosStock = Number(posItem.current_stock || 0) + quantity;
           await supabase
             .from('pos_outlet_items')
