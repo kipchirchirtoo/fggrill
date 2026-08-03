@@ -649,6 +649,31 @@ class BranchManagerRepository {
     await postMap('/bar/categories', data: data);
   }
 
+  // ── Discounts & Offers ────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> offers({
+    String? targetType,
+    String? active,
+  }) {
+    return getList('/offers', query: {
+      if (targetType != null && targetType != 'all') 'target_type': targetType,
+      if (active != null && active != 'all') 'active': active,
+    });
+  }
+
+  Future<Map<String, dynamic>> createOffer(Map<String, dynamic> data) {
+    return postMap('/offers', data: data);
+  }
+
+  Future<Map<String, dynamic>> updateOffer(String id, Map<String, dynamic> data) {
+    return putMap('/offers/$id', data: data);
+  }
+
+  Future<void> toggleOffer(String id) async {
+    await patchMap('/offers/$id/toggle');
+  }
+
+  Future<void> deleteOffer(String id) => delete('/offers/$id');
+
   Future<List<Map<String, dynamic>>> housekeepingTasks({String? status}) {
     return getList('/housekeeping/tasks', query: {
       if (status != null && status != 'all') 'status': status,

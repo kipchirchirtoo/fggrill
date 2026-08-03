@@ -2033,8 +2033,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     final receiptItems = _cart
         .map((item) => CartItem(
               productId: item.item.id,
-              name: item.item.name,
-              unitPrice: item.item.sellingPrice,
+              name: item.item.hasOffer
+                  ? '${item.item.name} (OFFER)'
+                  : item.item.name,
+              unitPrice: item.item.effectivePrice,
               qty: item.quantity,
             ))
         .toList();
@@ -3325,9 +3327,29 @@ class _ItemTile extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(formatKes(item.sellingPrice),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900, fontSize: 16)),
+                            child: item.hasOffer
+                                ? Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(formatKes(item.sellingPrice),
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                              decoration:
+                                                  TextDecoration.lineThrough)),
+                                      Text(formatKes(item.effectivePrice),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 16,
+                                              color: Color(0xFF15803D))),
+                                    ],
+                                  )
+                                : Text(formatKes(item.sellingPrice),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16)),
                           ),
                           if (!outOfStock) const Icon(Icons.add_circle_outline),
                         ],
@@ -3335,6 +3357,24 @@ class _ItemTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (item.hasOffer)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF15803D),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('OFFER',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900)),
+                    ),
+                  ),
                 if (outOfStock)
                   Positioned(
                     top: 6,
@@ -3419,11 +3459,39 @@ class _CartPanel extends StatelessWidget {
                 children: [
                   for (final item in cart)
                     ListTile(
-                      title: Text(item.item.name),
+                      title: item.item.hasOffer
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                    child: Text(item.item.name,
+                                        overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF15803D),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text('OFFER',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w900)),
+                                ),
+                              ],
+                            )
+                          : Text(item.item.name),
                       subtitle: Text(
-                        item.notes == null || item.notes!.trim().isEmpty
-                            ? formatKes(item.lineTotal)
-                            : '${formatKes(item.lineTotal)} - ${item.notes}',
+                        [
+                          formatKes(item.lineTotal),
+                          if (item.item.hasOffer)
+                            '${item.item.offerLabel ?? 'Offer'} · was ${formatKes(item.item.sellingPrice * item.quantity)}',
+                          if (item.notes != null &&
+                              item.notes!.trim().isNotEmpty)
+                            item.notes!.trim(),
+                        ].join('  •  '),
                       ),
                       trailing: Wrap(
                         spacing: 4,

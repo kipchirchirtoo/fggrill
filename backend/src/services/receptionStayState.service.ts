@@ -466,6 +466,7 @@ export async function performReceptionCheckIn(input: {
             AND id <> $2
             AND checked_out_at IS NULL
             AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
+            AND (check_out_date IS NULL OR check_out_date >= CURRENT_DATE)
           LIMIT 1
         `,
         [booking.room_id, booking.id]

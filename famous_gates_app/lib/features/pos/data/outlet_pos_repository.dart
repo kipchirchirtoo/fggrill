@@ -139,16 +139,17 @@ class OutletPosRepository {
       includeRelated ? 'related' : 'direct',
     ].join('|');
     final cached = _readItemsCache(cacheKey);
-    if (cached != null) return cached;
+    if (cached != null) return _withActiveOffers(cached, fallbackOutlet);
     if (_powerSync.hotReadsEnabled && !includeRelated) {
       final local = await _powerSync.getPosOutletItems(outletId);
       if (local.isNotEmpty) {
-        return local
+        final localItems = local
             .map((item) => OutletPosItem.fromJson(
                   Map<String, dynamic>.from(item),
                   fallbackOutlet: fallbackOutlet,
                 ))
             .toList();
+        return _withActiveOffers(localItems, fallbackOutlet);
       }
     }
     final response =
@@ -165,7 +166,88 @@ class OutletPosRepository {
       List<OutletPosItem>.from(rows),
       DateTime.now().add(const Duration(minutes: 2)),
     );
-    return rows;
+    return _withActiveOffers(rows, fallbackOutlet);
+  }
+
+  // ── Discounts & Offers overlay ────────────────────────────────────────────
+  // Raw item lists are cached unchanged; active offers are overlaid on every
+  // read so price changes take effect without invalidating the item cache.
+  final Map<int, _RepoCacheEntry<List<Map<String, dynamic>>>> _offersCache = {};
+
+  /// Active offers for a branch (cached 2 min). Returns [] on any failure so
+  /// the POS keeps working if the offers service is unavailable.
+  Future<List<Map<String, dynamic>>> getActiveOffers(int branchId) async {
+    final cached = _offersCache[branchId];
+    if (cached != null && cached.isFresh) return cached.value;
+    try {
+      final response = await _dio
+          .get('/offers/active', queryParameters: {'branch_id': branchId});
+      final rows = _list(response.data)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      _offersCache[branchId] =
+          _RepoCacheEntry(rows, DateTime.now().add(const Duration(minutes: 2)));
+      return rows;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<OutletPosItem>> _withActiveOffers(
+    List<OutletPosItem> items,
+    PosOutlet? outlet,
+  ) async {
+    final branchId = outlet?.branchId;
+    if (branchId == null || items.isEmpty) return items;
+    final offers = await getActiveOffers(branchId);
+    if (offers.isEmpty) return items;
+    return items.map((item) => _annotateItem(item, offers)).toList();
+  }
+
+  OutletPosItem _annotateItem(
+    OutletPosItem item,
+    List<Map<String, dynamic>> offers,
+  ) {
+    double? bestPrice;
+    String? bestLabel;
+    String? bestId;
+    for (final offer in offers) {
+      if (!_offerAppliesToItem(offer, item)) continue;
+      final price = _offerPriceFor(item.sellingPrice, offer);
+      if (price < item.sellingPrice &&
+          (bestPrice == null || price < bestPrice)) {
+        bestPrice = price;
+        bestLabel = '${offer['name'] ?? 'Offer'}';
+        bestId = '${offer['id']}';
+      }
+    }
+    if (bestPrice == null) return item;
+    return item.withOffer(
+        offerId: bestId, offerLabel: bestLabel, offerPrice: bestPrice);
+  }
+
+  bool _offerAppliesToItem(Map<String, dynamic> offer, OutletPosItem item) {
+    final kind = '${offer['item_kind'] ?? ''}'.trim();
+    if (kind.isNotEmpty && kind != item.itemGroup) return false;
+    switch ('${offer['target_type']}') {
+      case 'menu_item':
+        return '${offer['target_id']}' == item.id;
+      case 'menu_category':
+        final label = '${offer['target_label'] ?? ''}'.trim().toLowerCase();
+        return label.isNotEmpty && item.category.trim().toLowerCase() == label;
+      case 'outlet':
+        return true; // whole restaurant/bar menu (kind already matched above)
+      default:
+        return false; // room offers do not apply to POS items
+    }
+  }
+
+  double _offerPriceFor(double price, Map<String, dynamic> offer) {
+    final value = _num(offer['discount_value']);
+    final discounted = '${offer['discount_type']}' == 'percentage'
+        ? price * (1 - value / 100)
+        : price - value;
+    return discounted.clamp(0, price).toDouble();
   }
 
   Future<List<OutletPosItem>> getUnifiedFoodAndBarItems(
@@ -1149,6 +1231,9 @@ class OutletPosItem {
     required this.outletName,
     required this.outletType,
     this.trackStock = true,
+    this.offerId,
+    this.offerLabel,
+    this.offerPrice,
   });
 
   final String id;
@@ -1163,6 +1248,43 @@ class OutletPosItem {
   final String outletName;
   final String outletType;
   final bool trackStock;
+
+  /// Active offer applied to this item (null when no offer matches). Populated
+  /// by [OutletPosRepository] when it overlays branch offers onto the menu.
+  final String? offerId;
+  final String? offerLabel;
+  final double? offerPrice;
+
+  bool get hasOffer => offerPrice != null && offerPrice! < sellingPrice;
+
+  /// Price the customer actually pays — the offer price when discounted.
+  double get effectivePrice => hasOffer ? offerPrice! : sellingPrice;
+
+  double get discountAmount => hasOffer ? sellingPrice - offerPrice! : 0;
+
+  OutletPosItem withOffer({
+    String? offerId,
+    String? offerLabel,
+    double? offerPrice,
+  }) {
+    return OutletPosItem(
+      id: id,
+      name: name,
+      category: category,
+      costPrice: costPrice,
+      sellingPrice: sellingPrice,
+      currentStock: currentStock,
+      unit: unit,
+      itemGroup: itemGroup,
+      itemGroupLabel: itemGroupLabel,
+      outletName: outletName,
+      outletType: outletType,
+      trackStock: trackStock,
+      offerId: offerId,
+      offerLabel: offerLabel,
+      offerPrice: offerPrice,
+    );
+  }
 
   factory OutletPosItem.fromJson(
     Map<String, dynamic> json, {
@@ -1251,7 +1373,7 @@ class OutletCartItem {
   /// rides through to the captain order ticket.
   final String? notes;
 
-  double get lineTotal => item.sellingPrice * quantity;
+  double get lineTotal => item.effectivePrice * quantity;
 
   OutletCartItem copyWith({int? quantity, String? notes}) {
     return OutletCartItem(
@@ -1271,8 +1393,13 @@ class OutletCartItem {
       'outlet_name': item.outletName,
       'outlet_type': item.outletType,
       'quantity': quantity,
-      'unit_price': item.sellingPrice,
+      'unit_price': item.effectivePrice,
       'line_total': lineTotal,
+      if (item.hasOffer) 'original_unit_price': item.sellingPrice,
+      if (item.hasOffer) 'discount_amount': item.discountAmount * quantity,
+      if (item.hasOffer && item.offerId != null) 'offer_id': item.offerId,
+      if (item.hasOffer && item.offerLabel != null)
+        'offer_label': item.offerLabel,
       if (notes != null && notes!.trim().isNotEmpty) 'notes': notes,
     };
   }

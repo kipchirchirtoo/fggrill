@@ -6,65 +6,47 @@ import 'package:famous_gates_app/core/utils/pos_pin_rules.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
-import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/record_detail_screen.dart';
-import '../../branch_health/presentation/branch_health_screen.dart';
-import '../../kitchen_operations/presentation/kitchen_operations_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
-import '../../kitchen/presentation/kds_screen.dart';
-import '../../pos/data/outlet_pos_repository.dart';
 import 'mobile/mobile_manager_reviews_screen.dart';
 import '../../reception/presentation/screens/conference_booking_screen.dart';
 import '../../branch_accountant/presentation/waiter_audit_screen.dart';
+import '../../auth/domain/auth_notifier.dart';
 
+/// Streamlined Branch Manager sections.
+///
+/// The dashboard nav surfaces only the core management screens (see
+/// [_BranchManagerDashboardState._navItems]). The remaining values are
+/// supporting detail / workflow views reached from those screens or via
+/// deep-link routes (e.g. `/branch-manager/staff/:id`).
 enum BranchManagerSection {
+  // ── Core nav screens ──────────────────────────────────────────────────
   overview,
-  analytics,
-  salesPayments,
-  cashierClearance,
-  soldItems,
   waiterSales,
+  staffPerformance,
+  conferenceBooking,
+  users,
+  staff,
+  checkin,
   reservations,
+  reviews,
+  attendance,
+  leave,
+  offers,
+  // ── Supporting detail / workflow views (not in nav) ───────────────────
   newReservation,
   reservationDetail,
-  checkin,
   arrivals,
   departures,
-  rooms,
   guests,
   guestDetail,
-  staff,
-  users,
-  staffPerformance,
   staffDetail,
   staffAttendance,
   staffLeave,
   staffKpis,
   staffDocuments,
-  attendance,
-  leave,
-  stock,
-  stockAnalytics,
-  stockOut,
-  restaurant,
-  orderIntelligence,
-  menu,
-  barMenu,
-  housekeeping,
-  maintenance,
-  wastage,
-  reports,
-  reviews,
-  kitchenStock,
-  kitchenRequisitions,
-  kitchenRecipes,
-  kitchenUsage,
-  kitchenWastage,
-  exchangeHistory,
-  dataHealth,
-  conferenceBooking,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
@@ -92,6 +74,7 @@ class _BranchManagerDashboardState
   String _status = 'all';
   String _period = 'today';
   int _staffPerformancePeriod = 30;
+  String _staffPerfTab = 'kpis';
   String _leaveTab = 'active';
   bool _leaveDateFilter = false;
   DateTime _date = DateTime.now();
@@ -102,8 +85,13 @@ class _BranchManagerDashboardState
   Map<String, dynamic> _summary = {};
   Map<String, dynamic>? _detail;
   List<Map<String, dynamic>> _rows = [];
-  List<Map<String, dynamic>> _feed = [];
   List<Map<String, dynamic>> _secondaryRows = [];
+
+  // Executive dashboard performance snapshot.
+  int _staffTotal = 0;
+  int _staffOnDuty = 0;
+  int _bookingsInHouse = 0;
+  int _bookingsUpcoming = 0;
 
   BranchManagerRepository get _repo =>
       ref.read(branchManagerRepositoryProvider);
@@ -147,47 +135,29 @@ class _BranchManagerDashboardState
         case BranchManagerSection.overview:
           final results = await Future.wait<dynamic>([
             _repo.getDashboardStats(),
-            _safe(_repo.getRecentActivity, <RecentActivity>[]),
-            _safe(_repo.getDashboardFeed, <Map<String, dynamic>>[]),
+            _safe(() => _repo.staff(), <Map<String, dynamic>>[]),
+            _safe(() => _repo.staffAttendance(date: _ymd(DateTime.now())),
+                <Map<String, dynamic>>[]),
+            _safe(() => _repo.bookings(), <Map<String, dynamic>>[]),
           ]);
           _stats = results[0] as BranchManagerStats;
-          _rows = (results[1] as List<RecentActivity>)
-              .map((item) => {
-                    'id': item.id,
-                    'description': item.description,
-                    'user_name': item.userName,
-                    'amount': item.amount,
-                    'created_at': item.timeAgo,
-                  })
-              .toList();
-          _feed = List<Map<String, dynamic>>.from(results[2] as List);
-          break;
-        case BranchManagerSection.salesPayments:
-          break;
-        case BranchManagerSection.analytics:
-          _summary = await _repo.branchSalesAnalytics(
-            startDate: _ymd(_from),
-            endDate: _ymd(_to),
-            filters: {'search': _search, 'period': _period},
-          );
-          _rows = _listFrom(_summary['transactions']);
-          break;
-        case BranchManagerSection.cashierClearance:
-          _rows = await _repo.getCashierClearances(
-            date: _ymd(_date),
-            status: _status,
-          );
-          break;
-        case BranchManagerSection.soldItems:
-          _summary = await _repo.getSoldItemsAnalytics(
-            startDate: _ymd(_from),
-            endDate: _ymd(_to),
-            search: _search,
-          );
-          _rows = _listFrom(_summary['items'] ??
-              _summary['sold_items'] ??
-              _summary['rows'] ??
-              _summary['data']);
+          final overviewStaff = results[1] as List<Map<String, dynamic>>;
+          final overviewAttendance = results[2] as List<Map<String, dynamic>>;
+          final overviewBookings = results[3] as List<Map<String, dynamic>>;
+          _staffTotal = overviewStaff.length;
+          _staffOnDuty = overviewAttendance.map(_normalizeRecord).where((row) {
+            final status = _attendanceStatus(row);
+            return status == 'present' || status == 'late';
+          }).length;
+          _bookingsInHouse = overviewBookings
+              .where((row) =>
+                  _text(row, ['status']).toLowerCase() == 'checked_in')
+              .length;
+          _bookingsUpcoming = overviewBookings
+              .where((row) =>
+                  _text(row, ['status']).toLowerCase() == 'confirmed')
+              .length;
+          _rows = [];
           break;
         case BranchManagerSection.waiterSales:
           _summary =
@@ -214,9 +184,6 @@ class _BranchManagerDashboardState
         case BranchManagerSection.arrivals:
         case BranchManagerSection.departures:
           await _loadBookingWorkflow();
-          break;
-        case BranchManagerSection.rooms:
-          _rows = await _repo.rooms(status: _status, search: _search);
           break;
         case BranchManagerSection.guests:
           _rows = await _repo.guests(search: _search);
@@ -291,61 +258,10 @@ class _BranchManagerDashboardState
             <Map<String, dynamic>>[],
           );
           break;
-        case BranchManagerSection.stock:
-          _rows = await _repo.branchStock(search: _search, status: _status);
-          break;
-        case BranchManagerSection.stockAnalytics:
-          _summary = await _repo.stockAnalytics(period: _period);
-          _rows = _listFrom(_summary['reorder_suggestions'] ??
-              _summary['suggestions'] ??
-              _summary['low_stock']);
-          _secondaryRows = _listFrom(_summary['trends'] ??
-              _summary['consumption_trends'] ??
-              _summary['wastage']);
-          break;
-        case BranchManagerSection.stockOut:
-          _rows = await _repo.stockOut();
-          break;
-        case BranchManagerSection.restaurant:
-          _rows = await _repo.restaurantOrders();
-          break;
-        case BranchManagerSection.orderIntelligence:
-          break;
-        case BranchManagerSection.menu:
-          _rows = await _repo.restaurantMenuItems(category: _status);
-          _secondaryRows =
-              await _safe(_repo.restaurantCategories, <Map<String, dynamic>>[]);
-          break;
-        case BranchManagerSection.barMenu:
-          _rows = await _repo.barDrinks(category: _status);
-          _secondaryRows =
-              await _safe(_repo.barCategories, <Map<String, dynamic>>[]);
-          break;
-        case BranchManagerSection.housekeeping:
-          _rows = await _repo.housekeepingTasks(status: _status);
-          break;
-        case BranchManagerSection.maintenance:
-          _rows = await _repo.maintenanceRequests(status: _status);
-          break;
-        case BranchManagerSection.wastage:
-          _rows = await _repo.wastage(
-            startDate: _ymd(_from),
-            endDate: _ymd(_to),
-            reason: _status,
-          );
-          break;
-        case BranchManagerSection.reports:
-          _rows = _reportCards;
-          break;
         case BranchManagerSection.reviews:
+        case BranchManagerSection.conferenceBooking:
+        case BranchManagerSection.offers:
           break;
-        case BranchManagerSection.kitchenStock:
-        case BranchManagerSection.kitchenRequisitions:
-        case BranchManagerSection.kitchenRecipes:
-        case BranchManagerSection.kitchenUsage:
-        case BranchManagerSection.kitchenWastage:
-        case BranchManagerSection.exchangeHistory:
-        case BranchManagerSection.dataHealth:
       }
     } catch (error) {
       if (mounted) _snack('Failed to load ${_label(_section)}: $error');
@@ -444,36 +360,18 @@ class _BranchManagerDashboardState
           icon: Icons.dashboard_outlined,
           group: null,
         ),
-        // ── Financial Performance ─────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.analytics,
-          label: 'Sales Analytics',
-          icon: PhosphorIcons.chartLine(),
-          group: 'Financial Performance',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.salesPayments,
-          label: 'Sales & Payments',
-          icon: PhosphorIcons.currencyDollar(),
-          group: 'Financial Performance',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.soldItems,
-          label: 'Sold Items',
-          icon: PhosphorIcons.shoppingBag(),
-          group: 'Financial Performance',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.cashierClearance,
-          label: 'Cashier Clearance',
-          icon: PhosphorIcons.receipt(),
-          group: 'Financial Performance',
+        // ── Performance & Audit ───────────────────────────────────────────────
+        const MasterNavItem(
+          section: BranchManagerSection.waiterSales,
+          label: 'Waiter Performance',
+          icon: Icons.groups_outlined,
+          group: 'Performance & Audit',
         ),
         const MasterNavItem(
-          section: BranchManagerSection.exchangeHistory,
-          label: 'Item Exchanges',
-          icon: Icons.swap_horiz,
-          group: 'Financial Performance',
+          section: BranchManagerSection.staffPerformance,
+          label: 'Staff Performance & Audit',
+          icon: Icons.speed_outlined,
+          group: 'Performance & Audit',
         ),
         // ── Guest Services ────────────────────────────────────────────────────
         MasterNavItem(
@@ -489,178 +387,48 @@ class _BranchManagerDashboardState
           group: 'Guest Services',
         ),
         const MasterNavItem(
-          section: BranchManagerSection.arrivals,
-          label: 'Expected Arrivals',
-          icon: Icons.flight_land,
-          group: 'Guest Services',
-        ),
-        const MasterNavItem(
-          section: BranchManagerSection.departures,
-          label: 'Expected Departures',
-          icon: Icons.flight_takeoff,
-          group: 'Guest Services',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.guests,
-          label: 'Guest Directory',
-          icon: PhosphorIcons.identificationCard(),
-          group: 'Guest Services',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.rooms,
-          label: 'Room Status',
-          icon: PhosphorIcons.bed(),
+          section: BranchManagerSection.conferenceBooking,
+          label: 'Conference Bookings',
+          icon: Icons.meeting_room_outlined,
           group: 'Guest Services',
         ),
         MasterNavItem(
           section: BranchManagerSection.reviews,
-          label: 'Guest Reviews',
+          label: 'Customer Reviews',
           icon: PhosphorIcons.star(),
           group: 'Guest Services',
         ),
-        // ── Food & Beverage ───────────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.restaurant,
-          label: 'Restaurant Orders',
-          icon: PhosphorIcons.forkKnife(),
-          group: 'Food & Beverage',
-        ),
+        // ── Pricing & Offers ──────────────────────────────────────────────────
         const MasterNavItem(
-          section: BranchManagerSection.waiterSales,
-          label: 'Waiter Performance',
-          icon: Icons.groups_outlined,
-          group: 'Food & Beverage',
+          section: BranchManagerSection.offers,
+          label: 'Discounts & Offers',
+          icon: Icons.local_offer_outlined,
+          group: 'Pricing & Offers',
         ),
-        MasterNavItem(
-          section: BranchManagerSection.menu,
-          label: 'Restaurant Menu',
-          icon: PhosphorIcons.listBullets(),
-          group: 'Food & Beverage',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.barMenu,
-          label: 'Bar Menu',
-          icon: PhosphorIcons.wine(),
-          group: 'Food & Beverage',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.dataHealth,
-          label: 'Data Health',
-          icon: PhosphorIcons.heartbeat(),
-          group: 'Food & Beverage',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.orderIntelligence,
-          label: 'Order Intelligence',
-          icon: PhosphorIcons.chartBar(),
-          group: 'Food & Beverage',
-        ),
-        // ── Kitchen Operations ────────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.kitchenStock,
-          label: 'Stock Ledger',
-          icon: PhosphorIcons.bookOpen(),
-          group: 'Kitchen Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenRequisitions,
-          label: 'Request Stock',
-          icon: PhosphorIcons.shoppingCart(),
-          group: 'Kitchen Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenRecipes,
-          label: 'Recipes & BOM',
-          icon: PhosphorIcons.cookingPot(),
-          group: 'Kitchen Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenUsage,
-          label: 'Usage Tracking',
-          icon: PhosphorIcons.clipboardText(),
-          group: 'Kitchen Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenWastage,
-          label: 'Kitchen Wastage',
-          icon: PhosphorIcons.trash(),
-          group: 'Kitchen Operations',
-        ),
-        // ── Inventory Control ─────────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.stock,
-          label: 'Stock Overview',
-          icon: PhosphorIcons.package(),
-          group: 'Inventory Control',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.stockAnalytics,
-          label: 'Stock Analytics',
-          icon: PhosphorIcons.trendUp(),
-          group: 'Inventory Control',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.stockOut,
-          label: 'Stock Issuance',
-          icon: PhosphorIcons.trendDown(),
-          group: 'Inventory Control',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.wastage,
-          label: 'Wastage Tracking',
-          icon: PhosphorIcons.trash(),
-          group: 'Inventory Control',
-        ),
-        // ── Facilities & Operations ───────────────────────────────────────────
-        const MasterNavItem(
-          section: BranchManagerSection.housekeeping,
-          label: 'Housekeeping',
-          icon: Icons.cleaning_services_outlined,
-          group: 'Facilities & Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.maintenance,
-          label: 'Maintenance',
-          icon: PhosphorIcons.wrench(),
-          group: 'Facilities & Operations',
-        ),
-        // ── Human Resources ───────────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.staff,
-          label: 'Staff Directory',
-          icon: PhosphorIcons.users(),
-          group: 'Human Resources',
-        ),
+        // ── Personnel & HR ────────────────────────────────────────────────────
         const MasterNavItem(
           section: BranchManagerSection.users,
           label: 'User Accounts',
           icon: Icons.badge_outlined,
-          group: 'Human Resources',
+          group: 'Personnel & HR',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.staff,
+          label: 'Staff Directory',
+          icon: PhosphorIcons.users(),
+          group: 'Personnel & HR',
         ),
         MasterNavItem(
           section: BranchManagerSection.attendance,
           label: 'Attendance',
           icon: PhosphorIcons.clock(),
-          group: 'Human Resources',
+          group: 'Personnel & HR',
         ),
         MasterNavItem(
           section: BranchManagerSection.leave,
           label: 'Leave Requests',
           icon: PhosphorIcons.paperPlaneTilt(),
-          group: 'Human Resources',
-        ),
-        const MasterNavItem(
-          section: BranchManagerSection.staffPerformance,
-          label: 'Performance KPIs',
-          icon: Icons.speed_outlined,
-          group: 'Human Resources',
-        ),
-        // ── Reports ───────────────────────────────────────────────────────────
-        MasterNavItem(
-          section: BranchManagerSection.reports,
-          label: 'Reports & Exports',
-          icon: PhosphorIcons.fileText(),
-          group: 'Reports',
+          group: 'Personnel & HR',
         ),
       ];
 
@@ -668,17 +436,6 @@ class _BranchManagerDashboardState
     switch (_section) {
       case BranchManagerSection.overview:
         return _overview();
-      case BranchManagerSection.analytics:
-        return _analytics();
-      case BranchManagerSection.salesPayments:
-        return const BranchSalesPaymentsView();
-      case BranchManagerSection.soldItems:
-        return _genericPage(
-          title: 'Sold Items',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          actionsBuilder: _actionsFor,
-        );
       case BranchManagerSection.newReservation:
         return _reservationBuilder();
       case BranchManagerSection.reservationDetail:
@@ -705,15 +462,6 @@ class _BranchManagerDashboardState
       case BranchManagerSection.reservations:
         return _genericPage(
           title: 'Reservations',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.rooms:
-        return _genericPage(
-          title: 'Room Status',
           subtitle: _subtitle(_section),
           fields: _fieldsFor(_section),
           createLabel: _createLabel(_section),
@@ -747,98 +495,21 @@ class _BranchManagerDashboardState
           onCreate: _createHandler(_section),
           actionsBuilder: _actionsFor,
         );
-      case BranchManagerSection.cashierClearance:
-        return _genericPage(
-          title: 'Cashier Clearance',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.stock:
-        return _genericPage(
-          title: 'Stock Overview',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.stockOut:
-        return _genericPage(
-          title: 'Stock Issuance',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.wastage:
-        return _genericPage(
-          title: 'Wastage Tracking',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.restaurant:
-        return _genericPage(
-          title: 'Restaurant Orders',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.menu:
-        return _genericPage(
-          title: 'Restaurant Menu',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.barMenu:
-        return _genericPage(
-          title: 'Bar Menu',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.housekeeping:
-        return _genericPage(
-          title: 'Housekeeping',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          actionsBuilder: _actionsFor,
-        );
-      case BranchManagerSection.maintenance:
-        return _genericPage(
-          title: 'Maintenance',
-          subtitle: _subtitle(_section),
-          fields: _fieldsFor(_section),
-          createLabel: _createLabel(_section),
-          onCreate: _createHandler(_section),
-          actionsBuilder: _actionsFor,
-        );
+      case BranchManagerSection.conferenceBooking:
+        return const ConferenceBookingScreen();
+      case BranchManagerSection.offers:
+        return const _OffersSection();
       case BranchManagerSection.leave:
         return _leaveManagement();
-      case BranchManagerSection.reports:
-        return _reports();
       case BranchManagerSection.reviews:
         return const MobileManagerReviewsScreen();
-      case BranchManagerSection.dataHealth:
-        return const BranchHealthView();
-      case BranchManagerSection.orderIntelligence:
-        return const KitchenOrderIntelligencePanel();
       case BranchManagerSection.waiterSales:
         return _waiterPerformance();
       case BranchManagerSection.attendance:
       case BranchManagerSection.staffAttendance:
         return _attendanceDashboard();
-      case BranchManagerSection.stockAnalytics:
-        return _stockAnalytics();
       case BranchManagerSection.staffPerformance:
-        return _staffPerformance();
+        return _staffPerformanceWithAudit();
       case BranchManagerSection.staffDocuments:
         return _genericPage(
           title: 'Staff Documents',
@@ -849,33 +520,6 @@ class _BranchManagerDashboardState
             _miniButton('Download', () => _snack('Document download coming soon')),
           ],
         );
-      case BranchManagerSection.kitchenStock:
-        return const KitchenOperationsDashboard(
-          initialSection: KitchenOperationsSection.stock,
-          embedded: true,
-        );
-      case BranchManagerSection.kitchenRequisitions:
-        return const KitchenOperationsDashboard(
-          initialSection: KitchenOperationsSection.requisitions,
-          embedded: true,
-        );
-      case BranchManagerSection.kitchenRecipes:
-        return const KitchenOperationsDashboard(
-          initialSection: KitchenOperationsSection.recipes,
-          embedded: true,
-        );
-      case BranchManagerSection.kitchenUsage:
-        return const KitchenOperationsDashboard(
-          initialSection: KitchenOperationsSection.usage,
-          embedded: true,
-        );
-      case BranchManagerSection.kitchenWastage:
-        return const KitchenOperationsDashboard(
-          initialSection: KitchenOperationsSection.wastage,
-          embedded: true,
-        );
-      case BranchManagerSection.exchangeHistory:
-        return const _ExchangeHistorySection();
       default:
         return _genericPage(
           title: _label(_section),
@@ -889,129 +533,250 @@ class _BranchManagerDashboardState
   }
 
   Widget _overview() {
-    return _page(
-      title: 'Branch Overview',
-      subtitle:
-          'Live branch performance, operational alerts, recent activity, and quick actions.',
-      trailing: [
-        OutlinedButton.icon(
-          onPressed: _load,
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Refresh'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _showBarcodeItemDialog,
-          icon: const Icon(Icons.qr_code_scanner, size: 16),
-          label: const Text('Add Item'),
-        ),
-      ],
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final fullName = (user?.name ?? '').trim();
+    final firstName =
+        fullName.isEmpty ? 'Manager' : fullName.split(RegExp(r'\s+')).first;
+    final branchName = (user?.branchName ?? '').trim();
+    final occupied = _stats.occupiedRooms;
+    final totalRooms = _stats.totalRooms;
+    final occupancyPct =
+        totalRooms > 0 ? occupied / totalRooms * 100 : _stats.occupancyRate;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(spacing: 12, runSpacing: 12, children: [
-            _metric('Today Revenue', _money(_stats.todayRevenue),
-                PhosphorIcons.money(), AppColors.kSuccess),
-            _metric('Active Orders', '${_stats.activeOrders}',
-                PhosphorIcons.shoppingCart(), AppColors.kWarning),
-            _metric('Occupancy', '${_stats.occupancyRate.toStringAsFixed(1)}%',
-                PhosphorIcons.bed(), AppColors.kPrimary),
-            _metric('Low Stock', '${_stats.lowStockItems}',
-                PhosphorIcons.warning(), AppColors.kError),
-          ]),
-          const SizedBox(height: 18),
-          LayoutBuilder(builder: (context, constraints) {
-            final twoCols = constraints.maxWidth > 980;
-            final quick = _panel(
-                'Quick Actions',
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+          // ── Greeting ────────────────────────────────────────────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _quick('Reservations', BranchManagerSection.reservations),
-                    _quick('Stock Request', BranchManagerSection.stock),
-                    _quick('Staff KPIs', BranchManagerSection.staffPerformance),
-                    _quick('Clearance', BranchManagerSection.cashierClearance),
-                    _quick('Attendance', BranchManagerSection.attendance),
-                    _quick('Reports', BranchManagerSection.reports),
+                    Text(
+                      '${_greeting()}, $firstName 👋',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineLarge
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      [
+                        branchName.isEmpty ? 'Famous Gates' : branchName,
+                        _longDate(DateTime.now()),
+                      ].join('  ·  '),
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 15),
+                    ),
                   ],
-                ));
-            final alerts = _panel(
-                'Alerts & Activity',
-                Column(
-                  children: [
-                    ..._feed.take(8).map((row) => _compactRow(row)),
-                    if (_feed.isEmpty) const _EmptyNotice('No branch alerts.'),
-                  ],
-                ));
-            final activity = _panel(
-                'Recent Activity',
-                Column(
-                  children: [
-                    ..._rows.take(8).map((row) => _compactRow(row)),
-                    if (_rows.isEmpty)
-                      const _EmptyNotice('No recent activity.'),
-                  ],
-                ));
-            if (!twoCols) {
-              return Column(children: [quick, alerts, activity]);
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: activity),
-                const SizedBox(width: 16),
-                Expanded(child: Column(children: [quick, alerts])),
-              ],
-            );
-          }),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          // ── Branch performance ──────────────────────────────────────────
+          const Text('Branch Performance',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              _overviewStat(
+                icon: PhosphorIcons.users(),
+                color: AppColors.kPrimary,
+                label: 'Branch Staff',
+                value: '$_staffTotal',
+                caption: '$_staffOnDuty on duty today',
+              ),
+              _overviewStat(
+                icon: PhosphorIcons.bed(),
+                color: AppColors.kSuccess,
+                label: 'Room Occupancy',
+                value: '${occupancyPct.toStringAsFixed(0)}%',
+                caption: totalRooms > 0
+                    ? '$occupied of $totalRooms rooms occupied'
+                    : 'No room data',
+              ),
+              _overviewStat(
+                icon: PhosphorIcons.calendarCheck(),
+                color: AppColors.kWarning,
+                label: 'Guests In-House',
+                value: '$_bookingsInHouse',
+                caption: '$_bookingsUpcoming upcoming bookings',
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+          // ── Quick links ─────────────────────────────────────────────────
+          const Text('Go to',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              _navLink('Waiter Performance', Icons.groups_outlined,
+                  BranchManagerSection.waiterSales),
+              _navLink('Staff Performance & Audit', Icons.speed_outlined,
+                  BranchManagerSection.staffPerformance),
+              _navLink('Check-in / Check-out', PhosphorIcons.signIn(),
+                  BranchManagerSection.checkin),
+              _navLink('Reservations', PhosphorIcons.calendarCheck(),
+                  BranchManagerSection.reservations),
+              _navLink('Conference Bookings', Icons.meeting_room_outlined,
+                  BranchManagerSection.conferenceBooking),
+              _navLink('Customer Reviews', PhosphorIcons.star(),
+                  BranchManagerSection.reviews),
+              _navLink('User Accounts', Icons.badge_outlined,
+                  BranchManagerSection.users),
+              _navLink('Staff Directory', PhosphorIcons.users(),
+                  BranchManagerSection.staff),
+              _navLink('Attendance', PhosphorIcons.clock(),
+                  BranchManagerSection.attendance),
+              _navLink('Leave Requests', PhosphorIcons.paperPlaneTilt(),
+                  BranchManagerSection.leave),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _analytics() {
-    final summary = _summaryMap();
-    final total =
-        _num(summary, ['total_sales', 'total_revenue', 'revenue', 'gross_sales']);
-    final orders = _num(summary,
-        ['transaction_count', 'total_orders', 'orders', 'transactions']);
-    final apiAverage =
-        _num(summary, ['avg_transaction_value', 'average_ticket']);
-    final average = apiAverage == 0 && orders > 0 ? total / orders : apiAverage;
-    return _page(
-      title: 'Sales Analytics',
-      subtitle:
-          'Branch sales analytics with date range filters, payment/order/category breakdowns, and exports.',
-      trailing: [
-        _dateRangeButton(),
-        _periodButton(),
-        OutlinedButton.icon(
-          onPressed: () => _exportBranchSales('csv'),
-          icon: const Icon(Icons.download, size: 16),
-          label: const Text('CSV'),
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String _longDate(DateTime d) {
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  Widget _overviewStat({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    required String caption,
+  }) {
+    return SizedBox(
+      width: 268,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.6)),
         ),
-        ElevatedButton.icon(
-          onPressed: () => _exportBranchSales('pdf'),
-          icon: const Icon(Icons.picture_as_pdf, size: 16),
-          label: const Text('PDF'),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(value,
+                      style: const TextStyle(
+                          fontSize: 26, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(spacing: 12, runSpacing: 12, children: [
-            _metric('Gross Sales', _money(total), PhosphorIcons.money(),
-                AppColors.kSuccess),
-            _metric('Transactions', orders.toStringAsFixed(0),
-                PhosphorIcons.receipt(), AppColors.kPrimary),
-            _metric('Average Ticket', _money(average), PhosphorIcons.chartBar(),
-                AppColors.kAccent),
-            _metric('Range', '${_ymd(_from)} to ${_ymd(_to)}',
-                PhosphorIcons.calendar(), AppColors.kWarning),
-          ]),
-          const SizedBox(height: 16),
-          _dataList(_rows, _fieldsFor(_section), actionsBuilder: _actionsFor),
-        ],
+      ),
+    );
+  }
+
+  Widget _navLink(String label, IconData icon, BranchManagerSection section) {
+    return SizedBox(
+      width: 224,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            _section = section;
+            _recordId = null;
+            _resetFilters();
+          });
+          _load();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border:
+                Border.all(color: AppColors.kDivider.withValues(alpha: 0.6)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: AppColors.kPrimary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 18, color: AppColors.kTextSecondary),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1102,53 +867,6 @@ class _BranchManagerDashboardState
           if (detail != null) _detailCard(detail),
           const SizedBox(height: 16),
           _dataList(_rows, _fieldsFor(_section), actionsBuilder: _actionsFor),
-        ],
-      ),
-    );
-  }
-
-  Widget _stockAnalytics() {
-    return _page(
-      title: 'Stock Analytics',
-      subtitle:
-          'Consumption trends, reorder suggestions, wastage signals, and stock request actions.',
-      trailing: [_periodButton()],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(spacing: 12, runSpacing: 12, children: [
-            _metric('Suggestions', '${_rows.length}', PhosphorIcons.warning(),
-                AppColors.kWarning),
-            _metric('Trend Rows', '${_secondaryRows.length}',
-                PhosphorIcons.trendUp(), AppColors.kPrimary),
-            _metric(
-                'Period', _period, PhosphorIcons.calendar(), AppColors.kAccent),
-          ]),
-          const SizedBox(height: 16),
-          _panel(
-              'Reorder Suggestions',
-              _dataList(
-                _rows,
-                const [
-                  'item_name',
-                  'name',
-                  'current_stock',
-                  'minimum_stock',
-                  'suggested_quantity',
-                  'priority'
-                ],
-                actionsBuilder: _actionsFor,
-              )),
-          const SizedBox(height: 16),
-          _panel(
-              'Trends & Wastage',
-              _dataList(_secondaryRows, const [
-                'date',
-                'item_name',
-                'quantity',
-                'variance',
-                'reason'
-              ])),
         ],
       ),
     );
@@ -1399,6 +1117,50 @@ class _BranchManagerDashboardState
             ]);
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  /// Staff Performance & Audit: KPI leaderboard plus the embedded
+  /// waiter/staff audit log (shared with the Branch Accountant workflow).
+  Widget _staffPerformanceWithAudit() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _staffPerfTabButton(
+                  'Performance KPIs', 'kpis', Icons.speed_outlined),
+              _staffPerfTabButton(
+                  'Waiter / Staff Audit', 'audit', Icons.fact_check_outlined),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _staffPerfTab == 'audit'
+              ? const WaiterAuditScreen()
+              : _staffPerformance(),
+        ),
+      ],
+    );
+  }
+
+  Widget _staffPerfTabButton(String label, String value, IconData icon) {
+    final selected = _staffPerfTab == value;
+    return TextButton.icon(
+      onPressed: () => setState(() => _staffPerfTab = value),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: TextButton.styleFrom(
+        foregroundColor:
+            selected ? AppColors.kPrimary : AppColors.kTextSecondary,
+        backgroundColor:
+            selected ? AppColors.kPrimary.withValues(alpha: 0.08) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
@@ -2102,56 +1864,6 @@ class _BranchManagerDashboardState
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  Widget _reports() {
-    return _page(
-      title: 'Reports',
-      subtitle:
-          'Branch reports with scheduling-ready report cards and export actions.',
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 360,
-          childAspectRatio: 1.65,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-        ),
-        itemCount: _reportCards.length,
-        itemBuilder: (context, index) {
-          final report = _reportCards[index];
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(PhosphorIcons.fileText(), color: AppColors.kPrimary),
-                  const Spacer(),
-                  Text(_text(report, ['title', 'name']),
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700)),
-                  Text(_text(report, ['description']),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.kTextSecondary)),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _exportReport(_text(report, ['type'])),
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Export'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _genericPage({
     required String title,
     required String subtitle,
@@ -2371,38 +2083,6 @@ class _BranchManagerDashboardState
     );
   }
 
-  Widget _compactRow(Map<String, dynamic> row) {
-    final record = _normalizeRecord(row);
-    final amount = _text(record, [
-      'amount',
-      'total_amount',
-      'grand_total',
-      'quantity',
-      'current_stock',
-    ]);
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(_iconFor(_section), size: 18, color: AppColors.kPrimary),
-      title: Text(_titleFor(record),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-          _subtitleForRow(record).ifEmpty([
-            _text(record, ['type', 'status']),
-            if (record['created_at'] != null)
-              _displayValue(record, 'created_at'),
-          ].where((s) => s.isNotEmpty).join(' • ')),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis),
-      trailing: amount.isEmpty
-          ? null
-          : Text(_formatValue(record, 'amount', amount),
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-    );
-  }
-
   Widget _detailCard(Map<String, dynamic> detail) {
     final normalized = _normalizeRecord(detail);
     final lineItems = _lineItems(normalized);
@@ -2500,20 +2180,6 @@ class _BranchManagerDashboardState
           ],
         ],
       ),
-    );
-  }
-
-  Widget _quick(String label, BranchManagerSection section) {
-    return OutlinedButton(
-      onPressed: () {
-        setState(() {
-          _section = section;
-          _recordId = null;
-          _resetFilters();
-        });
-        _load();
-      },
-      child: Text(label),
     );
   }
 
@@ -2615,13 +2281,6 @@ class _BranchManagerDashboardState
     final id = _id(row);
     final status = _text(row, ['status']).toLowerCase();
     switch (_section) {
-      case BranchManagerSection.cashierClearance:
-        return [
-          _miniButton('View', () => _showRow(row)),
-          if (id.isNotEmpty && status != 'approved')
-            _miniButton('Approve', () => _approveClearance(id)),
-          if (id.isNotEmpty) _miniButton('Flag', () => _flagClearance(id)),
-        ];
       case BranchManagerSection.reservations:
       case BranchManagerSection.checkin:
       case BranchManagerSection.arrivals:
@@ -2635,13 +2294,6 @@ class _BranchManagerDashboardState
             _miniButton('Check out', () => _bookingAction(id, 'checkout')),
           if (id.isNotEmpty && status != 'cancelled')
             _miniButton('Cancel', () => _bookingAction(id, 'cancel')),
-        ];
-      case BranchManagerSection.rooms:
-        return [
-          _miniButton('View', () => _showRow(row)),
-          _miniButton('Edit', () => _editGeneric(row)),
-          if (id.isNotEmpty)
-            _miniButton('Status', () => _changeRoomStatus(row)),
         ];
       case BranchManagerSection.guests:
         return [
@@ -2676,35 +2328,6 @@ class _BranchManagerDashboardState
           if (id.isNotEmpty && status == 'approved')
             _miniButton('Report duty', () => _leaveAction(id, 'duty')),
         ];
-      case BranchManagerSection.stock:
-      case BranchManagerSection.stockAnalytics:
-        return [
-          _miniButton('View', () => _showRow(row)),
-          _miniButton('Request', () => _stockRequest(row)),
-        ];
-      case BranchManagerSection.menu:
-      case BranchManagerSection.barMenu:
-        return [
-          _miniButton('Edit', () => _editGeneric(row)),
-          if (id.isNotEmpty) _miniButton('Toggle', () => _toggleMenu(id)),
-          if (id.isNotEmpty) _miniButton('Delete', () => _deleteGeneric(id)),
-        ];
-      case BranchManagerSection.housekeeping:
-        return [
-          _miniButton('View', () => _showRow(row)),
-          if (id.isNotEmpty && status == 'pending')
-            _miniButton('Start', () => _housekeepingAction(id, 'in_progress')),
-          if (id.isNotEmpty && status == 'in_progress')
-            _miniButton('Done', () => _housekeepingAction(id, 'completed')),
-        ];
-      case BranchManagerSection.maintenance:
-        return [
-          _miniButton('View', () => _showRow(row)),
-          if (id.isNotEmpty && status == 'pending')
-            _miniButton('Start', () => _maintenanceAction(id, 'in_progress')),
-          if (id.isNotEmpty && status == 'in_progress')
-            _miniButton('Complete', () => _maintenanceAction(id, 'completed')),
-        ];
       case BranchManagerSection.waiterSales:
         return [_miniButton('Detail', () => _showRow(row))];
       case BranchManagerSection.staffPerformance:
@@ -2736,12 +2359,6 @@ class _BranchManagerDashboardState
               ],
               onSubmit: (data) => _repo.createBooking(data),
             );
-      case BranchManagerSection.rooms:
-        return () => _showFormDialog(
-              title: 'Add Room',
-              fields: const ['room_number', 'room_type', 'floor', 'status'],
-              onSubmit: _repo.createRoom,
-            );
       case BranchManagerSection.guests:
         return () => _showFormDialog(
               title: 'Add Guest',
@@ -2769,51 +2386,6 @@ class _BranchManagerDashboardState
                 'reason'
               ],
               onSubmit: _repo.createLeaveRequest,
-            );
-      case BranchManagerSection.stock:
-        return () => _showFormDialog(
-              title: 'Create Stock Request',
-              fields: const ['item_id', 'quantity', 'priority', 'notes'],
-              onSubmit: _repo.createStockRequest,
-            );
-      case BranchManagerSection.menu:
-        return () => _showFormDialog(
-              title: 'Create Menu Item',
-              fields: const [
-                'name',
-                'category_id',
-                'price',
-                'description',
-                'available'
-              ],
-              onSubmit: _repo.createRestaurantMenuItem,
-            );
-      case BranchManagerSection.barMenu:
-        return () => _showFormDialog(
-              title: 'Create Bar Drink',
-              fields: const [
-                'name',
-                'category_id',
-                'price',
-                'description',
-                'available'
-              ],
-              onSubmit: _repo.createBarDrink,
-            );
-      case BranchManagerSection.wastage:
-        return () => _showFormDialog(
-              title: 'Record Wastage',
-              fields: const ['item_id', 'quantity', 'reason', 'notes'],
-              onSubmit: _repo.recordWastage,
-            );
-      case BranchManagerSection.maintenance:
-        return () => _showFormDialog(
-              title: 'New Maintenance Request',
-              fields: const ['title', 'description', 'priority', 'location'],
-              onSubmit: (data) => _repo.postMap('/maintenance/tasks', data: {
-                ...data,
-                'status': 'pending',
-              }),
             );
       default:
         return null;
@@ -3488,20 +3060,6 @@ class _BranchManagerDashboardState
               })
               .where((option) => option.value.isNotEmpty)
               .toList();
-        case 'category_id':
-          if (_section == BranchManagerSection.barMenu) {
-            final cats = await _repo.barCategories();
-            return cats
-                .map((c) =>
-                    _SelectOption(value: '${c['id']}', label: '${c['name']}'))
-                .toList();
-          }
-          final cats =
-              await _safe(_repo.restaurantCategories, <Map<String, dynamic>>[]);
-          return cats
-              .map((c) =>
-                  _SelectOption(value: '${c['id']}', label: '${c['name']}'))
-              .toList();
         default:
           return [];
       }
@@ -3553,21 +3111,6 @@ class _BranchManagerDashboardState
     );
   }
 
-  Future<void> _showBarcodeItemDialog() {
-    return _showFormDialog(
-      title: 'Add Item by Barcode/SKU',
-      fields: const [
-        'sku',
-        'barcode',
-        'name',
-        'quantity',
-        'unit',
-        'cost_price'
-      ],
-      onSubmit: (data) => _repo.postMap('/store/items', data: data),
-    );
-  }
-
   Future<void> _editGeneric(Map<String, dynamic> row) async {
     final id = _id(row);
     if (id.isEmpty) return _snack('Missing record id');
@@ -3577,23 +3120,11 @@ class _BranchManagerDashboardState
       initial: row,
       onSubmit: (data) async {
         switch (_section) {
-          case BranchManagerSection.rooms:
-            await _repo.updateRoom(id, data);
-            break;
           case BranchManagerSection.guests:
             await _repo.updateGuest(id, data);
             break;
           case BranchManagerSection.staff:
             await _repo.updateStaff(id, data);
-            break;
-          case BranchManagerSection.menu:
-            await _repo.updateRestaurantMenuItem(id, data);
-            break;
-          case BranchManagerSection.barMenu:
-            await _repo.updateBarDrink(id, data);
-            break;
-          case BranchManagerSection.maintenance:
-            await _repo.putMap('/maintenance/tasks/$id', data: data);
             break;
           default:
             throw UnimplementedError('Edit not supported for this section');
@@ -3607,73 +3138,17 @@ class _BranchManagerDashboardState
     if (!confirmed) return;
     await _run(() async {
       switch (_section) {
-        case BranchManagerSection.rooms:
-          await _repo.deleteRoom(id);
-          break;
         case BranchManagerSection.guests:
           await _repo.deleteGuest(id);
           break;
         case BranchManagerSection.staff:
           await _repo.deleteStaff(id);
           break;
-        case BranchManagerSection.menu:
-          await _repo.deleteRestaurantMenuItem(id);
-          break;
-        case BranchManagerSection.barMenu:
-          await _repo.deleteBarDrink(id);
-          break;
-        case BranchManagerSection.maintenance:
-          await _repo.delete('/maintenance/tasks/$id');
-          break;
         default:
           throw UnimplementedError('Delete not supported for this section');
       }
       await _load();
     }, success: 'Record deleted');
-  }
-
-  Future<void> _changeRoomStatus(Map<String, dynamic> row) async {
-    final id = _id(row);
-    if (id.isEmpty) return;
-    final currentStatus = _text(row, ['status']).toLowerCase();
-    final options = ['available', 'occupied', 'maintenance', 'cleaning'];
-    final newStatus = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Change Room Status'),
-        children: options
-            .where((o) => o != currentStatus)
-            .map((o) => SimpleDialogOption(
-                  onPressed: () => Navigator.pop(ctx, o),
-                  child: Text(_pretty(o)),
-                ))
-            .toList(),
-      ),
-    );
-    if (newStatus == null) return;
-    await _run(() async {
-      await _repo.patchMap('/rooms/$id/status', data: {'status': newStatus});
-      await _load();
-    }, success: 'Room status updated');
-  }
-
-  Future<void> _approveClearance(String id) async {
-    await _run(() async {
-      await _repo.approveClearance(id);
-      await _load();
-    }, success: 'Clearance approved');
-  }
-
-  Future<void> _flagClearance(String id) async {
-    await _showFormDialog(
-      title: 'Flag Clearance',
-      fields: const ['reason', 'notes'],
-      onSubmit: (data) => _repo.flagClearance(
-        id,
-        reason: '${data['reason'] ?? 'Needs review'}',
-        notes: '${data['notes'] ?? ''}',
-      ),
-    );
   }
 
   Future<void> _bookingAction(String id, String action) async {
@@ -3708,66 +3183,6 @@ class _BranchManagerDashboardState
       if (action == 'duty') await _repo.reportToDuty(id);
       await _load();
     }, success: 'Leave updated');
-  }
-
-  Future<void> _maintenanceAction(String id, String newStatus) async {
-    await _run(() async {
-      await _repo.putMap('/maintenance/tasks/$id', data: {'status': newStatus});
-      await _load();
-    }, success: 'Maintenance task updated');
-  }
-
-  Future<void> _stockRequest(Map<String, dynamic> row) async {
-    await _showFormDialog(
-      title: 'Create Stock Request',
-      fields: const ['item_id', 'quantity', 'priority', 'notes'],
-      initial: {
-        'item_id': row['item_id'] ?? row['id'],
-        'quantity': row['suggested_quantity'] ?? row['minimum_stock'] ?? '',
-        'priority': row['priority'] ?? 'normal',
-      },
-      onSubmit: _repo.createStockRequest,
-    );
-  }
-
-  Future<void> _toggleMenu(String id) async {
-    await _run(() async {
-      if (_section == BranchManagerSection.menu) {
-        await _repo.toggleRestaurantMenuItem(id);
-      } else {
-        await _repo.toggleBarDrink(id);
-      }
-      await _load();
-    }, success: 'Availability updated');
-  }
-
-  Future<void> _housekeepingAction(String id, String status) async {
-    await _run(() async {
-      await _repo.updateHousekeepingTask(id, {'status': status});
-      await _load();
-    }, success: 'Housekeeping task updated');
-  }
-
-  Future<void> _exportBranchSales(String format) async {
-    await _run(() async {
-      final file = await _repo.exportBranchSales(
-        startDate: _ymd(_from),
-        endDate: _ymd(_to),
-        format: format,
-        filters: {'period': _period, 'search': _search},
-      );
-      _snack('Export saved to ${file.path}');
-    });
-  }
-
-  Future<void> _exportReport(String type) async {
-    await _run(() async {
-      final file = await _repo.exportReport(type, data: {
-        'start_date': _ymd(_from),
-        'end_date': _ymd(_to),
-      });
-      _snack('Report saved to ${file.path}');
-    });
   }
 
   Future<void> _exportRows(String name, List<Map<String, dynamic>> rows) async {
@@ -3908,10 +3323,6 @@ class _BranchManagerDashboardState
       case BranchManagerSection.arrivals:
       case BranchManagerSection.departures:
         return const ['guest_name', 'room_number', 'booking_reference'];
-      case BranchManagerSection.rooms:
-        return const ['room_number', 'name'];
-      case BranchManagerSection.analytics:
-        return const ['code', 'order_number', 'short_code', 'source', 'category'];
       case BranchManagerSection.guests:
       case BranchManagerSection.guestDetail:
         return const ['full_name', 'guest_name', 'phone'];
@@ -3925,17 +3336,8 @@ class _BranchManagerDashboardState
       case BranchManagerSection.leave:
       case BranchManagerSection.staffLeave:
         return const ['staff_name', 'full_name', 'employee_number'];
-      case BranchManagerSection.stock:
-      case BranchManagerSection.stockAnalytics:
-      case BranchManagerSection.stockOut:
-      case BranchManagerSection.wastage:
-        return const ['item_name', 'menu_item_name', 'item_sku', 'sku'];
-      case BranchManagerSection.restaurant:
-        return const ['order_number', 'table_number', 'guest_name'];
       case BranchManagerSection.waiterSales:
         return const ['waiter_name', 'staff_name', 'full_name'];
-      case BranchManagerSection.cashierClearance:
-        return const ['cashier_name', 'shift_start', 'shift', 'date'];
       default:
         return const ['description', 'user_name', 'name', 'title'];
     }
@@ -4132,10 +3534,6 @@ class _BranchManagerDashboardState
     final lower = key.toLowerCase();
     if (lower.startsWith('_')) return true;
     if (lower == 'id' || lower == 'uuid') return true;
-    if (_section == BranchManagerSection.rooms &&
-        const {'rate', 'base_rate', 'room_rate', 'price'}.contains(lower)) {
-      return true;
-    }
     if (lower.contains('password') || lower.contains('token')) return true;
     final text = _displayText(value);
     if (!_isUsefulDisplay(text)) return true;
@@ -4211,12 +3609,6 @@ class _BranchManagerDashboardState
         addField('total_amount');
         addField('status');
         break;
-      case BranchManagerSection.rooms:
-        addField('room_type');
-        addField('floor');
-        addField('housekeeping_status');
-        addField('status');
-        break;
       case BranchManagerSection.guests:
       case BranchManagerSection.guestDetail:
         addField('phone');
@@ -4237,39 +3629,10 @@ class _BranchManagerDashboardState
         addField('email');
         addField('status');
         break;
-      case BranchManagerSection.stock:
-      case BranchManagerSection.stockAnalytics:
-        addField('item_sku');
-        addField('current_stock');
-        addField('minimum_stock');
-        addField('unit');
-        break;
-      case BranchManagerSection.stockOut:
-      case BranchManagerSection.wastage:
-        addField('item_name');
-        addField('quantity');
-        addField('reason');
-        addField('created_at');
-        break;
-      case BranchManagerSection.restaurant:
-        addField('table_number');
-        addField('waiter_name');
-        addField('items_count');
-        addField('total_amount');
-        addField('status');
-        break;
       case BranchManagerSection.waiterSales:
         addField('orders_count');
         addField('total_sales');
         addField('average_order_value');
-        break;
-      case BranchManagerSection.cashierClearance:
-        addField('shift_start');
-        addField('shift_end');
-        addField('expected_cash');
-        addField('actual_cash');
-        addField('variance');
-        addField('status');
         break;
       default:
         addField('category_name');
@@ -4394,217 +3757,26 @@ class _BranchManagerDashboardState
 
   IconData _iconFor(BranchManagerSection section) {
     switch (section) {
-      case BranchManagerSection.analytics:
-        return PhosphorIcons.chartLine();
-      case BranchManagerSection.cashierClearance:
-        return PhosphorIcons.receipt();
-      case BranchManagerSection.rooms:
-        return PhosphorIcons.bed();
+      case BranchManagerSection.reservations:
+      case BranchManagerSection.reservationDetail:
+      case BranchManagerSection.newReservation:
+      case BranchManagerSection.checkin:
+      case BranchManagerSection.arrivals:
+      case BranchManagerSection.departures:
+        return PhosphorIcons.calendarCheck();
+      case BranchManagerSection.guests:
+      case BranchManagerSection.guestDetail:
+        return PhosphorIcons.identificationCard();
       case BranchManagerSection.staff:
+      case BranchManagerSection.users:
       case BranchManagerSection.staffPerformance:
+      case BranchManagerSection.staffDetail:
         return PhosphorIcons.users();
-      case BranchManagerSection.stock:
-      case BranchManagerSection.stockAnalytics:
-      case BranchManagerSection.stockOut:
-        return PhosphorIcons.package();
-      case BranchManagerSection.menu:
-      case BranchManagerSection.restaurant:
-      case BranchManagerSection.orderIntelligence:
+      case BranchManagerSection.waiterSales:
         return PhosphorIcons.forkKnife();
-      case BranchManagerSection.barMenu:
-        return PhosphorIcons.wine();
-      case BranchManagerSection.housekeeping:
-        return Icons.cleaning_services_outlined;
-      case BranchManagerSection.maintenance:
-        return PhosphorIcons.wrench();
-      case BranchManagerSection.kitchenStock:
-        return PhosphorIcons.cookingPot();
-      case BranchManagerSection.kitchenRequisitions:
-        return PhosphorIcons.clipboardText();
-      case BranchManagerSection.kitchenRecipes:
-        return PhosphorIcons.notebook();
-      case BranchManagerSection.kitchenUsage:
-        return PhosphorIcons.chartBar();
-      case BranchManagerSection.kitchenWastage:
-        return PhosphorIcons.trash();
       default:
         return PhosphorIcons.list();
     }
-  }
-}
-
-/// Read-only history of post-payment item exchanges. The cashier is the
-/// sole approver/rejecter for these -- the branch manager only ever views
-/// this list, never acts on it (mirrors the equivalent read-only section in
-/// branch_accountant_dashboard.dart).
-class _ExchangeHistorySection extends ConsumerStatefulWidget {
-  const _ExchangeHistorySection();
-
-  @override
-  ConsumerState<_ExchangeHistorySection> createState() =>
-      _ExchangeHistorySectionState();
-}
-
-class _ExchangeHistorySectionState
-    extends ConsumerState<_ExchangeHistorySection> {
-  String _status = 'all';
-  String _direction = 'all';
-  late Future<List<ItemExchangeRequest>> _future = _load();
-
-  Future<List<ItemExchangeRequest>> _load() {
-    return ref.read(outletPosRepositoryProvider).getExchangeHistory(
-          status: _status == 'all' ? null : _status,
-          direction: _direction == 'all' ? null : _direction,
-        );
-  }
-
-  void _refresh() => setState(() => _future = _load());
-
-  String _itemsSummary(List<dynamic> items) {
-    return items
-        .whereType<Map>()
-        .map((item) => '${item['name'] ?? ''} x${item['quantity'] ?? ''}')
-        .join(', ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('Item Exchanges',
-                    style: Theme.of(context).textTheme.headlineSmall),
-              ),
-              OutlinedButton.icon(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Post-payment item exchanges. The cashier approves, rejects, '
-            'and issues refunds directly -- this is a view-only history.',
-            style: TextStyle(color: AppColors.kTextSecondary),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              DropdownButton<String>(
-                value: _status,
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                  DropdownMenuItem(
-                      value: 'approved', child: Text('Approved')),
-                  DropdownMenuItem(
-                      value: 'rejected', child: Text('Rejected')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _status = value);
-                  _refresh();
-                },
-              ),
-              DropdownButton<String>(
-                value: _direction,
-                items: const [
-                  DropdownMenuItem(
-                      value: 'all', child: Text('All directions')),
-                  DropdownMenuItem(value: 'top_up', child: Text('Top-up')),
-                  DropdownMenuItem(value: 'refund', child: Text('Refund')),
-                  DropdownMenuItem(value: 'even', child: Text('Even')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _direction = value);
-                  _refresh();
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: FutureBuilder<List<ItemExchangeRequest>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return _EmptyNotice('Failed to load: ${snap.error}');
-                }
-                final rows = snap.data ?? const [];
-                if (rows.isEmpty) {
-                  return const _EmptyNotice('No exchange requests found');
-                }
-                return ListView.separated(
-                  itemCount: rows.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final r = rows[index];
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    (r.orderNumber ?? '').isEmpty
-                                        ? 'Exchange request'
-                                        : 'Order ${r.orderNumber}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15),
-                                  ),
-                                ),
-                                Text(r.status.toUpperCase(),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 12)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Returned: ${_itemsSummary(r.oldItems)}'),
-                            Text(
-                                'Replaced with: ${_itemsSummary(r.newItems)}'),
-                            const SizedBox(height: 4),
-                            Text(
-                                'Direction: ${r.direction}  ·  Price difference: KES ${r.priceDifference.abs().toStringAsFixed(2)}'),
-                            if ((r.requestedByName ?? '').isNotEmpty)
-                              Text('Requested by: ${r.requestedByName}'),
-                            if ((r.cashierName ?? '').isNotEmpty)
-                              Text('Cashier: ${r.cashierName}'),
-                            if (r.isRejected &&
-                                (r.rejectionReason ?? '').isNotEmpty)
-                              Text('Rejection reason: ${r.rejectionReason}'),
-                            if (r.isRefund)
-                              Text(r.refundIssued
-                                  ? 'Refund issued by ${r.refundIssuedByName ?? '—'}'
-                                  : 'Refund not yet issued'),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -4620,6 +3792,856 @@ class _EmptyNotice extends StatelessWidget {
         child: Center(
           child: Text(message,
               style: const TextStyle(color: AppColors.kTextSecondary)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Discounts & Offers management. Branch managers create discounts against POS
+/// menu items (restaurant/bar) or room rates. Active offers are surfaced at the
+/// POS as an OFFER tag (via GET /offers/active) and flow into customer bills.
+class _OffersSection extends ConsumerStatefulWidget {
+  const _OffersSection();
+
+  @override
+  ConsumerState<_OffersSection> createState() => _OffersSectionState();
+}
+
+class _OffersSectionState extends ConsumerState<_OffersSection> {
+  bool _loading = true;
+  bool _busy = false;
+  String _targetFilter = 'all';
+  String _activeFilter = 'all';
+  List<Map<String, dynamic>> _offers = [];
+
+  BranchManagerRepository get _repo =>
+      ref.read(branchManagerRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final rows =
+          await _repo.offers(targetType: _targetFilter, active: _activeFilter);
+      if (!mounted) return;
+      setState(() {
+        _offers = rows;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _offers = [];
+        _loading = false;
+      });
+      _snack('Failed to load offers: $error');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    AppNotifier.showSnackBar(context, SnackBar(content: Text(message)));
+  }
+
+  Future<void> _run(Future<void> Function() action, {String? success}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (success != null) _snack(success);
+    } catch (error) {
+      _snack('$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _create() async {
+    final result = await showDialog<dynamic>(
+      context: context,
+      builder: (_) => const _OfferFormDialog(),
+    );
+    if (result == null) return;
+    await _run(() async {
+      if (result is List) {
+        final list = result.cast<Map<String, dynamic>>();
+        for (final item in list) {
+          await _repo.createOffer(item);
+        }
+        await _load();
+      } else if (result is Map<String, dynamic>) {
+        await _repo.createOffer(result);
+        await _load();
+      }
+    },
+        success: result is List && result.length > 1
+            ? '${result.length} offers created'
+            : 'Offer created');
+  }
+
+  Future<void> _edit(Map<String, dynamic> offer) async {
+    final data = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _OfferFormDialog(initial: offer),
+    );
+    if (data == null) return;
+    await _run(() async {
+      await _repo.updateOffer('${offer['id']}', data);
+      await _load();
+    }, success: 'Offer updated');
+  }
+
+  Future<void> _toggle(Map<String, dynamic> offer) async {
+    await _run(() async {
+      await _repo.toggleOffer('${offer['id']}');
+      await _load();
+    });
+  }
+
+  Future<void> _delete(Map<String, dynamic> offer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete offer?'),
+        content: Text(
+            'Remove "${offer['name'] ?? 'this offer'}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _run(() async {
+      await _repo.deleteOffer('${offer['id']}');
+      await _load();
+    }, success: 'Offer deleted');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Discounts & Offers',
+                        style: Theme.of(context).textTheme.headlineMedium),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Create discounts on menu items and room rates. Active offers '
+                      'show as an OFFER tag at the POS and on customer bills.',
+                      style: TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _busy ? null : _create,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('New Offer'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(spacing: 12, runSpacing: 8, children: [
+            DropdownButton<String>(
+              value: _targetFilter,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All targets')),
+                DropdownMenuItem(value: 'menu_item', child: Text('Menu items')),
+                DropdownMenuItem(
+                    value: 'menu_category', child: Text('Menu categories')),
+                DropdownMenuItem(value: 'outlet', child: Text('Whole outlet')),
+                DropdownMenuItem(value: 'room_type', child: Text('Room types')),
+                DropdownMenuItem(value: 'all_rooms', child: Text('All rooms')),
+                DropdownMenuItem(value: 'guest', child: Text('Specific Guest')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _targetFilter = value);
+                _load();
+              },
+            ),
+            DropdownButton<String>(
+              value: _activeFilter,
+              items: const [
+                DropdownMenuItem(
+                    value: 'all', child: Text('Active & inactive')),
+                DropdownMenuItem(value: 'true', child: Text('Active only')),
+                DropdownMenuItem(value: 'false', child: Text('Inactive only')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _activeFilter = value);
+                _load();
+              },
+            ),
+          ]),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _offers.isEmpty
+                    ? const _EmptyNotice(
+                        'No offers yet. Tap "New Offer" to create one.')
+                    : ListView.separated(
+                        itemCount: _offers.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) =>
+                            _offerCard(_offers[index]),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _offerCard(Map<String, dynamic> offer) {
+    final active = offer['is_active'] == true;
+    final statusColor = active ? AppColors.kSuccess : AppColors.kTextSecondary;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.local_offer_outlined, color: statusColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text('${offer['name'] ?? 'Offer'}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 15)),
+                      _chip(_discountText(offer), AppColors.kPrimary),
+                      _chip(active ? 'ACTIVE' : 'INACTIVE', statusColor),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(_targetText(offer),
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 13)),
+                  if (_validityText(offer).isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(_validityText(offer),
+                        style: const TextStyle(
+                            color: AppColors.kTextSecondary, fontSize: 12)),
+                  ],
+                ],
+              ),
+            ),
+            Switch(
+                value: active, onChanged: _busy ? null : (_) => _toggle(offer)),
+            IconButton(
+                tooltip: 'Edit',
+                onPressed: _busy ? null : () => _edit(offer),
+                icon: const Icon(Icons.edit_outlined, size: 20)),
+            IconButton(
+                tooltip: 'Delete',
+                onPressed: _busy ? null : () => _delete(offer),
+                icon: const Icon(Icons.delete_outline, size: 20)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                color: color, fontSize: 10.5, fontWeight: FontWeight.w900)),
+      );
+
+  String _discountText(Map<String, dynamic> offer) {
+    final type = '${offer['discount_type']}';
+    final value = num.tryParse('${offer['discount_value']}') ?? 0;
+    return type == 'percentage'
+        ? '${_trimNum(value)}% OFF'
+        : 'KES ${_trimNum(value)} OFF';
+  }
+
+  String _targetText(Map<String, dynamic> offer) {
+    final type = '${offer['target_type']}';
+    final label = '${offer['target_label'] ?? ''}'.trim();
+    final kind = '${offer['item_kind'] ?? ''}'.trim();
+    final kindText = kind.isEmpty
+        ? ''
+        : ' (${kind[0].toUpperCase()}${kind.substring(1)})';
+    switch (type) {
+      case 'menu_item':
+        return 'Menu item: ${label.isEmpty ? '—' : label}$kindText';
+      case 'menu_category':
+        return 'Category: ${label.isEmpty ? '—' : label}$kindText';
+      case 'outlet':
+        return 'Whole ${kind.isEmpty ? 'outlet' : kind} menu';
+      case 'room_type':
+        return 'Room type: ${label.isEmpty ? '—' : label}';
+      case 'all_rooms':
+        return 'All rooms';
+      case 'guest':
+        return 'Guest: ${label.isEmpty ? '—' : label}';
+      default:
+        return type;
+    }
+  }
+
+  String _validityText(Map<String, dynamic> offer) {
+    final start = '${offer['starts_on'] ?? ''}'.trim().split('T').first;
+    final end = '${offer['ends_on'] ?? ''}'.trim().split('T').first;
+    if (start.isEmpty && end.isEmpty) return '';
+    if (start.isNotEmpty && end.isNotEmpty) return 'Valid $start → $end';
+    return start.isNotEmpty ? 'From $start' : 'Until $end';
+  }
+
+  String _trimNum(num v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+}
+
+/// Create / edit dialog for a single offer. Fields adapt to the chosen target.
+class _OfferFormDialog extends ConsumerStatefulWidget {
+  const _OfferFormDialog({this.initial});
+
+  final Map<String, dynamic>? initial;
+
+  @override
+  ConsumerState<_OfferFormDialog> createState() => _OfferFormDialogState();
+}
+
+class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _desc;
+  late final TextEditingController _value;
+  String _discountType = 'percentage';
+  String _targetType = 'menu_item';
+  String _itemKind = 'restaurant';
+  String _targetId = '';
+  String _targetLabel = '';
+  bool _active = true;
+  DateTime? _start;
+  DateTime? _end;
+
+  // ── Multi-select guests (only when _targetType == 'guest') ───────────
+  final Set<String> _selectedGuestIds = {};
+  // bookingId → display label (e.g. "Gabriel — Room 204")
+  final Map<String, String> _guestLabelById = {};
+
+  bool _loadingOptions = false;
+  List<_SelectOption> _options = [];
+
+  BranchManagerRepository get _repo =>
+      ref.read(branchManagerRepositoryProvider);
+
+  bool get _needsKind =>
+      _targetType == 'menu_item' ||
+      _targetType == 'menu_category' ||
+      _targetType == 'outlet';
+  bool get _needsPicker =>
+      _targetType == 'menu_item' ||
+      _targetType == 'menu_category' ||
+      _targetType == 'room_type' ||
+      _targetType == 'guest';
+
+  @override
+  void initState() {
+    super.initState();
+    final init = widget.initial;
+    _name = TextEditingController(text: '${init?['name'] ?? ''}');
+    _desc = TextEditingController(text: '${init?['description'] ?? ''}');
+    _value = TextEditingController(
+        text: init?['discount_value'] == null
+            ? ''
+            : '${init!['discount_value']}');
+    _discountType = '${init?['discount_type'] ?? 'percentage'}';
+    _targetType = '${init?['target_type'] ?? 'menu_item'}';
+    final kind = '${init?['item_kind'] ?? ''}';
+    _itemKind = (kind == 'bar') ? 'bar' : 'restaurant';
+    _targetId = '${init?['target_id'] ?? ''}';
+    _targetLabel = '${init?['target_label'] ?? ''}';
+    _active = init?['is_active'] == null ? true : init!['is_active'] == true;
+    _start = init?['starts_on'] == null
+        ? null
+        : DateTime.tryParse('${init!['starts_on']}');
+    _end = init?['ends_on'] == null
+        ? null
+        : DateTime.tryParse('${init!['ends_on']}');
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOptions());
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _desc.dispose();
+    _value.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadOptions() async {
+    if (!_needsPicker) {
+      setState(() => _options = []);
+      return;
+    }
+    setState(() => _loadingOptions = true);
+    try {
+      var opts = <_SelectOption>[];
+      if (_targetType == 'menu_item') {
+        final rows = _itemKind == 'bar'
+            ? await _repo.barDrinks()
+            : await _repo.restaurantMenuItems();
+        opts = rows
+            .map((r) => _SelectOption(
+                value: '${r['id']}',
+                label: '${r['name'] ?? r['item_name'] ?? 'Item'}'))
+            .toList();
+      } else if (_targetType == 'menu_category') {
+        final rows = _itemKind == 'bar'
+            ? await _repo.barCategories()
+            : await _repo.restaurantCategories();
+        opts = rows
+            .map((r) => _SelectOption(
+                value: '${r['id']}', label: '${r['name'] ?? 'Category'}'))
+            .toList();
+      } else if (_targetType == 'room_type') {
+        final rows = await _repo.rooms();
+        final seen = <String>{};
+        for (final r in rows) {
+          final t = '${r['room_type'] ?? r['type'] ?? ''}'.trim();
+          if (t.isNotEmpty && seen.add(t.toLowerCase())) {
+            opts.add(_SelectOption(value: t, label: t));
+          }
+        }
+      } else if (_targetType == 'guest') {
+        final rows = await _repo.bookings(status: 'checked_in');
+        opts = rows.map((b) {
+          final guestName =
+              '${b['guest_name'] ?? b['guestName'] ?? b['guest']?['name'] ?? 'Guest'}'
+                  .trim();
+          final roomNum =
+              '${b['room_number'] ?? b['roomNumber'] ?? b['room']?['room_number'] ?? ''}'
+                  .trim();
+          final label =
+              roomNum.isNotEmpty ? '$guestName — Room $roomNum' : guestName;
+          final id = '${b['id'] ?? ''}';
+          return _SelectOption(value: id, label: label);
+        }).where((o) => o.value.isNotEmpty).toList();
+      }
+      if (!mounted) return;
+      setState(() {
+        _options = opts;
+        _loadingOptions = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _options = [];
+        _loadingOptions = false;
+      });
+    }
+  }
+
+  void _onTargetTypeChanged(String value) {
+    setState(() {
+      _targetType = value;
+      _targetId = '';
+      _targetLabel = '';
+      _options = [];
+      _selectedGuestIds.clear();
+      _guestLabelById.clear();
+    });
+    _loadOptions();
+  }
+
+  void _onKindChanged(String value) {
+    setState(() {
+      _itemKind = value;
+      _targetId = '';
+      _targetLabel = '';
+      _options = [];
+    });
+    _loadOptions();
+  }
+
+  String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _outletLabel() =>
+      'Whole ${_itemKind == 'bar' ? 'bar' : 'restaurant'} menu';
+
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      _snack('Offer name is required');
+      return;
+    }
+    final value = num.tryParse(_value.text.trim());
+    if (value == null || value < 0) {
+      _snack('Enter a valid discount value');
+      return;
+    }
+    if (_discountType == 'percentage' && value > 100) {
+      _snack('Percentage cannot exceed 100');
+      return;
+    }
+
+    // ── Guest target: validate multi-selection ──
+    if (_targetType == 'guest') {
+      if (_selectedGuestIds.isEmpty) {
+        _snack('Select at least one checked-in guest');
+        return;
+      }
+      final desc = _desc.text.trim().isEmpty ? null : _desc.text.trim();
+      final starts = _start == null ? null : _ymd(_start!);
+      final ends   = _end   == null ? null : _ymd(_end!);
+      // One offer row per guest
+      final offers = _selectedGuestIds.map((id) {
+        final lbl = _guestLabelById[id] ?? id;
+        return <String, dynamic>{
+          'name': name,
+          'description': desc,
+          'discount_type': _discountType,
+          'discount_value': value,
+          'target_type': 'guest',
+          'item_kind': null,
+          'target_id': id,
+          'target_label': lbl,
+          'is_active': _active,
+          'starts_on': starts,
+          'ends_on': ends,
+        };
+      }).toList();
+      Navigator.pop(context, offers);
+      return;
+    }
+
+    // ── All other targets: original single-select path ──
+    if (_needsPicker && _targetId.isEmpty) {
+      _snack('Select what this offer applies to');
+      return;
+    }
+
+    String label = _targetLabel;
+    if (_targetType == 'outlet') label = _outletLabel();
+    if (_targetType == 'all_rooms') label = 'All rooms';
+
+    Navigator.pop(context, <String, dynamic>{
+      'name': name,
+      'description': _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+      'discount_type': _discountType,
+      'discount_value': value,
+      'target_type': _targetType,
+      'item_kind': _needsKind ? _itemKind : null,
+      'target_id': _needsPicker ? _targetId : null,
+      'target_label': label.isEmpty ? null : label,
+      'is_active': _active,
+      'starts_on': _start == null ? null : _ymd(_start!),
+      'ends_on': _end == null ? null : _ymd(_end!),
+    });
+  }
+
+  void _snack(String message) {
+    AppNotifier.showSnackBar(context, SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pickerValue =
+        _options.any((o) => o.value == _targetId) ? _targetId : null;
+    return AlertDialog(
+      title: Text(widget.initial == null ? 'New Offer' : 'Edit Offer'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Offer name *'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _desc,
+                decoration:
+                    const InputDecoration(labelText: 'Description (optional)'),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _discountType,
+                    decoration:
+                        const InputDecoration(labelText: 'Discount type'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'percentage', child: Text('Percentage (%)')),
+                      DropdownMenuItem(
+                          value: 'fixed', child: Text('Fixed amount (KES)')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _discountType = v ?? 'percentage'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _value,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Value *',
+                      prefixText: _discountType == 'fixed' ? 'KES ' : null,
+                      suffixText: _discountType == 'percentage' ? '%' : null,
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _targetType,
+                decoration: const InputDecoration(labelText: 'Applies to'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'menu_item', child: Text('Specific menu item')),
+                  DropdownMenuItem(
+                      value: 'menu_category', child: Text('Menu category')),
+                  DropdownMenuItem(
+                      value: 'outlet', child: Text('Whole outlet menu')),
+                  DropdownMenuItem(
+                      value: 'room_type', child: Text('Room type')),
+                  DropdownMenuItem(
+                      value: 'all_rooms', child: Text('All rooms')),
+                  DropdownMenuItem(
+                      value: 'guest', child: Text('Specific checked-in guest')),
+                ],
+                onChanged: (v) => _onTargetTypeChanged(v ?? 'menu_item'),
+              ),
+              if (_needsKind) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _itemKind,
+                  decoration: const InputDecoration(labelText: 'Menu'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'restaurant', child: Text('Restaurant')),
+                    DropdownMenuItem(value: 'bar', child: Text('Bar')),
+                  ],
+                  onChanged: (v) => _onKindChanged(v ?? 'restaurant'),
+                ),
+              ],
+              if (_needsPicker) ...[
+                const SizedBox(height: 10),
+                if (_loadingOptions)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Center(
+                        child: SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))),
+                  )
+                else if (_targetType == 'guest') ...[
+                  // ── Multi-select chip checklist ──
+                  Text(
+                    'Checked-in guests * — tap to select one or more',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.kTextSecondary),
+                  ),
+                  const SizedBox(height: 6),
+                  if (_options.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('No guests currently checked in.',
+                          style: TextStyle(
+                              color: AppColors.kTextSecondary, fontSize: 12)),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: SingleChildScrollView(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: _options.map((o) {
+                            final selected =
+                                _selectedGuestIds.contains(o.value);
+                            return FilterChip(
+                              label: Text(o.label,
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: selected
+                                          ? Colors.white
+                                          : AppColors.kTextPrimary)),
+                              selected: selected,
+                              selectedColor: AppColors.kSuccess,
+                              checkmarkColor: Colors.white,
+                              backgroundColor: AppColors.kSurface,
+                              side: BorderSide(
+                                  color: selected
+                                      ? AppColors.kSuccess
+                                      : AppColors.kDivider),
+                              onSelected: (on) => setState(() {
+                                if (on) {
+                                  _selectedGuestIds.add(o.value);
+                                  _guestLabelById[o.value] = o.label;
+                                } else {
+                                  _selectedGuestIds.remove(o.value);
+                                  _guestLabelById.remove(o.value);
+                                }
+                              }),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  if (_selectedGuestIds.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '${_selectedGuestIds.length} guest${_selectedGuestIds.length == 1 ? '' : 's'} selected — one offer per guest will be created.',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.kSuccess,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                ] else ...[
+                  // ── Single-select dropdown for all other picker targets ──
+                  DropdownButtonFormField<String>(
+                    initialValue: pickerValue,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: _targetType == 'room_type'
+                          ? 'Room type *'
+                          : _targetType == 'menu_category'
+                              ? 'Category *'
+                              : 'Menu item *',
+                    ),
+                    items: _options
+                        .map((o) => DropdownMenuItem(
+                              value: o.value,
+                              child: Text(o.label,
+                                  overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      final match = _options.firstWhere(
+                          (o) => o.value == v,
+                          orElse: () => _SelectOption(value: v, label: v));
+                      setState(() {
+                        _targetId = v;
+                        _targetLabel = match.label;
+                      });
+                    },
+                  ),
+                  if (_options.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('No options found for this selection.',
+                          style: TextStyle(
+                              color: AppColors.kTextSecondary, fontSize: 12)),
+                    ),
+                ],
+              ],
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: _dateField('Starts (optional)', _start,
+                    (d) => setState(() => _start = d))),
+                const SizedBox(width: 12),
+                Expanded(child: _dateField('Ends (optional)', _end,
+                    (d) => setState(() => _end = d))),
+              ]),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Active'),
+                subtitle: const Text('Active offers apply immediately at POS.'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(onPressed: _submit, child: const Text('Save')),
+      ],
+    );
+  }
+
+  Widget _dateField(String label, DateTime? value, ValueChanged<DateTime?> onPick) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? DateTime.now(),
+          firstDate: DateTime(2024),
+          lastDate: DateTime(2030),
+        );
+        if (picked != null) onPick(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: value == null
+              ? const Icon(Icons.calendar_today, size: 16)
+              : IconButton(
+                  icon: const Icon(Icons.clear, size: 16),
+                  onPressed: () => onPick(null),
+                ),
+        ),
+        child: Text(
+          value == null ? 'Any date' : _ymd(value),
+          style: TextStyle(
+              color: value == null
+                  ? AppColors.kTextSecondary
+                  : AppColors.kTextPrimary),
         ),
       ),
     );
@@ -4642,77 +4664,44 @@ extension _EmptyString on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }
 
-const _reportCards = <Map<String, dynamic>>[
-  {
-    'title': 'Daily Sales',
-    'type': 'daily-sales',
-    'description': 'Daily cashier, restaurant, bar, and branch sales.'
-  },
-  {
-    'title': 'Occupancy',
-    'type': 'occupancy',
-    'description': 'Room occupancy and arrival/departure performance.'
-  },
-  {
-    'title': 'Staff Performance',
-    'type': 'staff-performance',
-    'description': 'Attendance, leave, and branch team KPI report.'
-  },
-  {
-    'title': 'Sold Items',
-    'type': 'sold-items',
-    'description': 'Item-level sold quantity and revenue analysis.'
-  },
-  {
-    'title': 'Wastage Summary',
-    'type': 'wastage',
-    'description': 'Wastage quantities, reasons, and financial impact.'
-  },
-  {
-    'title': 'Inventory Status',
-    'type': 'inventory',
-    'description': 'Stock levels, low-stock alerts, and reorder signals.'
-  },
-];
-
 String _label(BranchManagerSection section) {
   switch (section) {
     case BranchManagerSection.overview:
       return 'Overview';
-    case BranchManagerSection.analytics:
-      return 'Sales Analytics';
-    case BranchManagerSection.salesPayments:
-      return 'Sales & Payments';
-    case BranchManagerSection.cashierClearance:
-      return 'Cashier Clearance';
-    case BranchManagerSection.soldItems:
-      return 'Sold Items';
     case BranchManagerSection.waiterSales:
-      return 'Waiter Sales';
+      return 'Waiter Performance';
+    case BranchManagerSection.staffPerformance:
+      return 'Staff Performance';
+    case BranchManagerSection.conferenceBooking:
+      return 'Conference Bookings';
+    case BranchManagerSection.users:
+      return 'User Accounts';
+    case BranchManagerSection.staff:
+      return 'Staff';
+    case BranchManagerSection.checkin:
+      return 'Check-in';
     case BranchManagerSection.reservations:
       return 'Reservations';
+    case BranchManagerSection.reviews:
+      return 'Reviews';
+    case BranchManagerSection.attendance:
+      return 'Attendance';
+    case BranchManagerSection.leave:
+      return 'Leave Requests';
+    case BranchManagerSection.offers:
+      return 'Discounts & Offers';
     case BranchManagerSection.newReservation:
       return 'New Reservation';
     case BranchManagerSection.reservationDetail:
       return 'Reservation Detail';
-    case BranchManagerSection.checkin:
-      return 'Check-in';
     case BranchManagerSection.arrivals:
       return 'Arrivals';
     case BranchManagerSection.departures:
       return 'Departures';
-    case BranchManagerSection.rooms:
-      return 'Rooms';
     case BranchManagerSection.guests:
       return 'Guests';
     case BranchManagerSection.guestDetail:
       return 'Guest Detail';
-    case BranchManagerSection.staff:
-      return 'Staff';
-    case BranchManagerSection.users:
-      return 'User Accounts';
-    case BranchManagerSection.staffPerformance:
-      return 'Staff Performance';
     case BranchManagerSection.staffDetail:
       return 'Staff Detail';
     case BranchManagerSection.staffAttendance:
@@ -4723,63 +4712,15 @@ String _label(BranchManagerSection section) {
       return 'Staff KPIs';
     case BranchManagerSection.staffDocuments:
       return 'Staff Documents';
-    case BranchManagerSection.attendance:
-      return 'Attendance';
-    case BranchManagerSection.leave:
-      return 'Leave Requests';
-    case BranchManagerSection.stock:
-      return 'Stock';
-    case BranchManagerSection.stockAnalytics:
-      return 'Stock Analytics';
-    case BranchManagerSection.stockOut:
-      return 'Stock Out';
-    case BranchManagerSection.restaurant:
-      return 'Restaurant';
-    case BranchManagerSection.orderIntelligence:
-      return 'Order Intelligence';
-    case BranchManagerSection.menu:
-      return 'Restaurant Menu';
-    case BranchManagerSection.barMenu:
-      return 'Bar Menu';
-    case BranchManagerSection.housekeeping:
-      return 'Housekeeping';
-    case BranchManagerSection.maintenance:
-      return 'Maintenance';
-    case BranchManagerSection.wastage:
-      return 'Wastage';
-    case BranchManagerSection.reports:
-      return 'Reports';
-    case BranchManagerSection.reviews:
-      return 'Reviews';
-    case BranchManagerSection.kitchenStock:
-      return 'Kitchen Stock';
-    case BranchManagerSection.kitchenRequisitions:
-      return 'Kitchen Requisitions';
-    case BranchManagerSection.kitchenRecipes:
-      return 'Kitchen Recipes';
-    case BranchManagerSection.kitchenUsage:
-      return 'Kitchen Usage';
-    case BranchManagerSection.kitchenWastage:
-      return 'Kitchen Wastage';
-    case BranchManagerSection.exchangeHistory:
-      return 'Item Exchanges';
-    case BranchManagerSection.dataHealth:
-      return 'Data Health';
   }
 }
 
 String _subtitle(BranchManagerSection section) {
   switch (section) {
-    case BranchManagerSection.cashierClearance:
-      return 'Review cashier station submissions, approve reconciled shifts, and flag variances.';
-    case BranchManagerSection.soldItems:
-      return 'Branch sold-item analytics with date filtering, search, and export.';
     case BranchManagerSection.waiterSales:
       return 'Restaurant waiter leaderboard, sales totals, order counts, and service performance.';
     case BranchManagerSection.reservations:
       return 'Search, inspect, create, cancel, check in, and check out branch reservations.';
-    case BranchManagerSection.rooms:
-      return 'Room status board with availability, occupancy, maintenance, and room CRUD actions.';
     case BranchManagerSection.guests:
       return 'Guest directory with profile, stay history, create, update, and delete actions.';
     case BranchManagerSection.staff:
@@ -4792,61 +4733,13 @@ String _subtitle(BranchManagerSection section) {
       return 'Daily branch attendance log with detail review and CSV export.';
     case BranchManagerSection.leave:
       return 'Leave active/history workflow with approve, reject, report-to-duty, and export actions.';
-    case BranchManagerSection.stock:
-      return 'Branch stock overview, low/out-of-stock filters, and stock request creation.';
-    case BranchManagerSection.stockOut:
-      return 'Stock-out movement ledger for branch inventory deductions.';
-    case BranchManagerSection.restaurant:
-      return 'Restaurant operation overview with recent orders and quick links to menu and waiter sales.';
-    case BranchManagerSection.orderIntelligence:
-      return 'Branch-specific kitchen demand, rush windows, and preparation pressure from restaurant POS orders.';
-    case BranchManagerSection.menu:
-      return 'Restaurant menu item/category management, availability toggles, and CRUD.';
-    case BranchManagerSection.barMenu:
-      return 'Bar drink/category management, availability toggles, and CRUD.';
-    case BranchManagerSection.housekeeping:
-      return 'Housekeeping task queue with start and completion actions.';
-    case BranchManagerSection.maintenance:
-      return 'Maintenance work-order board with create, update, and status management.';
-    case BranchManagerSection.wastage:
-      return 'Wastage reports by period and reason with record and export actions.';
     default:
-      return 'Branch manager workflow mirrored from the Next.js dashboard.';
+      return 'Branch manager workflow.';
   }
 }
 
 List<String> _fieldsFor(BranchManagerSection section) {
   switch (section) {
-    case BranchManagerSection.analytics:
-      return const [
-        'transaction_date',
-        'code',
-        'source',
-        'outlet',
-        'payment_method',
-        'order_type',
-        'category',
-        'total_amount'
-      ];
-    case BranchManagerSection.cashierClearance:
-      return const [
-        'shift_start',
-        'shift_end',
-        'cashier_name',
-        'expected_cash',
-        'actual_cash',
-        'variance',
-        'status'
-      ];
-    case BranchManagerSection.soldItems:
-      return const [
-        'item_name',
-        'sku',
-        'category',
-        'quantity_sold',
-        'total_revenue',
-        'profit'
-      ];
     case BranchManagerSection.waiterSales:
       return const [
         'waiter_name',
@@ -4866,14 +4759,6 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'check_out_date',
         'status',
         'total_amount'
-      ];
-    case BranchManagerSection.rooms:
-      return const [
-        'room_number',
-        'room_type',
-        'floor',
-        'status',
-        'housekeeping_status'
       ];
     case BranchManagerSection.guests:
     case BranchManagerSection.guestDetail:
@@ -4938,77 +4823,6 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'status',
         'reason'
       ];
-    case BranchManagerSection.stock:
-      return const [
-        'item_name',
-        'name',
-        'sku',
-        'current_stock',
-        'minimum_stock',
-        'unit',
-        'status'
-      ];
-    case BranchManagerSection.stockOut:
-      return const [
-        'created_at',
-        'item_name',
-        'quantity',
-        'unit',
-        'reason',
-        'created_by_name'
-      ];
-    case BranchManagerSection.restaurant:
-      return const [
-        'order_number',
-        'table_number',
-        'waiter_name',
-        'status',
-        'total_amount',
-        'created_at'
-      ];
-    case BranchManagerSection.menu:
-      return const [
-        'name',
-        'category_name',
-        'price',
-        'available',
-        'description'
-      ];
-    case BranchManagerSection.barMenu:
-      return const [
-        'name',
-        'category_name',
-        'price',
-        'available',
-        'stock_quantity'
-      ];
-    case BranchManagerSection.housekeeping:
-      return const [
-        'room_number',
-        'task_type',
-        'assigned_to_name',
-        'priority',
-        'status',
-        'due_date'
-      ];
-    case BranchManagerSection.maintenance:
-      return const [
-        'title',
-        'room_number',
-        'priority',
-        'status',
-        'reported_by_name',
-        'created_at'
-      ];
-    case BranchManagerSection.wastage:
-      return const [
-        'created_at',
-        'item_name',
-        'quantity',
-        'reason',
-        'cost_impact',
-        'notes'
-      ];
     default:
       return const ['name', 'status', 'created_at'];
   }
@@ -5016,8 +4830,6 @@ List<String> _fieldsFor(BranchManagerSection section) {
 
 List<String> _editFields(BranchManagerSection section) {
   switch (section) {
-    case BranchManagerSection.rooms:
-      return const ['room_number', 'room_type', 'floor', 'status'];
     case BranchManagerSection.guests:
       return const ['first_name', 'last_name', 'email', 'phone', 'id_number'];
     case BranchManagerSection.staff:
@@ -5030,11 +4842,6 @@ List<String> _editFields(BranchManagerSection section) {
         'department',
         'status'
       ];
-    case BranchManagerSection.menu:
-    case BranchManagerSection.barMenu:
-      return const ['name', 'category_id', 'price', 'description', 'available'];
-    case BranchManagerSection.maintenance:
-      return const ['title', 'description', 'priority', 'status'];
     default:
       return _fieldsFor(section).take(6).toList();
   }
@@ -5044,8 +4851,6 @@ String? _createLabel(BranchManagerSection section) {
   switch (section) {
     case BranchManagerSection.reservations:
       return 'New';
-    case BranchManagerSection.rooms:
-      return 'Add Room';
     case BranchManagerSection.guests:
       return 'Add Guest';
     case BranchManagerSection.staff:
@@ -5054,16 +4859,6 @@ String? _createLabel(BranchManagerSection section) {
       return 'Create Account';
     case BranchManagerSection.leave:
       return 'New Request';
-    case BranchManagerSection.stock:
-      return 'Stock Request';
-    case BranchManagerSection.menu:
-      return 'Menu Item';
-    case BranchManagerSection.barMenu:
-      return 'Drink';
-    case BranchManagerSection.wastage:
-      return 'Record';
-    case BranchManagerSection.maintenance:
-      return 'New Request';
     default:
       return null;
   }
@@ -5071,8 +4866,6 @@ String? _createLabel(BranchManagerSection section) {
 
 List<String> _statusOptions(BranchManagerSection section) {
   switch (section) {
-    case BranchManagerSection.cashierClearance:
-      return const ['all', 'pending', 'approved', 'flagged'];
     case BranchManagerSection.reservations:
       return const [
         'all',
@@ -5082,8 +4875,6 @@ List<String> _statusOptions(BranchManagerSection section) {
         'checked_out',
         'cancelled'
       ];
-    case BranchManagerSection.rooms:
-      return const ['all', 'available', 'occupied', 'maintenance', 'cleaning'];
     case BranchManagerSection.staff:
     case BranchManagerSection.staffPerformance:
     case BranchManagerSection.users:
@@ -5107,23 +4898,6 @@ List<String> _statusOptions(BranchManagerSection section) {
       ];
     case BranchManagerSection.leave:
       return const ['all', 'pending', 'approved', 'rejected', 'completed'];
-    case BranchManagerSection.stock:
-      return const ['all', 'low', 'out'];
-    case BranchManagerSection.menu:
-    case BranchManagerSection.barMenu:
-      return const ['all'];
-    case BranchManagerSection.housekeeping:
-    case BranchManagerSection.maintenance:
-      return const ['all', 'pending', 'in_progress', 'completed', 'cancelled'];
-    case BranchManagerSection.wastage:
-      return const [
-        'all',
-        'expired',
-        'spoiled',
-        'damaged',
-        'overproduction',
-        'other'
-      ];
     default:
       return const [];
   }
@@ -5132,20 +4906,14 @@ List<String> _statusOptions(BranchManagerSection section) {
 bool _usesSearch(BranchManagerSection section) {
   return const {
     BranchManagerSection.reservations,
-    BranchManagerSection.soldItems,
-    BranchManagerSection.rooms,
     BranchManagerSection.guests,
     BranchManagerSection.staff,
     BranchManagerSection.users,
-    BranchManagerSection.stock,
-    BranchManagerSection.menu,
-    BranchManagerSection.barMenu,
   }.contains(section);
 }
 
 bool _usesDate(BranchManagerSection section) {
   return const {
-    BranchManagerSection.cashierClearance,
     BranchManagerSection.attendance,
     BranchManagerSection.staffAttendance,
     BranchManagerSection.waiterSales,
@@ -5154,12 +4922,7 @@ bool _usesDate(BranchManagerSection section) {
   }.contains(section);
 }
 
-bool _usesRange(BranchManagerSection section) {
-  return const {
-    BranchManagerSection.soldItems,
-    BranchManagerSection.wastage,
-  }.contains(section);
-}
+bool _usesRange(BranchManagerSection section) => false;
 
 bool _numericField(String field) {
   return field.contains('amount') ||

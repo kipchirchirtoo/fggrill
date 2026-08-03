@@ -10,9 +10,10 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
-// Waiter sales routes
+// Waiter sales routes — mounted at /api/waiter-sales in routes/index.ts,
+// so paths here are relative to that mount point.
 router.get(
-    '/waiter-sales',
+    '/',
     authorize([
         UserRole.BRANCH_MANAGER,
         UserRole.RESTAURANT_MANAGER,

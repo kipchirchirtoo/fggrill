@@ -1309,15 +1309,17 @@ const _directorSectionRouteSpecs = <MapEntry<String, DirectorSection>>[
 
 const _branchManagerSectionRouteSpecs =
     <MapEntry<String, BranchManagerSection>>[
-  MapEntry('/branch-manager/analytics', BranchManagerSection.analytics),
-  MapEntry('/branch-manager/sales-analytics', BranchManagerSection.analytics),
-  MapEntry('/branch-manager/cashier-clearance',
-      BranchManagerSection.cashierClearance),
-  MapEntry('/branch-manager/sold-items', BranchManagerSection.soldItems),
   MapEntry('/branch-manager/restaurant/waiter-sales',
       BranchManagerSection.waiterSales),
   MapEntry(
       '/branch-manager/waiter-performance', BranchManagerSection.waiterSales),
+  MapEntry('/branch-manager/staff/performance',
+      BranchManagerSection.staffPerformance),
+  MapEntry('/branch-manager/staff-performance-audit',
+      BranchManagerSection.staffPerformance),
+  MapEntry('/branch-manager/conference-bookings',
+      BranchManagerSection.conferenceBooking),
+  MapEntry('/branch-manager/reviews', BranchManagerSection.reviews),
   MapEntry('/branch-manager/reservations', BranchManagerSection.reservations),
   MapEntry(
       '/branch-manager/reservations/new', BranchManagerSection.newReservation),
@@ -1325,42 +1327,13 @@ const _branchManagerSectionRouteSpecs =
   MapEntry('/branch-manager/check-in-check-out', BranchManagerSection.checkin),
   MapEntry('/branch-manager/arrivals', BranchManagerSection.arrivals),
   MapEntry('/branch-manager/departures', BranchManagerSection.departures),
-  MapEntry('/branch-manager/rooms', BranchManagerSection.rooms),
   MapEntry('/branch-manager/guests', BranchManagerSection.guests),
   MapEntry('/branch-manager/guest-directory', BranchManagerSection.guests),
   MapEntry('/branch-manager/staff', BranchManagerSection.staff),
   MapEntry('/branch-manager/staff-directory', BranchManagerSection.staff),
-  MapEntry('/branch-manager/staff/performance',
-      BranchManagerSection.staffPerformance),
+  MapEntry('/branch-manager/users', BranchManagerSection.users),
   MapEntry('/branch-manager/attendance', BranchManagerSection.attendance),
   MapEntry('/branch-manager/leave', BranchManagerSection.leave),
-  MapEntry('/branch-manager/stock', BranchManagerSection.stock),
-  MapEntry('/branch-manager/stock-requests', BranchManagerSection.stock),
-  MapEntry(
-      '/branch-manager/stock/analytics', BranchManagerSection.stockAnalytics),
-  MapEntry('/branch-manager/stock-out', BranchManagerSection.stockOut),
-  MapEntry('/branch-manager/restaurant', BranchManagerSection.restaurant),
-  MapEntry(
-      '/branch-manager/restaurant-overview', BranchManagerSection.restaurant),
-  MapEntry('/branch-manager/order-intelligence',
-      BranchManagerSection.orderIntelligence),
-  MapEntry('/branch-manager/restaurant/order-intelligence',
-      BranchManagerSection.orderIntelligence),
-  MapEntry('/branch-manager/menu', BranchManagerSection.menu),
-  MapEntry('/branch-manager/bar-menu', BranchManagerSection.barMenu),
-  MapEntry('/branch-manager/data-health', BranchManagerSection.dataHealth),
-  MapEntry('/branch-manager/housekeeping', BranchManagerSection.housekeeping),
-  MapEntry('/branch-manager/maintenance', BranchManagerSection.maintenance),
-  MapEntry('/branch-manager/wastage', BranchManagerSection.wastage),
-  MapEntry('/branch-manager/reports', BranchManagerSection.reports),
-  MapEntry('/branch-manager/kitchen/stock', BranchManagerSection.kitchenStock),
-  MapEntry('/branch-manager/kitchen/requisitions',
-      BranchManagerSection.kitchenRequisitions),
-  MapEntry(
-      '/branch-manager/kitchen/recipes', BranchManagerSection.kitchenRecipes),
-  MapEntry('/branch-manager/kitchen/usage', BranchManagerSection.kitchenUsage),
-  MapEntry(
-      '/branch-manager/kitchen/wastage', BranchManagerSection.kitchenWastage),
 ];
 
 const _branchAccountantSectionRouteSpecs =

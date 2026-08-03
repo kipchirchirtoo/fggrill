@@ -6218,6 +6218,11 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   Guest? _selectedGuest;
   Map<String, dynamic>? _createdBookingForPayment;
   Map<String, dynamic>? _cashierPaymentReceipt;
+  // ── Room-rate offers ──────────────────────────────────────────────────────
+  /// Active room_type / all_rooms offers for today, fetched alongside rooms.
+  List<Map<String, dynamic>> _roomOffers = [];
+  /// Best matching offer for the currently selected room (null = no offer).
+  Map<String, dynamic>? _appliedOffer;
 
   DateTime get _checkInDate =>
       DateTime.tryParse(_checkIn.text) ?? DateTime.now();
@@ -6258,6 +6263,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
       }
       _rooms = [];
       _selectedRoom = null;
+      _appliedOffer = null;
+      _roomOffers = [];
     });
   }
 
@@ -6421,36 +6428,79 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                             shrinkWrap: true,
                             children: _rooms.map((room) {
                               final selected = _selectedRoom?['id'] == room['id'];
+                              final baseRate = _num(room, _roomRateKeys).toDouble();
+                              final bestOffer = _bestOfferFor(room);
+                              final effRate = bestOffer != null
+                                  ? (baseRate - _offerSaving(bestOffer, baseRate))
+                                      .clamp(0.0, double.infinity)
+                                  : baseRate;
+                              final typeName = _text(room, [
+                                    'type.name', 'type.code',
+                                    'room_type.name', 'room_type.code',
+                                    'type_name',
+                                  ]) ??
+                                  'Standard';
                               return ListTile(
                                 selected: selected,
-                                title: Text('Room ${_text(room, [
-                                          'room_number',
-                                          'number'
-                                        ]) ?? '-'}'),
-                                subtitle: Text('${_text(room, [
-                                          'type.name',
-                                          'type.code',
-                                          'room_type.name',
-                                          'room_type.code',
-                                          'type_name',
-                                        ]) ?? 'Standard'} • ${_money(_num(room, [
-                                      'price_per_night',
-                                      'rate',
-                                      'base_rate',
-                                      'base_price',
-                                      'type.base_price',
-                                      'type.price_per_night',
-                                      'type.base_rate',
-                                      'type.rate',
-                                      'room_type.base_price',
-                                      'room_type.price_per_night',
-                                      'room_type.rate',
-                                    ]))}/night'),
+                                title: Row(
+                                  children: [
+                                    Text('Room ${_text(room, ['room_number', 'number']) ?? '-'}'),
+                                    if (bestOffer != null) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.kSuccess
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('OFFER',
+                                            style: TextStyle(
+                                                color: AppColors.kSuccess,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: 0.5)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                subtitle: bestOffer != null
+                                    ? RichText(
+                                        text: TextSpan(
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                          children: [
+                                            TextSpan(text: '$typeName • '),
+                                            TextSpan(
+                                              text: '${_money(baseRate)}/night',
+                                              style: const TextStyle(
+                                                decoration:
+                                                    TextDecoration.lineThrough,
+                                                color: AppColors.kTextSecondary,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text:
+                                                  '  ${_money(effRate)}/night',
+                                              style: const TextStyle(
+                                                  color: AppColors.kSuccess,
+                                                  fontWeight: FontWeight.w700),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Text('$typeName • ${_money(baseRate)}/night'),
                                 trailing: selected
                                     ? const Icon(Icons.check_circle,
                                         color: AppColors.kSuccess)
                                     : null,
-                                onTap: () => setState(() => _selectedRoom = room),
+                                onTap: () => setState(() {
+                                  _selectedRoom = room;
+                                  _appliedOffer = bestOffer;
+                                }),
                               );
                             }).toList(),
                           ),
@@ -6703,20 +6753,24 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                     },
                     {
                       'label': 'Nightly Rate',
-                      'value': _money(_num(_selectedRoom ?? const {}, [
-                        'price_per_night',
-                        'rate',
-                        'base_price',
-                        'base_rate',
-                        'type.base_price',
-                        'type.price_per_night',
-                        'type.base_rate',
-                        'type.rate',
-                        'room_type.base_price',
-                        'room_type.price_per_night',
-                        'room_type.rate',
-                      ]))
+                      'value': () {
+                        if (_selectedRoom == null) return _money(0);
+                        final base =
+                            _num(_selectedRoom!, _roomRateKeys).toDouble();
+                        if (_appliedOffer == null) return _money(base);
+                        final eff = (base -
+                                _offerSaving(_appliedOffer!, base))
+                            .clamp(0.0, double.infinity);
+                        return '${_money(eff)}/night (was ${_money(base)})';
+                      }(),
                     },
+                    if (_appliedOffer != null)
+                      {
+                        'label': 'Offer Applied',
+                        'value':
+                            '${_appliedOffer!['name'] ?? 'Discount'} — '
+                            '${_discountBadge(_appliedOffer!)}',
+                      },
                     {'label': 'Total Amount', 'value': _money(total)},
                   ]),
                 ],
@@ -6766,20 +6820,80 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     }
     setState(() => _busy = true);
     try {
-      final rows =
-          await ref.read(receptionRepositoryProvider).getAvailableRooms({
-        'checkIn': _checkIn.text,
-        'checkOut': _checkOut.text,
-        'adults': _adults + _children,
-      });
+      final repo = ref.read(receptionRepositoryProvider);
+      final results = await Future.wait([
+        repo.getAvailableRooms({
+          'checkIn': _checkIn.text,
+          'checkOut': _checkOut.text,
+          'adults': _adults + _children,
+        }),
+        repo.getActiveRoomOffers(),
+      ]);
+      if (!mounted) return;
       setState(() {
-        _rooms = rows;
+        _rooms = results.first;
+        _roomOffers = results.last;
         _step = 1;
       });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  // ── Offer helpers ─────────────────────────────────────────────────────────
+
+  static const List<String> _roomRateKeys = [
+    'price_per_night', 'rate', 'base_rate', 'base_price',
+    'type.base_price', 'type.price_per_night', 'type.base_rate', 'type.rate',
+    'room_type.base_price', 'room_type.price_per_night', 'room_type.rate',
+  ];
+
+  /// Amount saved by [offer] on a room with [baseRate].
+  double _offerSaving(Map<String, dynamic> offer, double baseRate) {
+    final v = (num.tryParse('${offer['discount_value']}') ?? 0).toDouble();
+    return '${offer['discount_type']}' == 'percentage'
+        ? baseRate * v / 100
+        : v.clamp(0.0, baseRate);
+  }
+
+  /// Best matching offer for [room], or null if none apply.
+  Map<String, dynamic>? _bestOfferFor(Map<String, dynamic> room) {
+    if (_roomOffers.isEmpty) return null;
+    final baseRate = _num(room, _roomRateKeys).toDouble();
+    if (baseRate <= 0) return null;
+    final roomTypeName = (_text(room, [
+          'type.name', 'room_type.name', 'type_name', 'type.code',
+        ]) ??
+        '').toLowerCase().trim();
+
+    Map<String, dynamic>? best;
+    double bestSaving = 0;
+    for (final o in _roomOffers) {
+      final tt = '${o['target_type']}';
+      bool matches = tt == 'all_rooms';
+      if (tt == 'room_type') {
+        final label =
+            '${o['target_label'] ?? o['target_id'] ?? ''.toLowerCase()}'.trim();
+        matches = label.isNotEmpty &&
+            (roomTypeName.contains(label.toLowerCase()) ||
+                label.toLowerCase().contains(roomTypeName));
+      } else if (tt == 'guest') {
+        final targetId = '${o['target_id'] ?? ''}'.trim();
+        final bookingId = '${room['booking_id'] ?? room['id'] ?? ''}'.trim();
+        final guestId = '${_selectedGuest?.id ?? ''}'.trim();
+        matches = targetId.isNotEmpty &&
+            (targetId == bookingId || targetId == guestId);
+      }
+      if (!matches) continue;
+      final saving = _offerSaving(o, baseRate);
+      if (saving > bestSaving) {
+        best = o;
+        bestSaving = saving;
+      }
+    }
+    return best;
+  }
+
 
   Future<void> _searchGuests() async {
     final rows = await ref
@@ -6802,19 +6916,13 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   }
 
   double _totalAmount() {
-    final rate = _num(_selectedRoom ?? const {}, [
-      'price_per_night',
-      'rate',
-      'base_price',
-      'base_rate',
-      'type.base_price',
-      'type.price_per_night',
-      'type.base_rate',
-      'type.rate',
-      'room_type.base_price',
-      'room_type.price_per_night',
-      'room_type.rate',
-    ]).toDouble();
+    final room = _selectedRoom ?? const <String, dynamic>{};
+    final baseRate = _num(room, _roomRateKeys).toDouble();
+    // Apply the best matching room offer if present
+    final rate = _appliedOffer != null
+        ? (baseRate - _offerSaving(_appliedOffer!, baseRate))
+            .clamp(0.0, double.infinity)
+        : baseRate;
     final inDate = DateTime.tryParse(_checkIn.text) ?? DateTime.now();
     final outDate = DateTime.tryParse(_checkOut.text) ??
         inDate.add(const Duration(days: 1));
@@ -6827,12 +6935,23 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     return (rate + mealAddon) * nights;
   }
 
+  /// Human-readable discount badge for an offer (e.g. "15% OFF" or "KES 500 OFF").
+  String _discountBadge(Map<String, dynamic> offer) {
+    final v = (num.tryParse('${offer['discount_value']}') ?? 0);
+    return '${offer['discount_type']}' == 'percentage'
+        ? '$v% OFF'
+        : 'KES $v OFF';
+  }
+
   Future<Map<String, dynamic>> _createBooking({required bool recordDepositAsPaid}) async {
     if (_selectedRoom == null || _selectedGuest == null) {
       throw StateError('Select a room and guest before creating the booking.');
     }
     final status = widget.isBookingMode ? 'confirmed' : 'pending';
     final paidAmount = recordDepositAsPaid ? (num.tryParse(_deposit.text) ?? 0) : 0;
+    final originalRate =
+        _num(_selectedRoom!, _roomRateKeys).toDouble();
+    final hasOffer = _appliedOffer != null;
     return ref.read(receptionRepositoryProvider).createBookingRow({
       'room_id': _text(_selectedRoom!, ['id']),
       'guest_id': _selectedGuest!.id,
@@ -6848,6 +6967,12 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
       'deposit_paid': paidAmount > 0,
       'payment_method': _paymentMethod,
       'status': status,
+      // Offer metadata — stored for folio / audit tracking
+      if (hasOffer) 'offer_id': _appliedOffer!['id'],
+      if (hasOffer) 'offer_label': _appliedOffer!['name'],
+      if (hasOffer) 'original_rate_per_night': originalRate,
+      if (hasOffer)
+        'discount_amount_per_night': _offerSaving(_appliedOffer!, originalRate),
     });
   }
 

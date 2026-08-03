@@ -707,4 +707,26 @@ class ReceptionRepository {
         await _dio.post('/email/send-checkout-reminder/$bookingId');
     return _payload(response.data);
   }
+
+  // ── Offers / room-rate discounts ──────────────────────────────────────────
+
+  /// Returns today's active room-rate offers for this branch
+  /// (target_type = 'room_type' | 'all_rooms').
+  ///
+  /// Fails safe — returns [] on any network or parsing error so the booking
+  /// creation flow is never blocked by offer unavailability.
+  Future<List<Map<String, dynamic>>> getActiveRoomOffers() async {
+    try {
+      final response = await _dio.get(
+        '/offers/active',
+        queryParameters: await _branchParams(),
+      );
+      return _mapList(response.data).where((o) {
+        final t = '${o['target_type'] ?? ''}';
+        return t == 'room_type' || t == 'all_rooms' || t == 'guest';
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 }

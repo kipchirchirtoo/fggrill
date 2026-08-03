@@ -84,7 +84,16 @@ export const getBookings = async (
       .range(startIndex, startIndex + limit - 1);
 
     if (status) {
-      query = query.eq('status', status);
+      const s = String(status).trim().toLowerCase();
+      if (s === 'checked_in' || s === 'in_house') {
+        const today = new Date().toISOString().split('T')[0];
+        query = query
+          .in('status', ['checked_in', 'confirmed'])
+          .lte('check_in_date', today)
+          .gte('check_out_date', today);
+      } else {
+        query = query.eq('status', status);
+      }
     }
     if (checkIn) {
       query = query.eq('check_in_date', checkIn);
