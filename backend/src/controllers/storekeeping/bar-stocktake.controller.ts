@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import db from '../../db';
+import { InventoryStocktakePostingService } from '../../modules/inventory';
 import { logger } from '../../utils/logger';
 import { getLastClosedCashierShiftWindow } from '../../utils/posStationAccess';
 import { isGlobalRole } from '../../utils/branchIsolation';
@@ -20,6 +21,18 @@ const num = (v: any): number => {
 };
 
 const BAR_LOCATIONS = ['main_bar', 'executive_bar'];
+const withPostingFields = (record: any) => ({
+    ...record,
+    additions: num(record.additions),
+    document_id: record.document_id ?? null,
+    document_number: record.document_number ?? null,
+    issuance: num(record.issuance),
+    physical_quantity: record.physical_quantity ?? null,
+    posted_at: record.posted_at ?? null,
+    posting_status: record.posting_status ?? null,
+    reversal_of_document_id: record.reversal_of_document_id ?? null,
+    sales: num(record.sales),
+});
 
 // Which cashier roles tend the till at each bar location — mirrors
 // POS_STATION_CASHIER_ROLE_TYPES in utils/posStationAccess.ts (reversed: role -> location).
@@ -69,7 +82,7 @@ const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stoc
 // submitted stock" bug. Returns item_id -> previous physical count. Empty for
 // the first count. When a prior date somehow has both a pending and an approved
 // row for the same item, the later-recorded one wins.
-const COUNTED_STATUSES = ['approved', 'submitted', 'pending', 'reviewed'];
+const COUNTED_STATUSES = ['approved'];
 const loadPreviousStocktakeCounts = async (
     branchId: number,
     barLocation: string,
@@ -147,6 +160,158 @@ const resolveBarOutlet = async (branchId: number, barLocation: string) => {
         .maybeSingle();
     if (error) throw error;
     return data || null;
+};
+
+const approveBarSession = async (
+    branchId: number,
+    barLocation: string,
+    stocktakeDate: string,
+    actorId: string | null | undefined,
+    idempotencyKey: string,
+) => {
+    const { data: rows, error } = await supabase
+        .from('bar_stocktake_records')
+        .select('*, item:inventory_items(id, item_name, unit, sku, default_unit_cost)')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('stocktake_date', stocktakeDate)
+        .in('status', ['pending', 'reviewed', 'approved'])
+        .order('recorded_at', { ascending: true });
+    if (error) throw error;
+    const sessionRows = rows || [];
+    if (!sessionRows.length) return { posting: null, rows: [] as any[] };
+
+    const targetOutlet = await resolveBarOutlet(branchId, barLocation);
+    if (!targetOutlet?.id) {
+        const err: any = new Error(`No POS outlet configured for ${barLocation}`);
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const alreadyApprovedWithDocument = sessionRows.find((row: any) => row.status === 'approved' && row.document_id);
+    const reviewedBy = alreadyApprovedWithDocument?.reviewed_by || actorId || null;
+    const reviewedAt = alreadyApprovedWithDocument?.reviewed_at || new Date().toISOString();
+
+    let posting = null;
+    if (!alreadyApprovedWithDocument) {
+        posting = await InventoryStocktakePostingService.postApproval({
+            actorId: actorId || '',
+            branchId,
+            documentReason: `Bar stocktake approval ${barLocation} ${stocktakeDate}`,
+            idempotencyKey,
+            lines: sessionRows.map((row: any) => ({
+                itemName: row.item?.item_name || row.item_name || row.item?.sku,
+                itemSku: row.item?.sku,
+                metadata: { bar_location: barLocation, stocktake_record_id: row.id },
+                physicalQuantity: num(row.physical_quantity),
+                systemQuantity: num(row.system_quantity),
+                unitCost: num(row.item?.default_unit_cost),
+            })).filter((row: any) => row.itemSku),
+            location: {
+                branchId,
+                locationCode: `OUTLET-${branchId}-${String(targetOutlet.id).toUpperCase()}`,
+                locationName: targetOutlet.name || barLocation,
+                locationType: 'pos_outlet',
+                outletId: String(targetOutlet.id),
+            },
+            metadata: { bar_location: barLocation, branch_id: branchId, stocktake_date: stocktakeDate },
+            scope: 'bar',
+            sourceId: String(sessionRows[0].id),
+            sourceTable: 'bar_stocktake_records',
+            stocktakeDate,
+        });
+    }
+
+    const documentFields = posting ? {
+        document_id: posting.document.document_id,
+        document_number: posting.document.document_number,
+        posted_at: posting.document.posted_at,
+        posting_status: posting.document.posting_status,
+        reversal_of_document_id: posting.document.reversal_of_document_id,
+    } : {
+        document_id: alreadyApprovedWithDocument?.document_id ?? null,
+        document_number: alreadyApprovedWithDocument?.document_number ?? null,
+        posted_at: alreadyApprovedWithDocument?.posted_at ?? null,
+        posting_status: alreadyApprovedWithDocument?.posting_status ?? null,
+        reversal_of_document_id: alreadyApprovedWithDocument?.reversal_of_document_id ?? null,
+    };
+
+    const { error: updateError } = await supabase
+        .from('bar_stocktake_records')
+        .update({
+            status: 'approved',
+            reviewed_at: reviewedAt,
+            reviewed_by: reviewedBy,
+            ...documentFields,
+        })
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('stocktake_date', stocktakeDate)
+        .in('status', ['pending', 'reviewed', 'approved']);
+    if (updateError) throw updateError;
+
+    await db.query(
+        `UPDATE public.stock_balance_ledger sbl
+         SET actual_closing = btr.physical_quantity::numeric,
+             variance = COALESCE(btr.variance, btr.physical_quantity::numeric - btr.system_quantity::numeric)
+         FROM public.bar_stocktake_records btr
+         WHERE sbl.branch_id = btr.branch_id
+           AND sbl.item_id = btr.item_id
+           AND sbl.ledger_date = btr.stocktake_date
+           AND btr.branch_id = $1
+           AND btr.bar_location = $2
+           AND btr.stocktake_date = $3`,
+        [branchId, barLocation, stocktakeDate],
+    );
+
+    const targetOutletTypes = barLocation === 'executive_bar'
+        ? ['executive_bar', 'kyogong_executive_bar']
+        : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
+
+    await db.query(
+        `UPDATE public.bar_stock bs
+         SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+             updated_at    = NOW()
+         FROM public.bar_stocktake_records btr
+         JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+         WHERE bs.drink_id        = bd.id
+           AND bs.branch_id       = btr.branch_id
+           AND btr.branch_id      = $1
+           AND btr.bar_location   = $2
+           AND btr.stocktake_date = $3
+           AND btr.status         = 'approved'`,
+        [branchId, barLocation, stocktakeDate],
+    );
+
+    await db.query(
+        `UPDATE public.pos_outlet_items poi
+         SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+             updated_at    = NOW()
+         FROM public.bar_stocktake_records btr
+         JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+         JOIN public.pos_outlets po ON po.branch_id  = btr.branch_id
+                                   AND po.outlet_type = ANY($4::text[])
+         WHERE poi.outlet_id      = po.id
+           AND poi.source_item_id = bd.id::text
+           AND btr.branch_id      = $1
+           AND btr.bar_location   = $2
+           AND btr.stocktake_date = $3
+           AND btr.status         = 'approved'`,
+        [branchId, barLocation, stocktakeDate, targetOutletTypes],
+    );
+
+    await syncBarStocktakeToStockCounts(branchId, barLocation, stocktakeDate, 'approved', reviewedBy, reviewedAt);
+
+    const { data: refreshed, error: refreshedError } = await supabase
+        .from('bar_stocktake_records')
+        .select('*, item:inventory_items(id, item_name, unit, sku)')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('stocktake_date', stocktakeDate)
+        .order('recorded_at', { ascending: true });
+    if (refreshedError) throw refreshedError;
+
+    return { posting, rows: refreshed || [] };
 };
 
 const loadShiftCountMaps = async (
@@ -706,14 +871,15 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 // sales, so every unit issued into the bar is reflected even if
                 // no shift was open when it was issued.
                 const additions = Math.max(0, sysQty - opening + sales);
-                return {
+                return withPostingFields({
                     ...r,
                     item_name: r.item?.item_name || r.item_name || null,
                     additions,
+                    issuance: 0,
                     sales,
                     opening_stock: opening,
                     system_quantity: sysQty,
-                };
+                });
             });
             const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
@@ -735,18 +901,19 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             // always reflected: additions = current − opening + sales.
             const additions = Math.max(0, currentStock - opening + sales);
             const system = currentStock;
-            return {
+            return withPostingFields({
                 id: invId,
                 name: d.name,
                 quantity: system,
                 opening_stock: opening,
                 additions,
+                issuance: 0,
                 sales,
                 shift_id: shiftWindow.shiftId,
                 unit: d.unit || 'bottle',
                 sku: d.sku || `bard-${d.id}`,
                 category: null,
-            };
+            });
         }).filter(Boolean);
 
         res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
@@ -964,6 +1131,201 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         // Prevent "ON CONFLICT DO UPDATE command cannot affect row a second time"
         // by deduplicating rows based on item_id (keeping the last occurrence if duplicates exist).
         const uniqueRowsMap = new Map();
+* @access  Branch Storekeeper, Central Storekeeper, Super Admin
+ */
+export const recordBarStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, bar_location, items } = req.body || {};
+        const stocktakeDate = req.body?.stocktake_date || new Date().toISOString().split('T')[0];
+        const branchId = resolveScopedBranchId(req, branch_id);
+        logger.info(`recordBarStocktake: branch_id=${branch_id} bar_location=${bar_location} date=${stocktakeDate} items=${Array.isArray(items) ? items.length : 'non-array'}`);
+        if (!branchId) {
+            res.status(400).json({ success: false, message: 'branch_id must be an integer' });
+            return;
+        }
+        if (!BAR_LOCATIONS.includes(bar_location)) {
+            res.status(400).json({ success: false, message: `bar_location must be one of ${BAR_LOCATIONS.join(', ')}` });
+            return;
+        }
+        if (!Array.isArray(items) || !items.length) {
+            res.status(400).json({ success: false, message: 'items must be a non-empty array' });
+            return;
+        }
+
+        // item_id values from the Flutter client are now inventory_items UUIDs.
+        const invIds = items.map((it: any) => String(it.item_id));
+        const { data: invRows } = await supabase
+            .from('inventory_items')
+            .select('id, item_name, unit, sku')
+            .in('id', invIds);
+        const invById = new Map((invRows || []).map((i: any) => [i.id, i]));
+
+        // Source the drinks straight from THIS bar's own POS outlet, exactly like
+        // the GET (listBarStocktakes). The outlet's pos_outlet_items define what
+        // the bar actually sells and carry the live current_stock; bar_drinks is
+        // used ONLY to resolve inventory_item_id, looked up by the POS item's
+        // source_item_id REGARDLESS of branch. POS-driven branches (e.g. Kyogong)
+        // reuse another branch's drink catalog and have ZERO bar_drinks of their
+        // own — the old `bar_drinks WHERE branch_id` query returned nothing, so
+        // system/opening/additions all stored as 0 and every count looked like a
+        // full +variance. Sourcing from the outlet fixes that.
+        const outlet = await resolveBarOutlet(branchId, bar_location);
+        const { data: outletItemRows } = outlet?.id
+            ? await supabase
+                .from('pos_outlet_items')
+                .select('id, name, sku, unit, current_stock, cost_price, selling_price, source_item_id')
+                .eq('outlet_id', outlet.id)
+                .eq('source_table', 'bar_drinks')
+                .eq('is_active', true)
+            : { data: [] as any[] };
+        const outletItems = (outletItemRows || []) as Array<Record<string, any>>;
+
+        // current_stock summed per drink id (a drink may sit under >1 POS item).
+        const posStockByDrinkId = new Map<string, number>();
+        const posDrinkIdSet = new Set<string>();
+        for (const oi of outletItems) {
+            const did = String(oi.source_item_id || '').trim();
+            if (!did) continue;
+            posDrinkIdSet.add(did);
+            posStockByDrinkId.set(did, num(posStockByDrinkId.get(did)) + num(oi.current_stock));
+        }
+        const posDrinkIds = Array.from(posDrinkIdSet);
+
+        // Resolve those drinks (inventory_item_id/name/sku) by id — NOT by branch.
+        const { data: outletDrinkRows } = posDrinkIds.length > 0
+            ? await supabase
+                .from('bar_drinks')
+                .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
+                .in('id', posDrinkIds)
+            : { data: [] as any[] };
+        let branchDrinks = (outletDrinkRows || []) as Array<Record<string, any>>;
+
+        // Fallback to the branch's own catalog only if the outlet has no POS items.
+        if (branchDrinks.length === 0) {
+            const { data: allBranchDrinks } = await supabase
+                .from('bar_drinks')
+                .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
+                .eq('branch_id', branchId)
+                .eq('is_active', true);
+            branchDrinks = (allBranchDrinks || []) as Array<Record<string, any>>;
+        }
+
+        // Resolve inventory_item_id for drinks that are missing it.
+        const drinksNeedingLink = branchDrinks
+            .filter((d) => !d.inventory_item_id)
+            .map((d) => ({
+                id: String(d.id),
+                name: String(d.name),
+                sku: d.sku ? String(d.sku) : `bard-${d.id}`,
+                unit: String(d.unit || 'bottle'),
+                cost_price: num(d.cost_price),
+                selling_price: num(d.selling_price),
+            }));
+        const fallbackInvIdByDrinkId = drinksNeedingLink.length > 0
+            ? await ensureInventoryItems(drinksNeedingLink)
+            : new Map<string, string>();
+
+        // Build invId → drinkId map (covers both stamped and fallback drinks).
+        const drinkIdByInvId = new Map<string, string>();
+        for (const d of branchDrinks) {
+            const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
+            if (invId && invIds.includes(String(invId))) {
+                drinkIdByInvId.set(String(invId), String(d.id));
+            }
+        }
+        const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
+        const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
+        const { additionsByDrinkId, salesByDrinkId } = await loadShiftCountMaps(
+            branchId,
+            bar_location,
+            sumWindow.from,
+            sumWindow.to
+        );
+
+        // current_stock per drink comes straight from the outlet's POS items.
+        const stockByDrinkId = posStockByDrinkId;
+        // Shift additions only seed opening for the first-ever count; later
+        // additions are derived from stock so shift-less issues still show.
+        const shiftAdditionsByInvId = new Map<string, number>();
+        const salesByInvId = new Map<string, number>();
+        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
+            shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(drinkId)) ?? 0);
+            salesByInvId.set(invId, salesByDrinkId.get(String(drinkId)) ?? 0);
+        }
+        // Previous stocktake's physical count → today's opening (submitted too).
+        const prevCountByInvId = await loadPreviousStocktakeCounts(branchId, bar_location, stocktakeDate);
+
+        const stockByInvId = new Map<string, number>();
+        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
+            stockByInvId.set(invId, stockByDrinkId.get(drinkId) ?? 0);
+        }
+
+        const now = new Date().toISOString();
+        const missingReasons: string[] = [];
+        const rows = items.map((it: any) => {
+            const invId = String(it.item_id);
+            const invItem = invById.get(invId);
+            const currentStock = stockByInvId.get(invId) ?? 0;
+            const sales = salesByInvId.get(invId) ?? 0;
+            // Opening = previous stocktake's physical count; reverse-compute with
+            // shift additions only for the first-ever count.
+            const opening = prevCountByInvId.has(invId)
+                ? prevCountByInvId.get(invId)!
+                : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
+            // Additions derived so bar issues are reflected even without a shift.
+            const additions = Math.max(0, currentStock - opening + sales);
+            // Must match the candidate-list formula (which resolves to currentStock)
+            const sysQty = currentStock;
+
+            const physQtyRaw = Number(it.physical_quantity);
+            const physQty = Number.isFinite(physQtyRaw) ? physQtyRaw : NaN;
+            const variance = physQty - sysQty;
+            const hasVariance = Math.abs(variance) > 0.0001;
+
+            if (!Number.isFinite(physQty)) {
+                const itemName = invItem?.item_name || invId;
+                missingReasons.push(`${itemName} (missing physical count)`);
+                return null;
+            }
+
+            return {
+                branch_id: branchId,
+                bar_location,
+                stocktake_date: stocktakeDate,
+                shift_id: shiftWindow.shiftId || null,
+                item_id: invId,  // inventory_items UUID (satisfies FK)
+                opening_stock: opening,
+                additions,
+                sales,
+                system_quantity: sysQty,
+                physical_quantity: physQty,
+                // variance is a GENERATED column — do NOT include it
+                reason_for_variance: hasVariance && it.reason_for_variance ? String(it.reason_for_variance).trim() : null,
+                explanation: hasVariance && it.explanation ? String(it.explanation).trim() : null,
+                action_taken: hasVariance && it.action_taken ? String(it.action_taken).trim() : null,
+                recorded_by: req.user?.id || null,
+                recorded_at: now,
+                status: 'pending'
+            };
+        });
+
+        const validRows = rows.filter(Boolean);
+        if (missingReasons.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Some items are missing a valid physical count',
+                items: missingReasons
+            });
+            return;
+        }
+        if (validRows.length === 0) {
+            res.status(400).json({ success: false, message: 'Could not resolve any items for stocktake' });
+            return;
+        }
+
+        // Prevent "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        // by deduplicating rows based on item_id (keeping the last occurrence if duplicates exist).
+        const uniqueRowsMap = new Map();
         for (const row of validRows) {
             if (row) {
                 uniqueRowsMap.set(row.item_id, row);
@@ -977,44 +1339,41 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .select('*, item:inventory_items(id, item_name, unit)');
         if (error) throw error;
 
-        // Immediately update pos_outlet_items.current_stock & bar_stock.current_stock
-        // with the storekeeper's submitted physical count so items are active for sale right away.
-        const outletTypesForLoc = bar_location === 'executive_bar'
+        // Immediately update live bar_stock & pos_outlet_items so subsequent shift openings use physical count as baseline
+        const targetOutletTypes = bar_location === 'executive_bar'
             ? ['executive_bar', 'kyogong_executive_bar']
             : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
 
-        for (const row of finalRows) {
-            if (row?.item_id && row?.physical_quantity != null) {
-                const physQty = num(row.physical_quantity);
-
-                // Update bar_stock
-                await db.query(
-                    `UPDATE public.bar_stock bs
-                     SET current_stock = GREATEST(0, $1),
-                         last_updated  = NOW(),
-                         updated_at    = NOW()
-                     FROM public.bar_drinks bd
-                     WHERE bs.drink_id = bd.id
-                       AND bd.inventory_item_id = $2::uuid
-                       AND bs.branch_id = $3`,
-                    [physQty, row.item_id, branchId]
-                ).catch((err: any) => logger.warn('recordBarStocktake: bar_stock sync warning:', err?.message));
-
-                // Update pos_outlet_items for this bar location/outlet
-                await db.query(
-                    `UPDATE public.pos_outlet_items poi
-                     SET current_stock = GREATEST(0, $1),
-                         updated_at    = NOW()
-                     FROM public.bar_drinks bd
-                     JOIN public.pos_outlets po ON po.branch_id  = $3
-                                               AND po.outlet_type = ANY($4::text[])
-                     WHERE poi.outlet_id      = po.id
-                       AND bd.inventory_item_id = $2::uuid
-                       AND poi.source_item_id = bd.id::text`,
-                    [physQty, row.item_id, branchId, outletTypesForLoc]
-                ).catch((err: any) => logger.warn('recordBarStocktake: pos_outlet_items sync warning:', err?.message));
-            }
-        }
+        await Promise.all([
+            db.query(
+                `UPDATE public.bar_stock bs
+                 SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+                     updated_at    = NOW()
+                 FROM public.bar_stocktake_records btr
+                 JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+                 WHERE bs.drink_id        = bd.id
+                   AND bs.branch_id       = btr.branch_id
+                   AND btr.branch_id      = $1
+                   AND btr.bar_location   = $2
+                   AND btr.stocktake_date = $3`,
+                [branchId, bar_location, stocktakeDate]
+            ).catch((e: any) => logger.warn('recordBarStocktake: bar_stock live update non-fatal:', e?.message || e)),
+            db.query(
+                `UPDATE public.pos_outlet_items poi
+                 SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+                     updated_at    = NOW()
+                 FROM public.bar_stocktake_records btr
+                 JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+                 JOIN public.pos_outlets po ON po.branch_id  = btr.branch_id
+                                           AND po.outlet_type = ANY($4::text[])
+                 WHERE poi.outlet_id      = po.id
+                   AND poi.source_item_id = bd.id::text
+                   AND btr.branch_id      = $1
+                   AND btr.bar_location   = $2
+                   AND btr.stocktake_date = $3`,
+                [branchId, bar_location, stocktakeDate, targetOutletTypes]
+            ).catch((e: any) => logger.warn('recordBarStocktake: pos_outlet_items live update non-fatal:', e?.message || e))
+        ]);
 
         // Sync into the unified stock_counts table so the cashier shift gate works.
         // Non-fatal: a constraint or schema error in stock_counts must not block the stocktake submission itself.
@@ -1022,7 +1381,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .catch((syncErr: any) => logger.warn('recordBarStocktake: stock_counts sync failed (non-fatal):', syncErr?.message || syncErr));
 
         // Flatten item_name to top level for the Flutter UI
-        const result = (data || []).map((r: any) => ({
+        const result = (data || []).map((r: any) => withPostingFields({
             ...r,
             item_name: r.item?.item_name || r.item_name || null,
         }));
@@ -1100,116 +1459,15 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             return;
         }
 
-        const now = new Date().toISOString();
-        const { data, error } = await supabase
-            .from('bar_stocktake_records')
-            .update({
-                status: 'approved',
-                reviewed_by: existing.reviewed_by || req.user?.id || null,
-                reviewed_at: existing.reviewed_at || now
-            })
-            .eq('id', req.params.id)
-            .select('*, item:inventory_items(id, item_name, unit)')
-            .single();
-        if (error) throw error;
-
-        // Best-effort: sync the ledger row for this item/branch/date with the
-        // approved physical count, so future ledger reads reflect reality.
-        await supabase
-            .from('stock_balance_ledger')
-            .update({ actual_closing: num(existing.physical_quantity), variance: num(existing.variance) })
-            .eq('branch_id', existing.branch_id)
-            .eq('item_id', existing.item_id)
-            .eq('ledger_date', existing.stocktake_date);
-
-        const targetOutletTypes = existing.bar_location === 'executive_bar'
-            ? ['executive_bar', 'kyogong_executive_bar']
-            : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
-
-        // Correct the live bar_stock so the next stocktake starts from the
-        // approved physical count (closing the loop between stocktake and inventory).
-        await db.query(
-            `UPDATE public.bar_stock bs
-             SET current_stock = GREATEST(0, $1),
-                 updated_at = NOW()
-             FROM public.bar_drinks bd
-             WHERE bs.drink_id = bd.id
-               AND bd.inventory_item_id = $2::uuid
-               AND bs.branch_id = $3`,
-            [num(existing.physical_quantity), existing.item_id, existing.branch_id]
-        );
-
-        // Also sync into pos_outlet_items so the Bar POS outlet reflects the approved count.
-        await db.query(
-            `UPDATE public.pos_outlet_items poi
-             SET current_stock = GREATEST(0, $1),
-                 updated_at    = NOW()
-             FROM public.bar_drinks bd
-             JOIN public.pos_outlets po ON po.branch_id = $3
-                                       AND po.outlet_type = ANY($4::text[])
-             WHERE bd.inventory_item_id = $2::uuid
-               AND poi.outlet_id = po.id
-               AND poi.source_item_id = bd.id::text`,
-            [num(existing.physical_quantity), existing.item_id, existing.branch_id, targetOutletTypes]
-        );
-
-        // Batch-approve all remaining reviewed/pending records for the same session.
-        await supabase
-            .from('bar_stocktake_records')
-            .update({
-                status: 'approved',
-                reviewed_by: existing.reviewed_by || req.user?.id || null,
-                reviewed_at: existing.reviewed_at || now
-            })
-            .eq('branch_id', existing.branch_id)
-            .eq('bar_location', existing.bar_location)
-            .eq('stocktake_date', existing.stocktake_date)
-            .in('status', ['pending', 'reviewed']);
-
-        // Bulk-update bar_stock and pos_outlet_items for ALL approved records in this session.
-        await db.query(
-            `UPDATE public.bar_stock bs
-             SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
-                 updated_at    = NOW()
-             FROM public.bar_stocktake_records btr
-             JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
-             WHERE bs.drink_id        = bd.id
-               AND bs.branch_id       = btr.branch_id
-               AND btr.branch_id      = $1
-               AND btr.bar_location   = $2
-               AND btr.stocktake_date = $3
-               AND btr.status         = 'approved'`,
-            [existing.branch_id, existing.bar_location, existing.stocktake_date]
-        );
-
-        await db.query(
-            `UPDATE public.pos_outlet_items poi
-             SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
-                 updated_at    = NOW()
-             FROM public.bar_stocktake_records btr
-             JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
-             JOIN public.pos_outlets po ON po.branch_id  = btr.branch_id
-                                       AND po.outlet_type = ANY($4::text[])
-             WHERE poi.outlet_id      = po.id
-               AND poi.source_item_id = bd.id::text
-               AND btr.branch_id      = $1
-               AND btr.bar_location   = $2
-               AND btr.stocktake_date = $3
-               AND btr.status         = 'approved'`,
-            [existing.branch_id, existing.bar_location, existing.stocktake_date, targetOutletTypes]
-        );
-
-        // Sync into the unified stock_counts table.
-        await syncBarStocktakeToStockCounts(
+        const { rows } = await approveBarSession(
             existing.branch_id,
             existing.bar_location,
             existing.stocktake_date,
-            'approved',
-            existing.reviewed_by || req.user?.id || null,
-            existing.reviewed_at || now
+            req.user?.id || null,
+            req.header('Idempotency-Key') || `bar-stocktake-approve-${existing.branch_id}-${existing.bar_location}-${existing.stocktake_date}`,
         );
-
-        res.status(200).json({ success: true, data: { ...data, item_name: data?.item?.item_name || null } });
+        const approved = rows.find((row: any) => row.id === req.params.id) || rows[0] || existing;
+        res.status(200).json({ success: true, data: withPostingFields({ ...approved, item_name: approved.item?.item_name || approved.item_name || null }) });
     } catch (error) {
         logger.error('approveBarStocktake failed:', error);
         next(error);

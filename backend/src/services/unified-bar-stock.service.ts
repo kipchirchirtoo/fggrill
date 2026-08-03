@@ -484,12 +484,25 @@ export async function recordBarStockMovement(
   }
 
   // ── Step 4: Update pos_shift_stock_counts ─────────────────────────
-  if (shiftId && outletId) {
+  let targetShiftId = shiftId;
+  if (!targetShiftId && outletId) {
+    const { data: openShift } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id')
+      .eq('outlet_id', outletId)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    targetShiftId = openShift?.id || null;
+  }
+
+  if (targetShiftId && outletId) {
     try {
       const { data: countRow } = await supabase
         .from('pos_shift_stock_counts')
         .select('id, opening_stock, additions, sold_quantity, system_closing_stock, physical_count')
-        .eq('shift_id', shiftId)
+        .eq('shift_id', targetShiftId)
         .eq('sku', sku)
         .maybeSingle();
 

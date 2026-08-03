@@ -936,6 +936,50 @@ const recordKitchenConsumption = async (
     .maybeSingle();
   if (!shift) return;
 
+  const openShiftId = String(shift.id);
+  await recordConsumptionForOrder(orderItems, branchId, posShiftId, orderId, openShiftId);
+};
+
+// Core per-order consumption recorder, given an explicit kitchen shift id.
+// Reused by recordKitchenConsumption (live POS completion) and the shift-open
+// backfill (recovers sales made before the kitchen shift opened). Every sold
+// outlet item yields at least one kitchen_shift_pos_consumption row: recipe-
+// and inventory-linked items are matched; anything else is recorded with
+// match_status = 'unmatched' so no sale is ever lost from food control.
+export const recordConsumptionForOrder = async (
+  orderItems: Array<Record<string, any>>,
+  branchId: number,
+  posShiftId: string,
+  orderId: string,
+  shiftId: string
+): Promise<void> => {
+  const insertUnmatchedConsumption = async (oi: any, portions: number, idx: number) => {
+    if (portions <= 0) return;
+    try {
+      await supabase.from('kitchen_shift_pos_consumption').insert({
+        shift_id: shiftId,
+        branch_id: branchId,
+        pos_shift_id: posShiftId,
+        pos_order_id: orderId,
+        pos_outlet_item_id: oi?.id ?? null,
+        item_index: idx,
+        produced_item_sku: oi?.sku ?? null,
+        produced_item_name: oi?.name ?? 'Unmapped POS item',
+        portions_sold: portions,
+        raw_item_sku: oi?.sku ?? null,
+        raw_item_name: oi?.name ?? 'Unmapped POS item',
+        raw_quantity_consumed: portions,
+        raw_unit: 'unit',
+        cost_price: 0,
+        match_status: 'unmatched',
+      });
+    } catch (err) {
+      // Never let an unmatched-row insert abort the rest of the order (e.g. if
+      // the match_status migration hasn't run yet). Best-effort only.
+      logger.warn('recordConsumptionForOrder: unmatched consumption insert failed', err as any);
+    }
+  };
+
   for (const [itemIndex, item] of orderItems.entries()) {
     const outletItemId = item.outlet_item_id;
     const portionsSold = numberValue(item.quantity);
@@ -947,7 +991,10 @@ const recordKitchenConsumption = async (
       .eq('id', outletItemId)
       .maybeSingle();
     if (outletItemError) throw outletItemError;
-    if (!outletItem) continue;
+    if (!outletItem) {
+      await insertUnmatchedConsumption({ id: outletItemId }, portionsSold, itemIndex);
+      continue;
+    }
 
     const { data: recipe } = await supabase
       .from('kitchen_production_recipes')
@@ -985,7 +1032,7 @@ const recordKitchenConsumption = async (
         if (rawQtyConsumed <= 0) continue;
 
         await supabase.from('kitchen_shift_pos_consumption').insert({
-          shift_id: shift.id,
+          shift_id: shiftId,
           branch_id: branchId,
           pos_shift_id: posShiftId,
           pos_order_id: orderId,
@@ -1004,7 +1051,7 @@ const recordKitchenConsumption = async (
         const { data: shiftItem } = await supabase
           .from('kitchen_shift_items')
           .select('id, sold_quantity')
-          .eq('shift_id', shift.id)
+          .eq('shift_id', shiftId)
           .eq('item_sku', input.raw_item_sku)
           .maybeSingle();
         if (shiftItem) {
@@ -1031,14 +1078,23 @@ const recordKitchenConsumption = async (
         .eq('id', outletItem.stock_pool_item_id)
         .maybeSingle();
       if (poolOutletItemError) throw poolOutletItemError;
-      if (!poolOutletItem) continue;
+      if (!poolOutletItem) {
+        await insertUnmatchedConsumption(outletItem, portionsSold, itemIndex);
+        continue;
+      }
       sourceTable = poolOutletItem.source_table;
       sourceItemId = poolOutletItem.source_item_id;
       producedItemSku = poolOutletItem.sku;
       producedItemName = poolOutletItem.name;
     }
 
-    if (sourceTable !== 'restaurant_menu_items' || !sourceItemId) continue;
+    // Not a recipe- or inventory-linked item: still record the sale so it is
+    // never lost from food control — flagged 'unmatched' for the accountant to
+    // register (recipe / direct / exempt).
+    if (sourceTable !== 'restaurant_menu_items' || !sourceItemId) {
+      await insertUnmatchedConsumption(outletItem, portionsSold, itemIndex);
+      continue;
+    }
 
     const { data: menuItem, error: menuItemError } = await supabase
       .from('restaurant_menu_items')
@@ -1046,7 +1102,10 @@ const recordKitchenConsumption = async (
       .eq('id', sourceItemId)
       .maybeSingle();
     if (menuItemError) throw menuItemError;
-    if (!menuItem?.inventory_item_id) continue;
+    if (!menuItem?.inventory_item_id) {
+      await insertUnmatchedConsumption(outletItem, portionsSold, itemIndex);
+      continue;
+    }
 
     const { data: inventoryItem, error: inventoryItemError } = await supabase
       .from('inventory_items')
@@ -1054,7 +1113,10 @@ const recordKitchenConsumption = async (
       .eq('id', menuItem.inventory_item_id)
       .maybeSingle();
     if (inventoryItemError) throw inventoryItemError;
-    if (!inventoryItem?.sku) continue;
+    if (!inventoryItem?.sku) {
+      await insertUnmatchedConsumption(outletItem, portionsSold, itemIndex);
+      continue;
+    }
 
     const consumedQuantity = portionsSold * quantityMultiplier;
     if (consumedQuantity <= 0) continue;
@@ -1062,7 +1124,7 @@ const recordKitchenConsumption = async (
     const { data: shiftItem, error: shiftItemError } = await supabase
       .from('kitchen_shift_items')
       .select('id, sold_quantity')
-      .eq('shift_id', shift.id)
+      .eq('shift_id', shiftId)
       .eq('item_sku', inventoryItem.sku)
       .maybeSingle();
 
@@ -1072,11 +1134,11 @@ const recordKitchenConsumption = async (
       // issued it to this shift) — still record the sale below so it is never
       // silently lost from the food-control ledger; it just can't be matched
       // against issued stock for variance until it is issued.
-      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shift.id} — recording sale as unmatched`);
+      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shiftId} — recording sale as unmatched`);
     }
 
     await supabase.from('kitchen_shift_pos_consumption').insert({
-      shift_id: shift.id,
+      shift_id: shiftId,
       branch_id: branchId,
       pos_shift_id: posShiftId,
       pos_order_id: orderId,
@@ -1155,6 +1217,66 @@ const reverseKitchenConsumptionForOrder = async (
         .from('kitchen_shift_pos_consumption')
         .update({ portions_sold: remainingPortions, raw_quantity_consumed: currentRawQty - rawQtyToReverse })
         .eq('id', row.id);
+    }
+  }
+};
+
+// Recovers POS sales that completed BEFORE a kitchen shift was opened — their
+// consumption was skipped because recordKitchenConsumption returns early when no
+// kitchen shift is open. Called from openKitchenShift. Best-effort and
+// idempotent: orders that already produced consumption rows are skipped, so it
+// never double-counts. Scoped to the branch's POS outlet shifts.
+export const backfillKitchenConsumptionForOpenShift = async (
+  branchId: number,
+  kitchenShiftId: string,
+  sinceIso?: string
+): Promise<void> => {
+  if (!branchId || !kitchenShiftId) return;
+
+  const since = sinceIso || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: outletShifts } = await supabase
+    .from('pos_outlet_shifts')
+    .select('id')
+    .eq('branch_id', branchId)
+    .or(`status.eq.open,opened_at.gte.${since}`)
+    .limit(250);
+  const shiftIds = (outletShifts || []).map((s: any) => String(s.id)).filter(Boolean);
+  if (!shiftIds.length) return;
+
+  const { data: orders } = await supabase
+    .from('pos_shift_orders')
+    .select('id, shift_id, items, created_at, status, payment_status')
+    .in('shift_id', shiftIds)
+    .gte('created_at', since)
+    .limit(500);
+  const candidateOrders = (orders || []).filter((o: any) =>
+    Array.isArray(o.items) && o.items.length > 0 &&
+    String(o.status || '').toLowerCase() !== 'voided' &&
+    String(o.payment_status || '').toLowerCase() !== 'voided'
+  );
+  if (!candidateOrders.length) return;
+
+  // Skip orders that already have consumption rows (idempotent — no double count).
+  const orderIds = candidateOrders.map((o: any) => String(o.id));
+  const { data: existingRows } = await supabase
+    .from('kitchen_shift_pos_consumption')
+    .select('pos_order_id')
+    .in('pos_order_id', orderIds);
+  const alreadyRecorded = new Set((existingRows || []).map((r: any) => String(r.pos_order_id)));
+
+  for (const order of candidateOrders) {
+    if (alreadyRecorded.has(String(order.id))) continue;
+    try {
+      await recordConsumptionForOrder(
+        order.items as any[],
+        branchId,
+        String(order.shift_id || ''),
+        String(order.id),
+        kitchenShiftId,
+      );
+    } catch (err) {
+      logger.warn(`backfillKitchenConsumptionForOpenShift: order ${order.id} failed`, err as any);
     }
   }
 };
@@ -2188,28 +2310,75 @@ const seedShiftStockCounts = async (shiftId: string, outletId: string): Promise<
     .limit(1);
   if (existingCounts && existingCounts.length) return;
 
-  const { data: items, error: itemsError } = await supabase
-    .from('pos_outlet_items')
-    .select('*')
-    .eq('outlet_id', outletId)
-    .eq('is_active', true);
+  const [{ data: items, error: itemsError }, { data: outlet }] = await Promise.all([
+    supabase.from('pos_outlet_items').select('*').eq('outlet_id', outletId).eq('is_active', true),
+    supabase.from('pos_outlets').select('id, branch_id, outlet_type').eq('id', outletId).maybeSingle()
+  ]);
   if (itemsError) throw itemsError;
 
-  const stockRows = ((items || []) as Array<Record<string, any>>).map((item) => ({
-    shift_id: shiftId,
-    outlet_id: outletId,
-    outlet_item_id: item.id,
-    item_name: item.name,
-    sku: item.sku,
-    unit: item.unit || 'each',
-    cost_price: item.cost_price || 0,
-    selling_price: item.selling_price || 0,
-    opening_stock: item.current_stock ?? item.opening_stock ?? 0,
-    additions: 0,
-    sold_quantity: 0,
-    system_closing_stock: item.current_stock ?? item.opening_stock ?? 0,
-    track_stock: item.track_stock !== false
-  }));
+  const branchId = outlet?.branch_id;
+  const barLocation = String(outlet?.outlet_type || '').includes('executive') ? 'executive_bar' : 'main_bar';
+
+  // Fetch recent physical counts from bar_stocktake_records & bar_stock to use as shift opening stock
+  const physicalCountsByInvId = new Map<string, number>();
+  const physicalCountsByDrinkId = new Map<string, number>();
+
+  if (branchId) {
+    const [{ data: stocktakeRows }, { data: barStockRows }] = await Promise.all([
+      supabase
+        .from('bar_stocktake_records')
+        .select('item_id, physical_quantity, recorded_at')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .in('status', ['submitted', 'reviewed', 'approved'])
+        .order('recorded_at', { ascending: false }),
+      supabase
+        .from('bar_stock')
+        .select('drink_id, current_stock')
+        .eq('branch_id', branchId)
+    ]);
+
+    for (const r of stocktakeRows || []) {
+      if (r.item_id && r.physical_quantity != null && !physicalCountsByInvId.has(String(r.item_id))) {
+        physicalCountsByInvId.set(String(r.item_id), Number(r.physical_quantity));
+      }
+    }
+
+    for (const r of barStockRows || []) {
+      if (r.drink_id && r.current_stock != null && !physicalCountsByDrinkId.has(String(r.drink_id))) {
+        physicalCountsByDrinkId.set(String(r.drink_id), Number(r.current_stock));
+      }
+    }
+  }
+
+  const stockRows = ((items || []) as Array<Record<string, any>>).map((item) => {
+    const sourceItemId = String(item.source_item_id || '').trim();
+    let openingStock = item.current_stock ?? item.opening_stock ?? 0;
+
+    if (sourceItemId && physicalCountsByDrinkId.has(sourceItemId)) {
+      openingStock = physicalCountsByDrinkId.get(sourceItemId)!;
+    } else if (item.inventory_item_id && physicalCountsByInvId.has(String(item.inventory_item_id))) {
+      openingStock = physicalCountsByInvId.get(String(item.inventory_item_id))!;
+    }
+
+    const numOpening = Number(openingStock) || 0;
+
+    return {
+      shift_id: shiftId,
+      outlet_id: outletId,
+      outlet_item_id: item.id,
+      item_name: item.name,
+      sku: item.sku,
+      unit: item.unit || 'each',
+      cost_price: item.cost_price || 0,
+      selling_price: item.selling_price || 0,
+      opening_stock: numOpening,
+      additions: 0,
+      sold_quantity: 0,
+      system_closing_stock: numOpening,
+      track_stock: item.track_stock !== false
+    };
+  });
 
   if (stockRows.length) {
     const { error: stockError } = await supabase.from('pos_shift_stock_counts').insert(stockRows);
