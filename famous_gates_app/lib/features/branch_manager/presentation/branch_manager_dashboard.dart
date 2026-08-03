@@ -16,6 +16,8 @@ import '../domain/models.dart';
 import '../../kitchen/presentation/kds_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import 'mobile/mobile_manager_reviews_screen.dart';
+import '../../reception/presentation/screens/conference_booking_screen.dart';
+import '../../branch_accountant/presentation/waiter_audit_screen.dart';
 
 enum BranchManagerSection {
   overview,
@@ -62,6 +64,7 @@ enum BranchManagerSection {
   kitchenWastage,
   exchangeHistory,
   dataHealth,
+  conferenceBooking,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
