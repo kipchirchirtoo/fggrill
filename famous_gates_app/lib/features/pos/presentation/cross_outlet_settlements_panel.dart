@@ -10,6 +10,7 @@ import '../data/outlet_pos_repository.dart';
 Future<void> showCrossOutletSettlementsPanel(BuildContext context) {
   return showDialog<void>(
     context: context,
+    useRootNavigator: true,
     barrierDismissible: true,
     builder: (_) => const Dialog(
       insetPadding: EdgeInsets.all(24),
@@ -94,7 +95,8 @@ class _CrossOutletClearancesTabState
     final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      useRootNavigator: true,
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Dispute settlement'),
         content: TextField(
           controller: controller,
@@ -107,10 +109,10 @@ class _CrossOutletClearancesTabState
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.of(dialogCtx).pop(),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => Navigator.of(dialogCtx).pop(controller.text.trim()),
             child: const Text('Raise dispute'),
           ),
         ],
@@ -151,7 +153,7 @@ class _CrossOutletClearancesTabState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canClose = widget.isDialog && (ModalRoute.of(context)?.canPop ?? false);
+    final canClose = widget.isDialog && Navigator.of(context, rootNavigator: true).canPop();
 
     final content = Column(
       children: [
@@ -171,7 +173,12 @@ class _CrossOutletClearancesTabState
                   icon: const Icon(Icons.refresh)),
               if (canClose)
                 IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      final nav = Navigator.of(context, rootNavigator: true);
+                      if (nav.canPop()) {
+                        nav.pop();
+                      }
+                    },
                     icon: const Icon(Icons.close)),
             ],
           ),
