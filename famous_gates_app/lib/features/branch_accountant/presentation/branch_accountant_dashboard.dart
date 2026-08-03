@@ -42,6 +42,7 @@ import 'daily_controls_screen.dart';
 import 'event_orders_screen.dart';
 import 'food_control_standards_screen.dart';
 import 'sections/corporate_accounts_section.dart';
+import 'sections/master_bill_disputes_section.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../../../core/services/user_service.dart';
 import '../../menu_pricing/data/menu_pricing_repository.dart';
@@ -52,6 +53,7 @@ import '../../kitchen/data/repository.dart';
 enum BranchAccountantSection {
   overview,
   search,
+  masterBillDisputes,
   cashierClearance,
   analytics,
   financialClose,
@@ -224,6 +226,8 @@ class _BranchAccountantDashboardState
         );
       case BranchAccountantSection.search:
         return const BranchSearchSection();
+      case BranchAccountantSection.masterBillDisputes:
+        return const MasterBillDisputesSection();
       case BranchAccountantSection.cashierClearance:
         return const _CashierClearanceSection();
       case BranchAccountantSection.analytics:
@@ -345,6 +349,7 @@ class _NavItem {
 // which is not a compile-time constant. The list is built once at startup.
 final _navItems = [
   _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
+  _NavItem(BranchAccountantSection.masterBillDisputes, 'Master Bill Disputes', Icons.gavel),
   _NavItem(BranchAccountantSection.search, 'Branch Search', Icons.search),
   // ── Daily cashier, shift & bill operations (most accessed) ──
   _NavItem(

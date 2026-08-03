@@ -28,6 +28,7 @@ import {
   confirmCrossOutletSettlement,
   disputeCrossOutletSettlement,
   resolveDisputedSettlement,
+  accountantResolveDisputedSettlement,
   addItemsToMasterBill,
   transferMasterBillWaiter,
   moveMasterBillTable,
@@ -195,6 +196,7 @@ router.get('/settlements/cross-outlet', getCrossOutletSettlements);
 router.post('/settlements/:settlementId/confirm', confirmCrossOutletSettlement);
 router.post('/settlements/:settlementId/dispute', disputeCrossOutletSettlement);
 router.post('/settlements/:settlementId/resolve', resolveDisputedSettlement);
+router.post('/settlements/:settlementId/accountant-resolve', accountantResolveDisputedSettlement);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);

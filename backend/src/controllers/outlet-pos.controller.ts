@@ -7125,6 +7125,128 @@ export const resolveDisputedSettlement = async (req: Request, res: Response, nex
   }
 };
 
+// POST /pos/settlements/:settlementId/accountant-resolve — Branch Accountant
+// resolves a disputed master bill share using Option 1, 2, or 3.
+export const accountantResolveDisputedSettlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const role = roleFor(req);
+    if (!ACCOUNTANT_ROLES.has(role) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Only the Branch Accountant or Manager can resolve disputed settlements', 403);
+    }
+
+    const { settlementId } = req.params;
+    const { action, payment_method, additional_amount, reference, room_number, new_allocations, void_reason } = req.body || {};
+
+    if (!['option1_collect_additional_payment', 'option2_reallocate_shares', 'option3_authorize_void_discount'].includes(action)) {
+      throw new AppError('Action must be one of option1_collect_additional_payment, option2_reallocate_shares, option3_authorize_void_discount', 400);
+    }
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('pos_master_bill_settlements')
+      .select('*, master:pos_master_bills(*)')
+      .eq('id', settlementId)
+      .maybeSingle();
+    if (fetchErr || !row) throw new AppError('Settlement not found', 404);
+    ensureBranchAccess(req, (row as any).branch_id);
+
+    const master = Array.isArray((row as any).master) ? (row as any).master[0] : (row as any).master;
+    const now = new Date().toISOString();
+    let resolutionSummary = '';
+
+    if (action === 'option1_collect_additional_payment') {
+      const extraAmt = numberValue(additional_amount);
+      if (extraAmt <= 0) throw new AppError('Additional amount must be greater than zero', 400);
+      const method = normalizePaymentMethod(payment_method || 'cash');
+
+      resolutionSummary = `Option 1: Collected additional KES ${extraAmt.toLocaleString('en-KE')} via ${method?.toUpperCase()} (Ref: ${reference || room_number || 'N/A'})`;
+
+      await recordCashierTransactionSafe({
+        branchId: Number((row as any).branch_id),
+        cashierId: String(req.user.id),
+        paymentAmount: extraAmt,
+        payment_method: method,
+        payment_reference: reference || room_number || null,
+        revenueType: 'pos_master_bill_additional',
+        referenceType: 'pos_master_bills',
+        referenceId: String(master.id),
+        sourceModule: 'pos',
+        sourceDocumentType: 'pos_master_bills',
+        sourceDocumentId: String(master.id),
+        sourceDocumentNumber: String(master.master_bill_number || ''),
+        billNumber: String(master.master_bill_number || ''),
+        orderNumber: String(master.master_bill_number || ''),
+        customerName: String(master.customer_name || 'Walk-in')
+      });
+
+      if (master?.id) {
+        await supabase.from('pos_master_bills')
+          .update({ amount_paid: numberValue(master.amount_paid) + extraAmt, updated_at: now })
+          .eq('id', master.id);
+      }
+
+    } else if (action === 'option2_reallocate_shares') {
+      if (!Array.isArray(new_allocations) || !new_allocations.length) {
+        throw new AppError('new_allocations array is required for reallocating shares', 400);
+      }
+      resolutionSummary = `Option 2: Re-allocated settlement shares across outlets by Accountant ${req.user.first_name || ''}`;
+
+      for (const alloc of new_allocations) {
+        if (alloc.outlet_id && alloc.amount != null) {
+          await supabase.from('pos_master_bill_settlements')
+            .update({ amount: numberValue(alloc.amount), updated_at: now })
+            .eq('master_bill_id', master.id)
+            .eq('outlet_id', alloc.outlet_id);
+        }
+      }
+
+    } else if (action === 'option3_authorize_void_discount') {
+      const reasonText = nullableText(void_reason);
+      if (!reasonText) throw new AppError('Void/discount reason is required for Option 3', 400);
+      resolutionSummary = `Option 3: Authorized manager void/discount: ${reasonText}`;
+
+      await supabase.from('pos_item_void_log').insert({
+        branch_id: Number((row as any).branch_id),
+        requested_by: (row as any).supplying_cashier_id || req.user.id,
+        approved_by: req.user.id,
+        status: 'approved',
+        reason: `Disputed master bill ${master?.master_bill_number}: ${reasonText}`,
+        created_at: now
+      }).catch(() => {});
+    }
+
+    // Update settlement record to confirmed with resolution notes
+    const { data: updated, error: updErr } = await supabase
+      .from('pos_master_bill_settlements')
+      .update({
+        status: 'cashier_confirmed',
+        confirmed_by: req.user.id,
+        confirmed_at: now,
+        dispute_reason: null,
+        updated_at: now
+      })
+      .eq('id', settlementId)
+      .select('*, master:pos_master_bills(*)')
+      .single();
+    if (updErr) throw updErr;
+
+    // Audit Log entry into inventory_audit_logs for Cashier Logbook traceability
+    await supabase.from('inventory_audit_logs').insert({
+      branch_id: Number((row as any).branch_id),
+      event_type: 'MASTER_BILL_DISPUTE_RESOLVED',
+      entity_type: 'pos_master_bill_settlements',
+      entity_id: settlementId,
+      actor_id: req.user.id,
+      notes: `Master Bill ${master?.master_bill_number} dispute resolved by Accountant. ${resolutionSummary}`,
+      created_at: now
+    }).catch(() => {});
+
+    res.json({ success: true, message: 'Disputed settlement resolved successfully', data: mapSettlementRow(updated) });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const payShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);

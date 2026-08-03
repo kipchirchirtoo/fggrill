@@ -379,6 +379,28 @@ class OutletPosRepository {
         data: {'resolution': resolution});
   }
 
+  /// Branch Accountant resolves a disputed master bill using Option 1, 2, or 3.
+  Future<void> accountantResolveDisputedSettlement({
+    required String settlementId,
+    required String action, // option1_collect_additional_payment | option2_reallocate_shares | option3_authorize_void_discount
+    double? additionalAmount,
+    String? paymentMethod,
+    String? reference,
+    String? roomNumber,
+    List<Map<String, dynamic>>? newAllocations,
+    String? voidReason,
+  }) async {
+    await _dio.post('/pos/settlements/$settlementId/accountant-resolve', data: {
+      'action': action,
+      'additional_amount': additionalAmount,
+      'payment_method': paymentMethod,
+      'reference': reference,
+      'room_number': roomNumber,
+      'new_allocations': newAllocations,
+      'void_reason': voidReason,
+    });
+  }
+
   /// Outstanding staff credit bills for the authenticated waiter/bartender.
   Future<Map<String, dynamic>> getMyCreditBills() async {
     final response = await _dio.get('/pos/my-credit-bills');
