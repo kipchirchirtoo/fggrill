@@ -252,8 +252,8 @@ class CashierRepository {
       if (billType != null && billType != 'all') 'bill_type': billType,
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
-      'page': page,
-      'limit': limit,
+      // Whole open shift, not a page — backend returns every bill for limit=all.
+      'limit': 'all',
     };
 
     final request = () async {
@@ -313,8 +313,8 @@ class CashierRepository {
       if (status != null && status != 'all') 'status': status,
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
-      'page': page,
-      'limit': limit,
+      // Whole open shift, not a page — backend returns every order for limit=all.
+      'limit': 'all',
     };
 
     final request = () async {
@@ -574,16 +574,21 @@ class CashierRepository {
   /// Load purchase orders the storekeeper has created — cashier uses these
   /// to issue petty-cash payments against approved/received POs.
   Future<List<Map<String, dynamic>>> getPendingPOs({int? branchId}) async {
-    // The "From PO" shortcut is a convenience only. Most cashier roles are not
-    // authorised on the storekeeping endpoint (403), so treat any failure as
-    // "no approved POs" rather than breaking the whole Expenses tab.
     try {
-      return await _getList('/storekeeping/purchase-orders', query: {
-        if (branchId != null) 'branch_id': branchId,
-        'status': 'approved',
+      final bId = branchId ?? await _branchId;
+      return await _getList('/kyogong/petty-cash/pending-pos', query: {
+        if (bId != null) 'branch_id': bId,
       });
     } catch (_) {
-      return [];
+      try {
+        final bId = branchId ?? await _branchId;
+        return await _getList('/storekeeping/purchase-orders', query: {
+          if (bId != null) 'branch_id': bId,
+          'status': 'approved',
+        });
+      } catch (_) {
+        return [];
+      }
     }
   }
 
