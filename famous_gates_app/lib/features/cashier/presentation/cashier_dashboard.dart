@@ -205,7 +205,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       const DashboardTab(
         label: 'Cross-Outlet Clearances',
         icon: Icons.sync_alt,
-        content: _RequiresOpenShift(child: _CrossOutletClearancesTab()),
+        content: _RequiresOpenShift(child: CrossOutletClearancesTab()),
       ),
       const DashboardTab(
         label: 'Shifts',

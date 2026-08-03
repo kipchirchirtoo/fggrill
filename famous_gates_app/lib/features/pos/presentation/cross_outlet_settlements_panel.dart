@@ -13,21 +13,21 @@ Future<void> showCrossOutletSettlementsPanel(BuildContext context) {
     barrierDismissible: true,
     builder: (_) => const Dialog(
       insetPadding: EdgeInsets.all(24),
-      child: SizedBox(width: 720, child: _CrossOutletSettlementsPanel()),
+      child: SizedBox(width: 720, child: CrossOutletClearancesTab()),
     ),
   );
 }
 
-class _CrossOutletSettlementsPanel extends ConsumerStatefulWidget {
-  const _CrossOutletSettlementsPanel();
+class CrossOutletClearancesTab extends ConsumerStatefulWidget {
+  const CrossOutletClearancesTab({super.key});
 
   @override
-  ConsumerState<_CrossOutletSettlementsPanel> createState() =>
-      _CrossOutletSettlementsPanelState();
+  ConsumerState<CrossOutletClearancesTab> createState() =>
+      _CrossOutletClearancesTabState();
 }
 
-class _CrossOutletSettlementsPanelState
-    extends ConsumerState<_CrossOutletSettlementsPanel> {
+class _CrossOutletClearancesTabState
+    extends ConsumerState<CrossOutletClearancesTab> {
   bool _loading = true;
   bool _busy = false;
   String _filter = 'pending'; // pending | all

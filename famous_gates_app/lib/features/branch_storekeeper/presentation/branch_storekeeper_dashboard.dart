@@ -3054,7 +3054,7 @@ class _BranchStorekeeperDashboardState
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
-        cross: WrapCrossAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 14,
         runSpacing: 12,
         children: [
@@ -3099,9 +3099,9 @@ class _BranchStorekeeperDashboardState
             ],
           ),
           FilledButton.icon(
-            onPressed: () => _go(BranchStorekeeperSection.kitchenSessions),
+            onPressed: () => _go(BranchStorekeeperSection.kitchenRequisitions),
             icon: Icon(PhosphorIcons.caretRight(), size: 16),
-            label: const Text('Go to Kitchen Sessions'),
+            label: const Text('Go to Kitchen Requisitions'),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.kPrimary,
               foregroundColor: Colors.white,
