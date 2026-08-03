@@ -61,6 +61,8 @@ enum BranchStorekeeperSection {
   internalTransfers,
 }
 
+enum _StockOutDestinationMode { department, outlet }
+
 class BranchStorekeeperDashboard extends ConsumerStatefulWidget {
   const BranchStorekeeperDashboard({
     super.key,
@@ -319,6 +321,18 @@ class _BranchStorekeeperDashboardState
     return true;
   }
 
+  bool _isIssueDestinationOutlet(Map<String, dynamic> row) {
+    final outletName = _normalisedOutletText(_outletName(row));
+    final outletType = _normalisedOutletText(_outletType(row));
+    if (outletName == 'cashier' || outletType == 'cashier') {
+      return false;
+    }
+    if (outletName.endsWith(' cashier') || outletType.endsWith(' cashier')) {
+      return false;
+    }
+    return true;
+  }
+
   String _outletDisplayName(Map<String, dynamic> item) {
     var name = _outletName(item);
     final branchName = _branchName.trim();
@@ -405,8 +419,10 @@ class _BranchStorekeeperDashboardState
         (item) => '${item['item_sku'] ?? item['sku'] ?? ''}',
       );
 
-  List<Map<String, dynamic>> get _posOutletOptions =>
-      _posOutletOptionsFrom(_posOutlets, _outletStock);
+  List<Map<String, dynamic>> get _posOutletOptions => _posOutletOptionsFrom(
+        _posOutlets,
+        _outletStock,
+      ).where(_isIssueDestinationOutlet).toList();
 
   List<Map<String, dynamic>> _posOutletOptionsFrom(
     List<Map<String, dynamic>> outlets,
@@ -1000,7 +1016,7 @@ class _BranchStorekeeperDashboardState
         ),
         MasterNavItem(
           section: BranchStorekeeperSection.foodStuffsStock,
-          label: 'Food Stuffs Stock',
+          label: 'Store Stock',
           icon: Icons.food_bank_outlined,
           group: 'Inventory',
         ),
@@ -1126,17 +1142,21 @@ class _BranchStorekeeperDashboardState
           },
         );
       case BranchStorekeeperSection.foodStuffsStock:
-        return const _FoodStuffsStockSection();
+        return _StoreStockSection(
+          onOpenCentralCatalog: () {
+            setState(() => _section = BranchStorekeeperSection.stock);
+          },
+        );
       case BranchStorekeeperSection.purchaseOrders:
         return _purchaseOrdersPage();
       case BranchStorekeeperSection.requests:
         return _selectedRequestId == null ? _requestsPage() : _requestDetail();
       case BranchStorekeeperSection.departmentRequestLogging:
-        return _consolidatedStockOutPage(3);
+        return _departmentRequestLoggingPage();
       case BranchStorekeeperSection.kitchenRequisitions:
-        return _consolidatedStockOutPage(2);
+        return _kitchenRequisitionsPage();
       case BranchStorekeeperSection.kitchenUsage:
-        return _consolidatedStockOutPage(4);
+        return _kitchenUsagePage();
       case BranchStorekeeperSection.stockOut:
         return _consolidatedStockOutPage(0);
       case BranchStorekeeperSection.kitchenProduction:
@@ -1169,86 +1189,7 @@ class _BranchStorekeeperDashboardState
   }
 
   Widget _consolidatedStockOutPage(int initialTab) {
-    return DefaultTabController(
-      length: 5,
-      initialIndex: initialTab,
-      child: _Page(
-        title: 'Stock Out & Requisitions',
-        subtitle: 'Manage and track all stock issues, kitchen usage, and department requests.',
-        actions: const [],
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.kPrimary,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const TabBar(
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
-              indicatorColor: Colors.white,
-              indicatorSize: TabBarIndicatorSize.tab,
-              isScrollable: true,
-              tabs: [
-                Tab(
-                  icon: Icon(Icons.outbox_outlined, size: 18),
-                  text: 'Direct Issue',
-                ),
-                Tab(
-                  icon: Icon(Icons.restaurant_menu_outlined, size: 18),
-                  text: 'POS Outlet Issue',
-                ),
-                Tab(
-                  icon: Icon(Icons.soup_kitchen_outlined, size: 18),
-                  text: 'Kitchen Requisitions',
-                ),
-                Tab(
-                  icon: Icon(Icons.assignment_outlined, size: 18),
-                  text: 'Department Requests',
-                ),
-                Tab(
-                  icon: Icon(Icons.kitchen_outlined, size: 18),
-                  text: 'Kitchen Usage',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 980,
-            child: TabBarView(
-              children: [
-                SingleChildScrollView(
-                  child: _stockOutPage(isTab: true),
-                ),
-                PosOutletIssueScreen(
-                  outlets: _posOutletOptions,
-                  selectedOutletId: _selectedOutletId,
-                  onSelectOutlet: _selectOutlet,
-                  branchStock: _stockOptions,
-                  movements: _inventoryTruthMovements,
-                  outletItemsLoading: _outletItemsLoading,
-                  search: _search,
-                  onSearchChanged: (value) => setState(() => _search = value),
-                  onRefresh: _loadAll,
-                  onViewDetail: _showJsonDetail,
-                  stockForOutlet: _stockForOutlet,
-                  outletDisplayName: _outletDisplayName,
-                ),
-                SingleChildScrollView(
-                  child: _kitchenRequisitionsPage(isTab: true),
-                ),
-                SingleChildScrollView(
-                  child: _departmentRequestLoggingPage(isTab: true),
-                ),
-                SingleChildScrollView(
-                  child: _kitchenUsagePage(isTab: true),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return _stockOutPage();
   }
 
   Widget _overview() {
@@ -2655,155 +2596,28 @@ class _BranchStorekeeperDashboardState
   }
 
   Widget _stockOutPage({bool isTab = false}) {
-    final outs = _departmentIssueJournals;
-    final hasPreload = _stockOutPreloadLines != null;
-
     final content = [
-        if (hasPreload)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.kPrimary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(10),
-              border:
-                  Border.all(color: AppColors.kPrimary.withValues(alpha: 0.35)),
-            ),
-            child: Row(
-              children: [
-                Icon(PhosphorIcons.caretRight(),
-                    color: AppColors.kPrimary, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Auto-loaded from request: $_stockOutPreloadRef',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.kPrimary),
-                      ),
-                      Text(
-                        '${_stockOutPreloadLines!.length} item(s) ready to issue to '
-                        '${_stockOutPreloadDeptCode.isNotEmpty ? _stockOutPreloadDeptCode.replaceAll('_', ' ') : 'department'}',
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.kTextSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () => setState(() {
-                    _stockOutPreloadLines = null;
-                    _stockOutPreloadDeptCode = '';
-                    _stockOutPreloadRef = '';
-                  }),
-                  child: const Text('Clear'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: () => _showStockOutForm(
-                    preloadLines: _stockOutPreloadLines,
-                    preloadDeptCode: _stockOutPreloadDeptCode,
-                    preloadRef: _stockOutPreloadRef,
-                  ),
-                  icon: Icon(PhosphorIcons.trendDown(), size: 16),
-                  label: const Text('Issue Now'),
-                ),
-              ],
-            ),
-          ),
-        _StatGrid(cards: [
-          _StatCardData(
-              'Total Volume',
-              outs
-                  .fold<num>(
-                      0,
-                      (sum, item) =>
-                          sum + _num(item['ledger']?['quantity']).abs())
-                  .toStringAsFixed(0),
-              PhosphorIcons.package(),
-              AppColors.kPrimary),
-          _StatCardData(
-              'High Intensity',
-              '${outs.where((r) => _num(r['ledger']?['quantity']).abs() > 10).length}',
-              PhosphorIcons.activity(),
-              AppColors.kError),
-          _StatCardData(
-              'Today',
-              '${outs.where((r) => '${r['created_at'] ?? r['ledger']?['created_at']}'.startsWith(DateTime.now().toIso8601String().substring(0, 10))).length}',
-              PhosphorIcons.calendar(),
-              AppColors.kSuccess),
-        ]),
-        _SectionCard(
-          title: 'Stock Out Ledger',
-          child: _RecordList(
-            emptyText: 'No stock out records',
-            children: outs.map((record) {
-              final ledger = Map<String, dynamic>.from(
-                  (record['ledger'] as Map?) ?? const {});
-              final metadata = Map<String, dynamic>.from(
-                  (ledger['metadata'] as Map?) ?? const {});
-              final account = Map<String, dynamic>.from(
-                  (record['account'] as Map?) ?? const {});
-              final issued = _num(metadata['issued_quantity'] ??
-                  ledger['quantity'] ??
-                  record['quantity']);
-              final requested = _num(metadata['requested_quantity'] ?? issued);
-              final pending = _num(metadata['pending_quantity']);
-              final status = '${metadata['issue_status'] ?? 'completed'}';
-              final minNumber =
-                  '${metadata['min_number'] ?? ledger['source_number'] ?? 'MIN'}';
-              return _RecordTile(
-                icon: PhosphorIcons.trendDown(),
-                title:
-                    '${metadata['item_name'] ?? ledger['item_sku'] ?? _itemName(record)}',
-                subtitle:
-                    '$minNumber | ${account['department_name'] ?? ledger['destination_type'] ?? 'Department'} | ${_date(ledger['created_at'] ?? record['created_at'])}',
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _qtyText(issued),
-                      style: TextStyle(
-                        color:
-                            pending > 0 ? AppColors.kWarning : AppColors.kError,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    _StatusChip(
-                      status == 'pending'
-                          ? 'PENDING'
-                          : status == 'partially_issued'
-                              ? 'PARTIAL'
-                              : 'ISSUED',
-                      warning: status != 'completed',
-                      success: status == 'completed',
-                    ),
-                    if (pending > 0)
-                      Text(
-                        'Bal ${_qtyText(pending)} / Req ${_qtyText(requested)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.kTextSecondary,
-                        ),
-                      ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => _showJsonDetail(minNumber, record),
-                    child: const Text('View'),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
+      _DirectIssueWorkbench(
+        key: ValueKey(
+          'stock_out_workbench_${_stockOutPreloadRef}_${_stockOutPreloadDeptCode}_${_stockOutPreloadLines?.length ?? 0}',
         ),
+        branchName: _branchName,
+        preloadRef: _stockOutPreloadRef,
+        preloadDeptCode: _stockOutPreloadDeptCode,
+        preloadLines: _stockOutPreloadLines,
+        catalog: _stockOptions,
+        departmentOptions: _stockOutDepartmentOptions,
+        outletOptions: _posOutletOptions,
+        departmentNameFor: _departmentNameFor,
+        outletDisplayName: _outletDisplayName,
+        outletItemsFor: _stockForOutlet,
+        onOutletChanged: (outletId) {
+          unawaited(_loadOutletMenuItems(outletId));
+        },
+        onClearPreload: _clearStockOutPreload,
+        onSubmit: _submitStockOutDocument,
+        onSubmitOutlet: _submitOutletStockOut,
+      ),
     ];
 
     if (isTab) {
@@ -2814,22 +2628,6 @@ class _BranchStorekeeperDashboardState
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               _RefreshButton(onPressed: _loadAll),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _exportStockOut,
-                icon: Icon(PhosphorIcons.download()),
-                label: const Text('Export Ledger'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _showStockOutForm(
-                  preloadLines: _stockOutPreloadLines,
-                  preloadDeptCode: _stockOutPreloadDeptCode,
-                  preloadRef: _stockOutPreloadRef,
-                ),
-                icon: Icon(PhosphorIcons.plus()),
-                label: const Text('Issue Stock'),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -2840,23 +2638,9 @@ class _BranchStorekeeperDashboardState
 
     return _Page(
       title: 'Stock Out',
-      subtitle: 'Issue branch stock to departments with availability checks.',
+      subtitle: '',
       actions: [
         _RefreshButton(onPressed: _loadAll),
-        OutlinedButton.icon(
-          onPressed: _exportStockOut,
-          icon: Icon(PhosphorIcons.download()),
-          label: const Text('Export Ledger'),
-        ),
-        FilledButton.icon(
-          onPressed: () => _showStockOutForm(
-            preloadLines: _stockOutPreloadLines,
-            preloadDeptCode: _stockOutPreloadDeptCode,
-            preloadRef: _stockOutPreloadRef,
-          ),
-          icon: Icon(PhosphorIcons.plus()),
-          label: const Text('Issue Stock'),
-        ),
       ],
       children: content,
     );
@@ -2938,6 +2722,7 @@ class _BranchStorekeeperDashboardState
   }
 
   Widget _departmentRequestLoggingPage({bool isTab = false}) {
+    final hasPreload = _stockOutPreloadLines != null;
     final pendingReqs = _deptRequestLogs
         .where((r) => '${r['status']}'.contains('pending'))
         .length;
@@ -2948,6 +2733,200 @@ class _BranchStorekeeperDashboardState
         .length;
 
     final content = [
+        _SectionCard(
+          title: 'Request Intake Desk',
+          subtitle:
+              'Capture department requests first, then hand them over to Direct Issue as a clean material issue workflow.',
+          child: LayoutBuilder(builder: (context, constraints) {
+            final compact = constraints.maxWidth < 980;
+            final cards = [
+              _WorkflowStepCard(
+                index: '01',
+                title: 'Capture request',
+                description:
+                    'Log the department, requestor, shift, and requested items before any stock is posted.',
+                icon: PhosphorIcons.clipboardText(),
+                color: AppColors.kPrimary,
+              ),
+              _WorkflowStepCard(
+                index: '02',
+                title: 'Review pending lines',
+                description:
+                    'Approve the request path or push it straight into issue preparation when stock is ready.',
+                icon: PhosphorIcons.checkCircle(),
+                color: AppColors.kWarning,
+              ),
+              _WorkflowStepCard(
+                index: '03',
+                title: 'Issue against request',
+                description:
+                    'Use Log & Issue to preload the request into the Direct Issue workbench with no logic changes.',
+                icon: Icons.open_in_new_rounded,
+                color: AppColors.kSuccess,
+              ),
+            ];
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (compact)
+                  Column(
+                    children: [
+                      for (var i = 0; i < cards.length; i++) ...[
+                        cards[i],
+                        if (i != cards.length - 1) const SizedBox(height: 12),
+                      ],
+                    ],
+                  )
+                else
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: cards
+                        .map((card) => SizedBox(
+                              width: (constraints.maxWidth - 24) / 3,
+                              child: card,
+                            ))
+                        .toList(),
+                  ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.kPrimary.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: compact
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.move_down_outlined,
+                                    color: AppColors.kPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Fast handoff to Direct Issue',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        hasPreload
+                                            ? 'A request is already preloaded and waiting in Direct Issue.'
+                                            : 'When you use Log & Issue, the request moves into the issue workbench with quantities ready to post.',
+                                        style: const TextStyle(
+                                          color: AppColors.kTextSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: hasPreload
+                                  ? () =>
+                                      _go(BranchStorekeeperSection.stockOut)
+                                  : () => _showLogRequestDialog(
+                                      issueAfter: true),
+                              icon: Icon(
+                                hasPreload
+                                    ? Icons.open_in_new_rounded
+                                    : PhosphorIcons.caretRight(),
+                              ),
+                              label: Text(
+                                hasPreload
+                                    ? 'Open Direct Issue'
+                                    : 'Log & Issue',
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.move_down_outlined,
+                                color: AppColors.kPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Fast handoff to Direct Issue',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    hasPreload
+                                        ? 'A request is already preloaded and waiting in Direct Issue.'
+                                        : 'When you use Log & Issue, the request moves into the issue workbench with quantities ready to post.',
+                                    style: const TextStyle(
+                                      color: AppColors.kTextSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.icon(
+                              onPressed: hasPreload
+                                  ? () =>
+                                      _go(BranchStorekeeperSection.stockOut)
+                                  : () => _showLogRequestDialog(
+                                      issueAfter: true),
+                              icon: Icon(
+                                hasPreload
+                                    ? Icons.open_in_new_rounded
+                                    : PhosphorIcons.caretRight(),
+                              ),
+                              label: Text(
+                                hasPreload
+                                    ? 'Open Direct Issue'
+                                    : 'Log & Issue',
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            );
+          }),
+        ),
         _StatGrid(cards: [
           _StatCardData('Total Logged', '${_deptRequestLogs.length}',
               PhosphorIcons.clipboardText(), AppColors.kPrimary),
@@ -3092,6 +3071,255 @@ class _BranchStorekeeperDashboardState
     });
   }
 
+  List<Map<String, dynamic>> get _stockOutDepartmentOptions =>
+      _departmentAccounts.isNotEmpty
+          ? _departmentAccounts
+          : const [
+              {
+                'department_code': 'main_kitchen',
+                'department_name': 'Main Kitchen'
+              },
+              {
+                'department_code': 'choma_zone_kitchen',
+                'department_name': 'Choma Zone Kitchen'
+              },
+              {
+                'department_code': 'pastries_kitchen',
+                'department_name': 'Pastries Kitchen'
+              },
+              {'department_code': 'buffet', 'department_name': 'Buffets'},
+              {
+                'department_code': 'outside_catering',
+                'department_name': 'Outside Catering'
+              },
+              {
+                'department_code': 'accommodation_breakfast',
+                'department_name': 'Accommodation Breakfast'
+              },
+              {'department_code': 'main_bar', 'department_name': 'Main Bar'},
+              {
+                'department_code': 'executive_bar',
+                'department_name': 'Executive Bar'
+              },
+              {
+                'department_code': 'housekeeping',
+                'department_name': 'Housekeeping & Maintenance'
+              },
+              {
+                'department_code': 'spa_sauna',
+                'department_name': 'Spa & Sauna'
+              },
+              {
+                'department_code': 'back_office',
+                'department_name': 'Back Office'
+              },
+            ];
+
+  String _departmentNameFor(String departmentCode) {
+    for (final item in _stockOutDepartmentOptions) {
+      if ('${item['department_code'] ?? ''}' == departmentCode) {
+        return '${item['department_name'] ?? item['department_code'] ?? departmentCode}';
+      }
+    }
+    return departmentCode.isEmpty ? 'Select department' : departmentCode;
+  }
+
+  String _outletItemName(Map<String, dynamic> item) {
+    final raw =
+        '${item['name'] ?? item['item_name'] ?? item['output_name'] ?? _outletItemSku(item)}'
+            .trim();
+    return raw.isEmpty || raw == 'null' ? 'Outlet Item' : raw;
+  }
+
+  Map<String, dynamic>? _matchingOutletItemForSource(
+    String outletId,
+    Map<String, dynamic> source,
+  ) {
+    final outletItems = _stockForOutlet(outletId);
+    final sourceSku = _optionSku(source).trim().toLowerCase();
+    final sourceName = _itemName(source).trim().toLowerCase();
+
+    for (final item in outletItems) {
+      if (_outletItemSku(item).trim().toLowerCase() == sourceSku &&
+          sourceSku.isNotEmpty) {
+        return item;
+      }
+    }
+
+    for (final item in outletItems) {
+      if (_outletItemName(item).trim().toLowerCase() == sourceName &&
+          sourceName.isNotEmpty) {
+        return item;
+      }
+    }
+
+    return null;
+  }
+
+  void _clearStockOutPreload() {
+    setState(() {
+      _stockOutPreloadLines = null;
+      _stockOutPreloadDeptCode = '';
+      _stockOutPreloadRef = '';
+    });
+  }
+
+  Future<bool> _submitStockOutDocument({
+    required List<Map<String, dynamic>> lines,
+    required String departmentCode,
+    required String shiftCode,
+    required String notes,
+    String? eventName,
+    int? paxCount,
+  }) async {
+    final eventConfig = _eventDepartments[departmentCode];
+    final cleanEventName = eventName?.trim() ?? '';
+    if (eventConfig != null && cleanEventName.isEmpty) {
+      _showSnack('${eventConfig.label} is required for this issue', error: true);
+      return false;
+    }
+
+    try {
+      final results = <Map<String, dynamic>>[];
+      for (final line in lines) {
+        final result = await _repo.recordDepartmentIssue({
+          'item_sku': line['item_sku'],
+          'quantity': _num(line['quantity']),
+          'department_code': departmentCode,
+          if (shiftCode.isNotEmpty) 'shift_code': shiftCode,
+          'destination_type':
+              eventConfig != null ? departmentCode : 'department_issue',
+          if (eventConfig != null && cleanEventName.isNotEmpty)
+            'event_name': cleanEventName,
+          if (eventConfig != null && eventConfig.pax && paxCount != null)
+            'pax_count': paxCount,
+          'notes': notes,
+        });
+        results.add(result);
+      }
+      await _loadAll();
+      if (_stockOutPreloadLines != null) {
+        _clearStockOutPreload();
+      }
+      final statuses = results
+          .map((r) => '${r['status'] ?? ''}')
+          .where((status) => status.isNotEmpty)
+          .toSet();
+      final minNumbers = results
+          .map((r) => '${r['minNumber'] ?? ''}')
+          .where((number) => number.isNotEmpty)
+          .take(3)
+          .join(', ');
+      _showSnack(
+        'MIN recorded${minNumbers.isNotEmpty ? ': $minNumbers' : ''}${statuses.isNotEmpty ? ' (${statuses.join(', ')})' : ''}',
+      );
+      return true;
+    } catch (error) {
+      _showSnack('Stock out failed: ${_errorText(error)}', error: true);
+      return false;
+    }
+  }
+
+  Future<bool> _submitOutletStockOut({
+    required List<Map<String, dynamic>> lines,
+    required String outletId,
+    required String notes,
+  }) async {
+    final outlet = _posOutletOptions.firstWhere(
+      (row) => _outletId(row) == outletId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (outlet.isEmpty) {
+      _showSnack('Select a valid POS outlet', error: true);
+      return false;
+    }
+
+    try {
+      for (final line in lines) {
+        final source = _stockOptions.firstWhere(
+          (item) => _optionSku(item) == '${line['item_sku'] ?? ''}',
+          orElse: () => <String, dynamic>{},
+        );
+        if (source.isEmpty) {
+          _showSnack('Source stock item not found', error: true);
+          return false;
+        }
+
+        final selectedDestinationId =
+            '${line['destination_item_id'] ?? ''}'.trim();
+        Map<String, dynamic>? output;
+        if (selectedDestinationId.isNotEmpty) {
+          final outletItems = _stockForOutlet(outletId);
+          for (final item in outletItems) {
+            if (_outletItemId(item) == selectedDestinationId) {
+              output = item;
+              break;
+            }
+          }
+        }
+        output ??= _matchingOutletItemForSource(outletId, source);
+        if (output == null) {
+          _showSnack(
+            'No matching POS outlet item for ${_itemName(source)} in ${_outletDisplayName(outlet)}',
+            error: true,
+          );
+          return false;
+        }
+
+        final qty = _num(line['quantity']);
+        if (qty <= 0) continue;
+
+        await _repo.createProductionRun({
+          'destination_outlet_id': outletId,
+          'production_area': 'pos_outlet_issue',
+          'batch_reference': 'OUT-${DateTime.now().millisecondsSinceEpoch}',
+          'inputs': [
+            {
+              'item_sku': _optionSku(source),
+              'item_name': _itemName(source),
+              'quantity': qty,
+              'unit': source['unit_of_measure'] ?? source['unit'] ?? 'units',
+              'unit_cost': _num(
+                source['cost_price'] ??
+                    source['unit_cost'] ??
+                    source['unit_price'],
+              ),
+            }
+          ],
+          'outputs': [
+            {
+              'outlet_item_id': _outletItemId(output),
+              'item_sku': _outletItemSku(output),
+              'item_name': _outletItemName(output),
+              'quantity': qty,
+              'unit': output['unit'] ?? 'units',
+              'unit_cost': _num(
+                output['cost_price'] ??
+                    source['cost_price'] ??
+                    source['unit_cost'],
+              ),
+              'category': output['category'],
+              'metadata': {
+                'source': 'branch_store_pos_outlet_issue',
+                'source_sku': _optionSku(source),
+              },
+            }
+          ],
+          'remarks': notes.trim().isEmpty
+              ? 'Branch store issue to ${_outletDisplayName(outlet)}'
+              : notes.trim(),
+        });
+      }
+
+      await _loadAll();
+      _showSnack('Stock issued to ${_outletDisplayName(outlet)}');
+      return true;
+    } catch (error) {
+      _showSnack('POS outlet issue failed: ${_errorText(error)}', error: true);
+      return false;
+    }
+  }
+
   void _showLogRequestDialog({required bool issueAfter}) {
     final requestorCtrl = TextEditingController();
     final purposeCtrl = TextEditingController();
@@ -3101,36 +3329,7 @@ class _BranchStorekeeperDashboardState
         : 'main_kitchen';
     String shiftCode = 'A';
 
-    final departmentOptions = _departmentAccounts.isNotEmpty
-        ? _departmentAccounts
-        : const [
-            {
-              'department_code': 'main_kitchen',
-              'department_name': 'Main Kitchen'
-            },
-            {
-              'department_code': 'choma_zone_kitchen',
-              'department_name': 'Choma Zone Kitchen'
-            },
-            {
-              'department_code': 'pastries_kitchen',
-              'department_name': 'Pastries Kitchen'
-            },
-            {'department_code': 'buffet', 'department_name': 'Buffets'},
-            {
-              'department_code': 'outside_catering',
-              'department_name': 'Outside Catering'
-            },
-            {'department_code': 'main_bar', 'department_name': 'Main Bar'},
-            {
-              'department_code': 'housekeeping',
-              'department_name': 'Housekeeping & Maintenance'
-            },
-            {
-              'department_code': 'back_office',
-              'department_name': 'Back Office'
-            },
-          ];
+    final departmentOptions = _stockOutDepartmentOptions;
 
     showDialog<void>(
       context: context,
@@ -7114,6 +7313,13 @@ class _LineEditor extends StatefulWidget {
     this.quantityKey = 'quantity',
     this.priceEnabled = true,
     this.showCentralAvailable = false,
+    this.destinationOptions = const [],
+    this.destinationEnabled = false,
+    this.destinationLabel = 'Destination item',
+    this.destinationHelperText,
+    this.destinationIdFor,
+    this.destinationNameFor,
+    this.defaultDestinationForCatalogItem,
   });
 
   final List<Map<String, dynamic>> catalog;
@@ -7123,6 +7329,14 @@ class _LineEditor extends StatefulWidget {
   final String quantityKey;
   final bool priceEnabled;
   final bool showCentralAvailable;
+  final List<Map<String, dynamic>> destinationOptions;
+  final bool destinationEnabled;
+  final String destinationLabel;
+  final String? destinationHelperText;
+  final String Function(Map<String, dynamic>)? destinationIdFor;
+  final String Function(Map<String, dynamic>)? destinationNameFor;
+  final Map<String, dynamic>? Function(Map<String, dynamic>)?
+      defaultDestinationForCatalogItem;
 
   @override
   State<_LineEditor> createState() => _LineEditorState();
@@ -7131,6 +7345,16 @@ class _LineEditor extends StatefulWidget {
 class _LineEditorState extends State<_LineEditor> {
   String? _selectedSku;
   Map<String, dynamic> _selectedItem = {};
+
+  String _destinationId(Map<String, dynamic> item) =>
+      widget.destinationIdFor?.call(item) ??
+      '${item['id'] ?? item['outlet_item_id'] ?? item['outletItemId'] ?? ''}'
+          .trim();
+
+  String _destinationName(Map<String, dynamic> item) =>
+      widget.destinationNameFor?.call(item) ??
+      '${item['name'] ?? item['item_name'] ?? item['output_name'] ?? _destinationId(item)}'
+          .trim();
 
   List<Map<String, dynamic>> get _catalogOptions {
     final seen = <String>{};
@@ -7255,6 +7479,17 @@ class _LineEditorState extends State<_LineEditor> {
           ],
         ),
         const SizedBox(height: 12),
+        if (widget.destinationEnabled && widget.destinationOptions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'No outlet items loaded yet for this POS outlet. Select the outlet first, then match each branch item to the outlet item that should increase.',
+              style: TextStyle(
+                color: Colors.orange.shade800,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         if (widget.lines.isEmpty)
           Container(
             width: double.infinity,
@@ -7321,7 +7556,7 @@ class _LineEditorState extends State<_LineEditor> {
                               child: Text(
                                 centralQty <= 0
                                     ? 'PENDING ARRIVAL'
-                                    : 'Central: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
+                                    : 'Available: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -7374,6 +7609,206 @@ class _LineEditorState extends State<_LineEditor> {
                           ),
                         ],
                       ),
+                      if (widget.destinationEnabled) ...[
+                        const SizedBox(height: 10),
+                        Builder(
+                          builder: (context) {
+                            final currentDestinationId =
+                                '${line['destination_item_id'] ?? ''}'.trim();
+                            Map<String, dynamic>? selectedItem;
+                            if (currentDestinationId.isNotEmpty) {
+                              selectedItem = widget.destinationOptions.firstWhere(
+                                (item) => _destinationId(item) == currentDestinationId,
+                                orElse: () => <String, dynamic>{},
+                              );
+                              if (selectedItem.isEmpty) selectedItem = null;
+                            }
+
+                            return Autocomplete<Map<String, dynamic>>(
+                              key: ValueKey(
+                                'dest_autocomplete_${line['item_id'] ?? line['item_sku']}_${currentDestinationId}_${widget.destinationOptions.length}',
+                              ),
+                              initialValue: TextEditingValue(
+                                text: selectedItem != null
+                                    ? _destinationName(selectedItem)
+                                    : '',
+                              ),
+                              displayStringForOption: (item) =>
+                                  _destinationName(item),
+                              optionsBuilder: (textEditingValue) {
+                                final query =
+                                    textEditingValue.text.trim().toLowerCase();
+                                if (query.isEmpty) {
+                                  return widget.destinationOptions.take(40);
+                                }
+                                return widget.destinationOptions.where((item) {
+                                  final name =
+                                      _destinationName(item).toLowerCase();
+                                  final id =
+                                      _destinationId(item).toLowerCase();
+                                  final sku =
+                                      '${item['sku'] ?? item['item_sku'] ?? item['output_sku'] ?? ''}'
+                                          .toLowerCase();
+                                  final cat =
+                                      '${item['category'] ?? item['item_category'] ?? ''}'
+                                          .toLowerCase();
+                                  return name.contains(query) ||
+                                      sku.contains(query) ||
+                                      cat.contains(query) ||
+                                      id.contains(query);
+                                }).take(40);
+                              },
+                              onSelected: (match) {
+                                final value = _destinationId(match);
+                                line['destination_item_id'] = value;
+                                line['destination_item_name'] =
+                                    _destinationName(match);
+                                line['destination_item_sku'] =
+                                    '${match['sku'] ?? match['item_sku'] ?? match['output_sku'] ?? ''}'
+                                        .trim();
+                                widget.onChanged();
+                                setState(() {});
+                              },
+                              fieldViewBuilder: (context, controller, focusNode,
+                                  onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: InputDecoration(
+                                    labelText: widget.destinationLabel,
+                                    hintText: 'Type to search outlet item...',
+                                    helperText: widget.destinationHelperText,
+                                    prefixIcon: const Icon(
+                                        Icons.call_split_rounded),
+                                    suffixIcon: controller.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.clear,
+                                                size: 18),
+                                            tooltip: 'Clear selection',
+                                            onPressed: () {
+                                              controller.clear();
+                                              line.remove(
+                                                  'destination_item_id');
+                                              line.remove(
+                                                  'destination_item_name');
+                                              line.remove(
+                                                  'destination_item_sku');
+                                              widget.onChanged();
+                                              setState(() {});
+                                            },
+                                          )
+                                        : null,
+                                  ),
+                                  onChanged: (val) {
+                                    if (val.isEmpty &&
+                                        line.containsKey(
+                                            'destination_item_id')) {
+                                      line.remove('destination_item_id');
+                                      line.remove('destination_item_name');
+                                      line.remove('destination_item_sku');
+                                      widget.onChanged();
+                                      setState(() {});
+                                    }
+                                  },
+                                );
+                              },
+                              optionsViewBuilder:
+                                  (context, onSelected, options) {
+                                final rows = options.toList();
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 8,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                          maxWidth: 600, maxHeight: 300),
+                                      child: ListView.separated(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        shrinkWrap: true,
+                                        itemCount: rows.length,
+                                        separatorBuilder: (_, __) =>
+                                            const Divider(
+                                                height: 1,
+                                                indent: 16,
+                                                endIndent: 16),
+                                        itemBuilder: (context, index) {
+                                          final item = rows[index];
+                                          final name = _destinationName(item);
+                                          final sku =
+                                              '${item['sku'] ?? item['item_sku'] ?? item['output_sku'] ?? ''}'
+                                                  .trim();
+                                          final unit =
+                                              '${item['unit'] ?? item['unit_of_measure'] ?? 'units'}';
+                                          final qty = item['current_stock'] ??
+                                              item['quantity'] ??
+                                              item['available_quantity'];
+                                          String subText =
+                                              sku.isNotEmpty ? 'SKU: $sku' : '';
+                                          if (qty != null) {
+                                            if (subText.isNotEmpty) {
+                                              subText += ' | ';
+                                            }
+                                            subText += 'Stock: $qty $unit';
+                                          }
+
+                                          return ListTile(
+                                            dense: true,
+                                            leading: CircleAvatar(
+                                              radius: 16,
+                                              backgroundColor: AppColors.kPrimary
+                                                  .withValues(alpha: 0.1),
+                                              child: const Icon(
+                                                  Icons.storefront_outlined,
+                                                  size: 16,
+                                                  color: AppColors.kPrimary),
+                                            ),
+                                            title: Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w700),
+                                            ),
+                                            subtitle: subText.isNotEmpty
+                                                ? Text(
+                                                    subText,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors
+                                                            .grey.shade700),
+                                                  )
+                                                : null,
+                                            onTap: () => onSelected(item),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        if ('${line['destination_item_name'] ?? ''}'
+                            .trim()
+                            .isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              'Increase: ${line['destination_item_name']}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blueGrey.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
                       if (widget.showCentralAvailable && overRequest)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -7383,7 +7818,7 @@ class _LineEditorState extends State<_LineEditor> {
                                   size: 14, color: Colors.orange.shade700),
                               const SizedBox(width: 4),
                               Text(
-                                'Requesting ${requestedQty.toStringAsFixed(0)} but central only has ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
+                                'Requesting ${requestedQty.toStringAsFixed(0)} but available stock is ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.orange.shade800,
@@ -7409,6 +7844,7 @@ class _LineEditorState extends State<_LineEditor> {
     );
     if (item.isEmpty) return;
     if (widget.lines.any((line) => line['item_sku'] == _selectedSku)) return;
+    final destination = widget.defaultDestinationForCatalogItem?.call(item);
     setState(() {
       widget.lines.add({
         if (widget.itemIdKey != null) widget.itemIdKey!: _sku(item),
@@ -7426,11 +7862,861 @@ class _LineEditorState extends State<_LineEditor> {
               item['last_purchase_price'] ??
               item['unit_price'] ??
               0,
+        if (widget.destinationEnabled && destination != null) ...{
+          'destination_item_id': _destinationId(destination),
+          'destination_item_name': _destinationName(destination),
+          'destination_item_sku':
+              '${destination['sku'] ?? destination['item_sku'] ?? destination['output_sku'] ?? ''}'
+                  .trim(),
+        },
       });
       _selectedSku = null;
       _selectedItem = {};
     });
     widget.onChanged();
+  }
+}
+
+typedef _DirectIssueSubmitCallback = Future<bool> Function({
+  required List<Map<String, dynamic>> lines,
+  required String departmentCode,
+  required String shiftCode,
+  required String notes,
+  String? eventName,
+  int? paxCount,
+});
+
+typedef _OutletIssueSubmitCallback = Future<bool> Function({
+  required List<Map<String, dynamic>> lines,
+  required String outletId,
+  required String notes,
+});
+
+class _DirectIssueWorkbench extends StatefulWidget {
+  const _DirectIssueWorkbench({
+    super.key,
+    this.initialMode = _StockOutDestinationMode.department,
+    required this.branchName,
+    required this.preloadRef,
+    required this.preloadDeptCode,
+    required this.preloadLines,
+    required this.catalog,
+    required this.departmentOptions,
+    required this.outletOptions,
+    required this.departmentNameFor,
+    required this.outletDisplayName,
+    required this.outletItemsFor,
+    required this.onOutletChanged,
+    required this.onClearPreload,
+    required this.onSubmit,
+    required this.onSubmitOutlet,
+  });
+
+  final _StockOutDestinationMode initialMode;
+  final String branchName;
+  final String preloadRef;
+  final String preloadDeptCode;
+  final List<Map<String, dynamic>>? preloadLines;
+  final List<Map<String, dynamic>> catalog;
+  final List<Map<String, dynamic>> departmentOptions;
+  final List<Map<String, dynamic>> outletOptions;
+  final String Function(String departmentCode) departmentNameFor;
+  final String Function(Map<String, dynamic> outlet) outletDisplayName;
+  final List<Map<String, dynamic>> Function(String outletId) outletItemsFor;
+  final ValueChanged<String> onOutletChanged;
+  final VoidCallback onClearPreload;
+  final _DirectIssueSubmitCallback onSubmit;
+  final _OutletIssueSubmitCallback onSubmitOutlet;
+
+  @override
+  State<_DirectIssueWorkbench> createState() => _DirectIssueWorkbenchState();
+}
+
+class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
+  static const _eventDepartments = {
+    'buffet': (label: 'Buffet Name', pax: true),
+    'outside_catering': (label: 'Event Name', pax: true),
+    'accommodation_breakfast': (label: 'Guest / Room', pax: false),
+  };
+
+  final _notesCtrl = TextEditingController();
+  final _eventNameCtrl = TextEditingController();
+  final _paxCtrl = TextEditingController();
+
+  late List<Map<String, dynamic>> _lines;
+  late String _departmentCode;
+  String? _outletId;
+  String _shiftCode = 'A';
+  bool _submitting = false;
+  late _StockOutDestinationMode _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    _lines = [
+      if (widget.preloadLines != null)
+        ...widget.preloadLines!.map((line) => Map<String, dynamic>.from(line)),
+    ];
+    _departmentCode = widget.preloadDeptCode.isNotEmpty
+        ? widget.preloadDeptCode
+        : widget.departmentOptions.isNotEmpty
+            ? '${widget.departmentOptions.first['department_code']}'
+            : 'main_kitchen';
+    _mode = widget.initialMode;
+    _outletId = widget.outletOptions.isNotEmpty
+        ? _outletIdFor(widget.outletOptions.first)
+        : null;
+    if (_outletId != null && _outletId!.isNotEmpty) {
+      widget.onOutletChanged(_outletId!);
+    }
+    _syncOutletLineTargets();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DirectIssueWorkbench oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final preloadChanged =
+        oldWidget.preloadRef != widget.preloadRef ||
+            oldWidget.preloadDeptCode != widget.preloadDeptCode ||
+            (oldWidget.preloadLines?.length ?? 0) !=
+                (widget.preloadLines?.length ?? 0);
+    if (!preloadChanged) return;
+
+    if (widget.preloadLines != null) {
+      _lines = widget.preloadLines!
+          .map((line) => Map<String, dynamic>.from(line))
+          .toList();
+      if (widget.preloadDeptCode.isNotEmpty) {
+        _departmentCode = widget.preloadDeptCode;
+      }
+      _eventNameCtrl.clear();
+      _paxCtrl.clear();
+      _notesCtrl.clear();
+      _syncOutletLineTargets();
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if (oldWidget.preloadLines != null && widget.preloadLines == null) {
+      _lines = [];
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    _eventNameCtrl.dispose();
+    _paxCtrl.dispose();
+    super.dispose();
+  }
+
+  num _num(dynamic value) => value is num ? value : (num.tryParse('$value') ?? 0);
+
+  String _outletIdFor(Map<String, dynamic> item) =>
+      '${item['outlet_id'] ?? item['outletId'] ?? item['id'] ?? ''}'.trim();
+
+  String _destinationItemId(Map<String, dynamic> item) =>
+      '${item['id'] ?? item['outlet_item_id'] ?? item['outletItemId'] ?? ''}'
+          .trim();
+
+  String _destinationItemSku(Map<String, dynamic> item) =>
+      '${item['sku'] ?? item['item_sku'] ?? item['output_sku'] ?? ''}'.trim();
+
+  String _destinationItemName(Map<String, dynamic> item) {
+    final raw =
+        '${item['name'] ?? item['item_name'] ?? item['output_name'] ?? _destinationItemSku(item)}'
+            .trim();
+    return raw.isEmpty || raw == 'null' ? 'Outlet Item' : raw;
+  }
+
+  Map<String, dynamic> _stockForLine(Map<String, dynamic> line) {
+    return widget.catalog.firstWhere(
+      (item) => '${item['item_sku'] ?? item['sku'] ?? ''}' == '${line['item_sku'] ?? ''}',
+      orElse: () => <String, dynamic>{},
+    );
+  }
+
+  void _resetForm() {
+    setState(() {
+      _lines = [];
+      _notesCtrl.clear();
+      _eventNameCtrl.clear();
+      _paxCtrl.clear();
+    });
+  }
+
+  List<Map<String, dynamic>> _outletItems(String? outletId) {
+    if (outletId == null || outletId.isEmpty) return const [];
+    return widget.outletItemsFor(outletId);
+  }
+
+  Map<String, dynamic>? _matchOutletItem(
+    String? outletId,
+    Map<String, dynamic> source,
+  ) {
+    final outletItems = _outletItems(outletId);
+    final sourceSku = '${source['item_sku'] ?? source['sku'] ?? ''}'
+        .trim()
+        .toLowerCase();
+    final sourceName = '${source['item_name'] ?? source['name'] ?? ''}'
+        .trim()
+        .toLowerCase();
+
+    for (final item in outletItems) {
+      if (_destinationItemSku(item).trim().toLowerCase() == sourceSku &&
+          sourceSku.isNotEmpty) {
+        return item;
+      }
+    }
+
+    for (final item in outletItems) {
+      if (_destinationItemName(item).trim().toLowerCase() == sourceName &&
+          sourceName.isNotEmpty) {
+        return item;
+      }
+    }
+
+    return null;
+  }
+
+  void _syncOutletLineTargets() {
+    final outletId = _outletId;
+    for (final line in _lines) {
+      final existingId = '${line['destination_item_id'] ?? ''}'.trim();
+      if (existingId.isNotEmpty) {
+        final existing = _outletItems(outletId).where(
+          (item) => _destinationItemId(item) == existingId,
+        );
+        if (existing.isNotEmpty) {
+          final target = existing.first;
+          line['destination_item_name'] = _destinationItemName(target);
+          line['destination_item_sku'] = _destinationItemSku(target);
+          continue;
+        }
+      }
+
+      final matched = _matchOutletItem(outletId, line);
+      if (matched == null) {
+        line.remove('destination_item_id');
+        line.remove('destination_item_name');
+        line.remove('destination_item_sku');
+        continue;
+      }
+      line['destination_item_id'] = _destinationItemId(matched);
+      line['destination_item_name'] = _destinationItemName(matched);
+      line['destination_item_sku'] = _destinationItemSku(matched);
+    }
+  }
+
+  Widget _buildDestinationField({required bool outletMissing}) {
+    if (_mode == _StockOutDestinationMode.department) {
+      return DropdownButtonFormField<String>(
+        isExpanded: true,
+        initialValue: _departmentCode,
+        decoration: const InputDecoration(
+          labelText: 'Department',
+          prefixIcon: Icon(Icons.business),
+        ),
+        items: widget.departmentOptions
+            .map(
+              (item) => DropdownMenuItem<String>(
+                value: '${item['department_code']}',
+                child: Text(
+                  '${item['department_name'] ?? item['department_code']}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value == null) return;
+          setState(() => _departmentCode = value);
+        },
+      );
+    }
+
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      initialValue: _outletId,
+      decoration: InputDecoration(
+        labelText: 'POS Outlet',
+        prefixIcon: const Icon(Icons.storefront_outlined),
+        errorText: outletMissing ? 'Required' : null,
+      ),
+      items: widget.outletOptions
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: _outletIdFor(item),
+              child: Text(
+                widget.outletDisplayName(item),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        setState(() {
+          _outletId = value;
+          _syncOutletLineTargets();
+        });
+        if (value != null && value.isNotEmpty) {
+          widget.onOutletChanged(value);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final eventConfig = _mode == _StockOutDestinationMode.department
+        ? _eventDepartments[_departmentCode]
+        : null;
+    final invalidLines = _lines.where((line) {
+      final stock = _stockForLine(line);
+      final qty = _num(line['quantity']);
+      return stock.isEmpty || qty <= 0;
+    }).toList();
+    final shortfallLines = _lines.where((line) {
+      final stock = _stockForLine(line);
+      final qty = _num(line['quantity']);
+      return stock.isNotEmpty && qty > _num(stock['quantity']);
+    }).toList();
+    final totalQuantity =
+        _lines.fold<num>(0, (sum, line) => sum + _num(line['quantity']));
+    final quantityLabel = totalQuantity.toStringAsFixed(
+      totalQuantity % 1 == 0 ? 0 : 2,
+    );
+    final eventNameMissing =
+        eventConfig != null && _eventNameCtrl.text.trim().isEmpty;
+    final outletMissing = _mode == _StockOutDestinationMode.outlet &&
+        (_outletId == null || _outletId!.isEmpty);
+
+    return _SectionCard(
+      title: 'Direct Issue',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ChoiceChip(
+                selected: _mode == _StockOutDestinationMode.department,
+                label: const Text('Department'),
+                onSelected: (_) {
+                  setState(() => _mode = _StockOutDestinationMode.department);
+                },
+              ),
+              ChoiceChip(
+                selected: _mode == _StockOutDestinationMode.outlet,
+                label: const Text('POS Outlet'),
+                onSelected: (_) {
+                  setState(() {
+                    _mode = _StockOutDestinationMode.outlet;
+                    _syncOutletLineTargets();
+                  });
+                  if (_outletId != null && _outletId!.isNotEmpty) {
+                    widget.onOutletChanged(_outletId!);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 420,
+                child: _buildDestinationField(outletMissing: outletMissing),
+              ),
+              SizedBox(
+                width: 240,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _shiftCode,
+                  decoration: const InputDecoration(
+                    labelText: 'Shift',
+                    prefixIcon: Icon(Icons.schedule),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'A', child: Text('Shift A')),
+                    DropdownMenuItem(value: 'B', child: Text('Shift B')),
+                    DropdownMenuItem(value: '', child: Text('No shift')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _shiftCode = value ?? '');
+                  },
+                ),
+              ),
+              if (widget.preloadRef.isNotEmpty)
+                OutlinedButton(
+                  onPressed: widget.onClearPreload,
+                  child: const Text('Clear'),
+                ),
+            ],
+          ),
+          if (eventConfig != null) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 420,
+                  child: TextField(
+                    controller: _eventNameCtrl,
+                    decoration: InputDecoration(
+                      labelText: '${eventConfig.label} *',
+                      prefixIcon: const Icon(Icons.event),
+                      errorText: eventNameMissing ? 'Required' : null,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                if (eventConfig.pax)
+                  SizedBox(
+                    width: 180,
+                    child: TextField(
+                      controller: _paxCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Pax',
+                        prefixIcon: Icon(Icons.groups),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _notesCtrl,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Notes',
+              prefixIcon: Icon(Icons.notes),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _LineEditor(
+            catalog: widget.catalog,
+            lines: _lines,
+            onChanged: () => setState(() {}),
+            quantityKey: 'quantity',
+            priceEnabled: false,
+            showCentralAvailable: true,
+            destinationOptions:
+                _mode == _StockOutDestinationMode.outlet && _outletId != null
+                    ? _outletItems(_outletId)
+                    : const [],
+            destinationEnabled: _mode == _StockOutDestinationMode.outlet,
+            destinationLabel: 'Outlet item to increase',
+            destinationHelperText:
+                'Choose the POS outlet item that should increase after issue.',
+            destinationIdFor: _destinationItemId,
+            destinationNameFor: _destinationItemName,
+            defaultDestinationForCatalogItem: (item) =>
+                _matchOutletItem(_outletId, item),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoPill('Lines', '${_lines.length}'),
+              _InfoPill('Qty', quantityLabel),
+              if (shortfallLines.isNotEmpty)
+                _InfoPill('Pending', '${shortfallLines.length}'),
+            ],
+          ),
+          if (invalidLines.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'Fix invalid quantities before posting.',
+                style: TextStyle(
+                  color: AppColors.kError,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          if (shortfallLines.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Short items stay pending.',
+                style: TextStyle(
+                  color: AppColors.kWarning,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _submitting ? null : _resetForm,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Reset Lines'),
+              ),
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: _submitting ||
+                        _lines.isEmpty ||
+                        invalidLines.isNotEmpty ||
+                        eventNameMissing ||
+                        outletMissing
+                    ? null
+                    : () async {
+                        setState(() => _submitting = true);
+                        final cleanLines = _lines
+                            .map((line) => Map<String, dynamic>.from(line))
+                            .toList();
+                        final success = _mode == _StockOutDestinationMode.department
+                            ? await widget.onSubmit(
+                                lines: cleanLines,
+                                departmentCode: _departmentCode,
+                                shiftCode: _shiftCode,
+                                notes: _notesCtrl.text,
+                                eventName: _eventNameCtrl.text,
+                                paxCount: int.tryParse(_paxCtrl.text.trim()),
+                              )
+                            : await widget.onSubmitOutlet(
+                                lines: cleanLines,
+                                outletId: _outletId ?? '',
+                                notes: _notesCtrl.text,
+                              );
+                        if (!mounted) return;
+                        setState(() => _submitting = false);
+                        if (!success) return;
+                        _resetForm();
+                      },
+                icon: Icon(
+                  shortfallLines.isEmpty
+                      ? PhosphorIcons.checkCircle()
+                      : PhosphorIcons.fileText(),
+                ),
+                label: Text(
+                  _submitting
+                      ? 'Posting...'
+                      : shortfallLines.isEmpty
+                          ? 'Issue & Approve'
+                          : 'Create MIN',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkbenchFactTile extends StatelessWidget {
+  const _WorkbenchFactTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.kTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkflowStepCard extends StatelessWidget {
+  const _WorkflowStepCard({
+    required this.index,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.color,
+  });
+
+  final String index;
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const Spacer(),
+              Text(
+                index,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            style: const TextStyle(
+              color: AppColors.kTextSecondary,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnifiedStockOutScreen extends StatefulWidget {
+  const _UnifiedStockOutScreen({
+    required this.initialMode,
+    required this.branchName,
+    required this.stockOutWorkbench,
+    required this.outletIssueScreen,
+  });
+
+  final _StockOutDestinationMode initialMode;
+  final String branchName;
+  final Widget stockOutWorkbench;
+  final Widget outletIssueScreen;
+
+  @override
+  State<_UnifiedStockOutScreen> createState() => _UnifiedStockOutScreenState();
+}
+
+class _UnifiedStockOutScreenState extends State<_UnifiedStockOutScreen> {
+  late _StockOutDestinationMode _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initialMode;
+  }
+
+  @override
+  void didUpdateWidget(covariant _UnifiedStockOutScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialMode != widget.initialMode) {
+      _mode = widget.initialMode;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final issuingWarehouse = widget.branchName.trim().isEmpty
+        ? 'Branch Store'
+        : '${widget.branchName.toUpperCase()} STORE';
+
+    return _Page(
+      title: 'Stock Out',
+      subtitle: '',
+      actions: const [],
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 24,
+                runSpacing: 12,
+                children: [
+                  _HeaderField(
+                    label: 'Date Of Record',
+                    child: _HeaderValue(
+                      DateFormat('dd / MM / yyyy').format(DateTime.now()),
+                    ),
+                  ),
+                  _HeaderField(
+                    label: 'Document',
+                    child: const _HeaderValue('STOCK OUT'),
+                  ),
+                  _HeaderField(
+                    label: 'Issuing Warehouse',
+                    child: _HeaderValue(issuingWarehouse),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _HeaderField(
+                label: 'Receiving Type',
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    ChoiceChip(
+                      selected: _mode == _StockOutDestinationMode.department,
+                      label: const Text('Department'),
+                      onSelected: (_) => setState(
+                        () => _mode = _StockOutDestinationMode.department,
+                      ),
+                    ),
+                    ChoiceChip(
+                      selected: _mode == _StockOutDestinationMode.outlet,
+                      label: const Text('POS Outlet'),
+                      onSelected: (_) => setState(
+                        () => _mode = _StockOutDestinationMode.outlet,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _mode == _StockOutDestinationMode.department
+            ? widget.stockOutWorkbench
+            : widget.outletIssueScreen,
+      ],
+    );
+  }
+}
+
+class _HeaderField extends StatelessWidget {
+  const _HeaderField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 240,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.kTextSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderValue extends StatelessWidget {
+  const _HeaderValue(this.value);
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey.shade50,
+      ),
+      child: Text(
+        value,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
   }
 }
 
@@ -14503,20 +15789,53 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
   }
 }
 
-class _FoodStuffsStockSection extends ConsumerStatefulWidget {
-  const _FoodStuffsStockSection();
+class _StoreStockSection extends ConsumerStatefulWidget {
+  const _StoreStockSection({
+    required this.onOpenCentralCatalog,
+  });
+
+  final VoidCallback onOpenCentralCatalog;
 
   @override
-  ConsumerState<_FoodStuffsStockSection> createState() =>
-      _FoodStuffsStockSectionState();
+  ConsumerState<_StoreStockSection> createState() =>
+      _StoreStockSectionState();
 }
 
-class _FoodStuffsStockSectionState
-    extends ConsumerState<_FoodStuffsStockSection> {
+class _StoreStockSectionState extends ConsumerState<_StoreStockSection> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String _search = '';
   String? _error;
+
+  static const Set<String> _barKeywords = {
+    'bar drinks',
+    'soft drink',
+    'soft drinks',
+    'energy drink',
+    'energy drinks',
+    'beer',
+    'beers',
+    'cider',
+    'ciders',
+    'wine',
+    'wines',
+    'cognac',
+    'whisky',
+    'whiskey',
+    'vodka',
+    'gin',
+    'rum',
+    'tequila',
+    'brandy',
+    'condom',
+    'condoms',
+    'tots',
+    'liqueur',
+    'spirits',
+    'champagne',
+    'cocktail',
+    'bar stock',
+  };
 
   @override
   void initState() {
@@ -14532,12 +15851,14 @@ class _FoodStuffsStockSectionState
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
       final data = await repo.branchStock(search: _search);
-      final filtered = data.where((item) {
-        final storeType =
-            '${item['store_type'] ?? item['item']?['store_type'] ?? ''}'
-                .toLowerCase();
-        return storeType == 'foodstuffs';
-      }).toList();
+      final filtered = data.where(_isStoreStockItem).toList()
+        ..sort((a, b) {
+          final categoryCompare = _categoryLabel(a)
+              .toLowerCase()
+              .compareTo(_categoryLabel(b).toLowerCase());
+          if (categoryCompare != 0) return categoryCompare;
+          return _itemName(a).toLowerCase().compareTo(_itemName(b).toLowerCase());
+        });
       if (mounted) setState(() => _items = filtered);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -14568,6 +15889,44 @@ class _FoodStuffsStockSectionState
     return '${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 2)} ${_unit(item)}';
   }
 
+  String _normalized(Object? value) =>
+      '$value'
+          .toLowerCase()
+          .replaceAll('_', ' ')
+          .replaceAll('-', ' ')
+          .trim();
+
+  bool _hasBarKeyword(String text) {
+    final normalized = _normalized(text);
+    return _barKeywords.any(normalized.contains);
+  }
+
+  bool _isStoreStockItem(Map<String, dynamic> item) {
+    final storeType =
+        _normalized(item['store_type'] ?? item['item']?['store_type'] ?? '');
+    final category =
+        _normalized(item['category'] ?? item['item']?['category'] ?? '');
+    final sku = _normalized(item['item_sku'] ?? item['sku'] ?? '');
+    final name = _normalized(_itemName(item));
+
+    if (storeType == 'bar_store') return false;
+    if (storeType.isNotEmpty && storeType != 'foodstuffs') return false;
+    if (_hasBarKeyword(category) || _hasBarKeyword(sku) || _hasBarKeyword(name)) {
+      return false;
+    }
+    return true;
+  }
+
+  String _categoryLabel(Map<String, dynamic> item) {
+    final raw = '${item['category'] ?? item['item']?['category'] ?? ''}'.trim();
+    if (raw.isEmpty) return 'Uncategorised';
+    return raw
+        .split(RegExp(r'[\s_]+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
   List<Map<String, dynamic>> get _filtered {
     if (_search.isEmpty) return _items;
     final q = _search.toLowerCase();
@@ -14578,6 +15937,15 @@ class _FoodStuffsStockSectionState
               .toLowerCase()
               .contains(q);
     }).toList();
+  }
+
+  Map<String, List<Map<String, dynamic>>> get _groupedItems {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final item in _filtered) {
+      grouped.putIfAbsent(_categoryLabel(item), () => []).add(item);
+    }
+    final keys = grouped.keys.toList()..sort();
+    return {for (final key in keys) key: grouped[key]!};
   }
 
   void _showSnack(String message, {bool error = false}) {
@@ -14608,7 +15976,7 @@ class _FoodStuffsStockSectionState
         if (saved.invoiceRef.isNotEmpty) 'reference': saved.invoiceRef,
         'notes': saved.notes.isNotEmpty
             ? saved.notes
-            : 'Direct foodstuffs receipt — ${_itemName(item)}',
+            : 'Direct store stock receipt - ${_itemName(item)}',
       });
       await _load();
       _showSnack('Added ${saved.quantity} ${_unit(item)} of ${_itemName(item)}');
@@ -14623,8 +15991,150 @@ class _FoodStuffsStockSectionState
       builder: (_) => _RequestFoodStockDialog(item: item),
     );
     if (submitted == true && mounted) {
-      _showSnack('Foodstuffs restock request sent to central store');
+      _showSnack('Store stock restock request sent to central store');
     }
+  }
+
+  Widget _buildGroupedStockSections(
+    Map<String, List<Map<String, dynamic>>> grouped,
+  ) {
+    return Column(
+      children: grouped.entries.map((entry) {
+        final categoryItems = entry.value;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.key,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${categoryItems.length} item(s)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Item')),
+                    DataColumn(label: Text('SKU')),
+                    DataColumn(label: Text('Unit')),
+                    DataColumn(label: Text('Balance'), numeric: true),
+                    DataColumn(label: Text('Reorder'), numeric: true),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('')),
+                  ],
+                  rows: categoryItems.map((item) {
+                    final qty = _num(item['quantity']);
+                    final reorder =
+                        _num(item['reorder_level'] ?? item['min_quantity']);
+                    final isLow = qty <= reorder;
+                    final isZero = qty <= 0;
+                    return DataRow(cells: [
+                      DataCell(Text(_itemName(item))),
+                      DataCell(Text('${item['item_sku'] ?? item['sku'] ?? '-'}')),
+                      DataCell(Text(_unit(item))),
+                      DataCell(Text(
+                        qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2),
+                        style: TextStyle(
+                          color: isZero
+                              ? Colors.red
+                              : isLow
+                                  ? Colors.orange
+                                  : AppColors.kPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )),
+                      DataCell(Text(
+                        reorder.toStringAsFixed(reorder % 1 == 0 ? 0 : 2),
+                      )),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isZero
+                              ? Colors.red.shade100
+                              : isLow
+                                  ? Colors.orange.shade100
+                                  : Colors.green.shade100,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          isZero
+                              ? 'ZERO'
+                              : isLow
+                                  ? 'LOW'
+                                  : 'OK',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isZero
+                                ? Colors.red.shade700
+                                : isLow
+                                    ? Colors.orange.shade700
+                                    : Colors.green.shade700,
+                          ),
+                        ),
+                      )),
+                      DataCell(
+                        PopupMenuButton<String>(
+                          onSelected: (action) {
+                            if (action == 'add') {
+                              _openAddStockDialog(item);
+                            } else if (action == 'request') {
+                              _openRequestStockDialog(item);
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'add',
+                              child: Text('Add Stock'),
+                            ),
+                            PopupMenuItem(
+                              value: 'request',
+                              child: Text('Request from Central'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]);
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   @override
@@ -14636,12 +16146,19 @@ class _FoodStuffsStockSectionState
       final min = _num(item['reorder_level'] ?? item['min_quantity']);
       return qty <= min;
     }).length;
+    final grouped = _groupedItems;
 
     return _Page(
-      title: 'Food Stuffs Stock',
+      title: 'Store Stock',
       subtitle:
-          'Track kitchen raw materials and branch foodstuffs stock with direct stock-in and central restock requests.',
+          'Track branch store items only, grouped by category, with direct stock-in and central catalogue registration.',
       actions: [
+        OutlinedButton.icon(
+          onPressed: widget.onOpenCentralCatalog,
+          icon: const Icon(Icons.add_business_outlined),
+          label: const Text('Register New Item from Central Catalogue'),
+        ),
+        const SizedBox(width: 8),
         _RefreshButton(onPressed: _load),
       ],
       children: [
@@ -14673,14 +16190,42 @@ class _FoodStuffsStockSectionState
               const Icon(Icons.warning_amber_outlined,
                   color: Colors.orange, size: 18),
               const SizedBox(width: 8),
-              Text('$lowStock food item(s) at or below reorder level',
+              Text('$lowStock store item(s) at or below reorder level',
                   style: const TextStyle(
                       color: Colors.orange, fontWeight: FontWeight.w700)),
             ]),
           ),
+        if (grouped.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: grouped.entries.map((entry) {
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    '${entry.key} (${entry.value.length})',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         const SizedBox(height: 16),
-        if (_filtered.isEmpty)
-          const _EmptyState('No foodstuffs stock found.')
+        if (_filtered.isNotEmpty)
+          _buildGroupedStockSections(grouped)
+        else if (_filtered.isEmpty)
+          const _EmptyState('No store stock found.')
         else
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -14796,7 +16341,7 @@ class _RequestFoodStockDialogState
   }
 
   String get _itemName =>
-      '${widget.item['item_name'] ?? widget.item['name'] ?? widget.item['description'] ?? widget.item['item_sku'] ?? widget.item['sku'] ?? 'Food item'}';
+      '${widget.item['item_name'] ?? widget.item['name'] ?? widget.item['description'] ?? widget.item['item_sku'] ?? widget.item['sku'] ?? 'Store item'}';
 
   String get _unit =>
       '${widget.item['unit_of_measure'] ?? widget.item['unit'] ?? widget.item['item']?['unit_of_measure'] ?? widget.item['item']?['unit'] ?? 'units'}';
@@ -14823,13 +16368,13 @@ class _RequestFoodStockDialogState
             (double.tryParse('${widget.item['quantity'] ?? 0}') ?? 0) <= 0
                 ? 'URGENT'
                 : 'NORMAL',
-        'reason': 'FOODSTUFFS RESTOCK REQUEST — $_itemName',
+        'reason': 'STORE STOCK RESTOCK REQUEST — $_itemName',
         'items': [
           {
             'item_sku': _sku,
             'requested_quantity': quantity,
             'reason':
-                'Food item: $_itemName ($_unit)${notes.isNotEmpty ? ' — $notes' : ''}',
+                'Store item: $_itemName ($_unit)${notes.isNotEmpty ? ' — $notes' : ''}',
           },
         ],
       });
