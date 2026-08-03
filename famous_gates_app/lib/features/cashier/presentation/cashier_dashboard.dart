@@ -20,6 +20,7 @@ import '../../kitchen/domain/models.dart' show KitchenOrder;
 import '../../pos/domain/models.dart';
 import '../../templates/data/document_printer.dart';
 import '../../pos/data/outlet_pos_repository.dart';
+import '../../pos/presentation/cross_outlet_settlements_panel.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
@@ -202,10 +203,10 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         icon: Icons.receipt_long,
         content: _RequiresOpenShift(child: _ShiftExpensesTab()),
       ),
-      const DashboardTab(
+      DashboardTab(
         label: 'Cross-Outlet Clearances',
         icon: Icons.sync_alt,
-        content: _RequiresOpenShift(child: CrossOutletClearancesTab()),
+        content: const _RequiresOpenShift(child: CrossOutletClearancesTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
