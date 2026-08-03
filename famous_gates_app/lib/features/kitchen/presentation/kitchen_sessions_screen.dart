@@ -5338,24 +5338,161 @@ class _KitchenProductionLogSectionState
                   const Text('Select Recipe',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<Map<String, dynamic>>(
-                    value: recipe,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      hintText: 'Choose a production recipe...',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                  Autocomplete<Map<String, dynamic>>(
+                    key: ValueKey(
+                      'issue_batch_recipe_${recipe != null ? recipe['id'] : 'none'}_${_recipes.length}',
                     ),
-                    items: _recipes
-                        .map((r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(_recipeName(r),
-                                  overflow: TextOverflow.ellipsis),
-                            ))
-                        .toList(),
-                    onChanged: _selectRecipe,
+                    initialValue: TextEditingValue(
+                      text: recipe != null ? _recipeName(recipe) : '',
+                    ),
+                    displayStringForOption: (r) => _recipeName(r),
+                    optionsBuilder: (textEditingValue) {
+                      final query =
+                          textEditingValue.text.trim().toLowerCase();
+                      if (query.isEmpty) {
+                        return _recipes.take(50);
+                      }
+                      return _recipes.where((r) {
+                        final name = _recipeName(r).toLowerCase();
+                        final code = '${r['recipe_code'] ?? ''}'.toLowerCase();
+                        final rawName =
+                            '${r['raw_item_name'] ?? ''}'.toLowerCase();
+                        final prodName =
+                            '${r['produced_item_name'] ?? ''}'.toLowerCase();
+                        final sku =
+                            '${r['produced_item_sku'] ?? r['raw_item_sku'] ?? ''}'
+                                .toLowerCase();
+                        return name.contains(query) ||
+                            code.contains(query) ||
+                            rawName.contains(query) ||
+                            prodName.contains(query) ||
+                            sku.contains(query);
+                      }).take(50);
+                    },
+                    onSelected: _selectRecipe,
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Type to search production recipe...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: controller.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: 'Clear selection',
+                                  onPressed: () {
+                                    controller.clear();
+                                    _selectRecipe(null);
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          if (val.isEmpty && _selectedRecipe != null) {
+                            _selectRecipe(null);
+                          }
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final rows = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 8,
+                          borderRadius: BorderRadius.circular(12),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                                maxWidth: 600, maxHeight: 300),
+                            child: ListView.separated(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 6),
+                              shrinkWrap: true,
+                              itemCount: rows.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                  height: 1, indent: 16, endIndent: 16),
+                              itemBuilder: (context, index) {
+                                final r = rows[index];
+                                final name = _recipeName(r);
+                                final raw =
+                                    '${r['raw_item_name'] ?? r['raw_item_sku'] ?? ''}'
+                                        .trim();
+                                final prod =
+                                    '${r['produced_item_name'] ?? r['produced_item_sku'] ?? ''}'
+                                        .trim();
+                                final yieldType = (r['yield_type_code'] ?? '')
+                                    .toString()
+                                    .toUpperCase();
+                                String sub = '';
+                                if (raw.isNotEmpty && prod.isNotEmpty) {
+                                  sub = '$raw → $prod';
+                                } else if (raw.isNotEmpty) {
+                                  sub = 'Raw: $raw';
+                                }
+
+                                return ListTile(
+                                  dense: true,
+                                  leading: CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Theme.of(context)
+                                        .primaryColor
+                                        .withValues(alpha: 0.1),
+                                    child: Icon(Icons.restaurant_menu,
+                                        size: 16,
+                                        color: Theme.of(context).primaryColor),
+                                  ),
+                                  title: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  subtitle: sub.isNotEmpty
+                                      ? Text(
+                                          sub,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700),
+                                        )
+                                      : null,
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border:
+                                          Border.all(color: Colors.blue.shade200),
+                                    ),
+                                    child: Text(
+                                      yieldType.isEmpty ? 'BATCH' : yieldType,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                  onTap: () => onSelected(r),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
