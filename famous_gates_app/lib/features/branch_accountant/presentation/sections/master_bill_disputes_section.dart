@@ -406,7 +406,7 @@ class _MasterBillDisputesSectionState
                                         'Disputed Share Amount: ${_money(s.amount)}',
                                         style: theme.textTheme.titleMedium
                                             ?.copyWith(
-                                                fontWeight: FontWeight.extrabold,
+                                                fontWeight: FontWeight.w800,
                                                 color: Colors.blue.shade900),
                                       ),
                                       const SizedBox(height: 16),
