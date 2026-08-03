@@ -719,6 +719,27 @@ export const receivePurchaseOrder = async (
         performed_by: userId,
         notes: `Directly received PO ${po.po_number}`,
       });
+
+      // Update simple_items stock quantity
+      if (item.sku) {
+        const { data: sItem } = await supabase
+          .from("simple_items")
+          .select("id, quantity")
+          .or(`sku.eq.${item.sku},item_sku.eq.${item.sku}`)
+          .maybeSingle();
+
+        if (sItem) {
+          const currentSimpleQty = Number(sItem.quantity || 0);
+          await supabase
+            .from("simple_items")
+            .update({
+              quantity: currentSimpleQty + Number(qty),
+              last_updated: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sItem.id);
+        }
+      }
     }
 
     // Update PO status to the valid po_status enum value.
