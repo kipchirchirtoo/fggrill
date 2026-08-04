@@ -11342,13 +11342,35 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     _refresh();
   }
 
+  String _cleanPdfText(String? input) {
+    if (input == null || input.isEmpty) return '';
+    return input
+        .replaceAll('—', '-')
+        .replaceAll('–', '-')
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('•', '*')
+        .replaceAll(RegExp(r'[^\x00-\x7F]'), '');
+  }
+
   Future<void> _generateCreditBillsPdf(List<Map<String, dynamic>> items) async {
     if (items.isEmpty) {
       _notify(context, 'No credit bill items to export');
       return;
     }
     try {
-      final pdf = pw.Document();
+      final fontRegular = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
+
+      final pdf = pw.Document(
+        theme: pw.ThemeData.withFont(
+          base: fontRegular,
+          bold: fontBold,
+        ),
+      );
+
       pw.MemoryImage? logoImage;
       try {
         final logoBytes = await rootBundle.load('assets/frontend_public/fglogo.png');
@@ -11363,7 +11385,7 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
-          maxPages: 500,
+          maxPages: 1000,
           margin: const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 24),
           build: (pw.Context ctx) {
             return [
@@ -11381,9 +11403,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                       children: [
                         pw.Text('FamousGate Hotels',
                             style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
-                        pw.Text('Bomet, Kenya  ·  Tel: 0706782828',
+                        pw.Text('Bomet, Kenya  -  Tel: 0706782828',
                             style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                        pw.Text('Email: famousgatesbmt@gmail.com  ·  www.famousgatehotels.com',
+                        pw.Text('Email: famousgatesbmt@gmail.com  -  www.famousgatehotels.com',
                             style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey600)),
                       ],
                     ),
@@ -11460,12 +11482,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               pw.Table.fromTextArray(
                 headers: ['Staff / Customer', 'Description', 'Amount', 'Paid', 'Balance', 'Status'],
                 data: items.map((it) => [
-                  _staffName(it),
-                  _text(it, ['description']),
+                  _cleanPdfText(_staffName(it)),
+                  _cleanPdfText(_text(it, ['description'])),
                   _money(_num(it['amount'] ?? it['total_amount'])),
                   _money(_num(it['paid_amount'])),
                   _money(_staffCreditBalance(it)),
-                  _text(it, ['status']),
+                  _cleanPdfText(_text(it, ['status'])),
                 ]).toList(),
                 border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.black),
