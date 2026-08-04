@@ -7897,48 +7897,293 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              _ResponsiveGrid(
-                children: [
-                  _MetricCard(
-                    'Total Sales',
-                    _money(_num(summary['total_sales'])),
-                    Icons.point_of_sale,
-                    Colors.green,
-                  ),
-                  _MetricCard(
-                    'Transactions',
-                    '${_num(summary['transaction_count']).toInt()}',
-                    Icons.receipt_long,
-                    AppColors.kPrimary,
-                  ),
-                  _MetricCard(
-                    'Expected Cash',
-                    _money(_expectedClosingAmount(detail)),
-                    Icons.account_balance_wallet,
-                    Colors.blue,
-                  ),
-                  _MetricCard(
-                    'Actual Cash',
-                    _money(_actualCashCounted(detail)),
-                    Icons.payments,
-                    Colors.teal,
-                  ),
-                  _MetricCard(
-                    'Variance',
-                    _money(_varianceAmount(detail)),
-                    Icons.warning_amber,
-                    _varianceAmount(detail).abs() < 0.01
-                        ? Colors.green
-                        : Colors.red,
-                  ),
-                  _MetricCard(
-                    'Cleared Lines',
-                    '${clearedTransactions.length}',
-                    Icons.fact_check,
-                    Colors.orange,
-                  ),
-                ],
-              ),
+              StatefulBuilder(builder: (context, setSt) {
+                bool salesExpanded = false;
+                return StatefulBuilder(builder: (ctx, setSalesState) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ResponsiveGrid(
+                        children: [
+                          // ── Tappable Total Sales ──────────────────────────
+                          GestureDetector(
+                            onTap: () =>
+                                setSalesState((_) => salesExpanded = !salesExpanded),
+                            child: Card(
+                              elevation: 0,
+                              margin: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: salesExpanded
+                                      ? Colors.green.shade300
+                                      : Colors.grey.shade200,
+                                  width: salesExpanded ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.point_of_sale,
+                                          color: Colors.green),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(children: [
+                                            const Text('Total Sales',
+                                                style: TextStyle(
+                                                    color: AppColors
+                                                        .kTextSecondary,
+                                                    fontSize: 12)),
+                                            const SizedBox(width: 4),
+                                            Icon(
+                                              salesExpanded
+                                                  ? Icons.expand_less
+                                                  : Icons.expand_more,
+                                              size: 14,
+                                              color: Colors.green.shade600,
+                                            ),
+                                          ]),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _money(_num(summary['total_sales'])),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.w800),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          _MetricCard(
+                            'Transactions',
+                            '${_num(summary['transaction_count']).toInt()}',
+                            Icons.receipt_long,
+                            AppColors.kPrimary,
+                          ),
+                          _MetricCard(
+                            'Expected Cash',
+                            _money(_expectedClosingAmount(detail)),
+                            Icons.account_balance_wallet,
+                            Colors.blue,
+                          ),
+                          _MetricCard(
+                            'Actual Cash',
+                            _money(_actualCashCounted(detail)),
+                            Icons.payments,
+                            Colors.teal,
+                          ),
+                          _MetricCard(
+                            'Variance',
+                            _money(_varianceAmount(detail)),
+                            Icons.warning_amber,
+                            _varianceAmount(detail).abs() < 0.01
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                          _MetricCard(
+                            'Cleared Lines',
+                            '${clearedTransactions.length}',
+                            Icons.fact_check,
+                            Colors.orange,
+                          ),
+                        ],
+                      ),
+                      // ── Sales Breakdown Dropdown Panel ─────────────────────
+                      if (salesExpanded)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                          margin: const EdgeInsets.only(top: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  const Icon(Icons.storefront_outlined,
+                                      size: 16, color: Colors.green),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Sales by POS Outlet',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: Colors.green.shade800,
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 10),
+                                if (revenue.isEmpty)
+                                  const Text('No outlet data available',
+                                      style: TextStyle(
+                                          color: AppColors.kTextSecondary,
+                                          fontSize: 12))
+                                else
+                                  ...revenue.map((r) {
+                                    final label = _text(r, ['label', 'outlet',
+                                        'source', 'name']);
+                                    final amt = _num(r['amount']);
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4),
+                                      child: Row(children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade400,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            label.isNotEmpty
+                                                ? label
+                                                : 'Unknown Outlet',
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                        Text(
+                                          _money(amt),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                      ]),
+                                    );
+                                  }),
+                                const Divider(height: 20),
+                                Row(children: [
+                                  const Icon(Icons.payments_outlined,
+                                      size: 16, color: Colors.indigo),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Sales by Payment Method',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: Colors.indigo.shade800,
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 10),
+                                if (payments.isEmpty)
+                                  const Text('No payment method data available',
+                                      style: TextStyle(
+                                          color: AppColors.kTextSecondary,
+                                          fontSize: 12))
+                                else
+                                  ...payments.map((p) {
+                                    final method = _text(p, ['method', 'name',
+                                        'label', 'payment_method']);
+                                    final amt = _num(p['amount']);
+                                    final count = _num(p['count'] ?? p['transaction_count']);
+                                    final icon = () {
+                                      final m =
+                                          method.trim().toLowerCase();
+                                      if (m.contains('cash'))
+                                        return Icons.money;
+                                      if (m.contains('mpesa') ||
+                                          m.contains('m-pesa'))
+                                        return Icons.phone_android;
+                                      if (m.contains('card'))
+                                        return Icons.credit_card;
+                                      return Icons.payment;
+                                    }();
+                                    final color = () {
+                                      final m =
+                                          method.trim().toLowerCase();
+                                      if (m.contains('cash'))
+                                        return Colors.green.shade600;
+                                      if (m.contains('mpesa') ||
+                                          m.contains('m-pesa'))
+                                        return Colors.red.shade600;
+                                      if (m.contains('card'))
+                                        return Colors.blue.shade600;
+                                      return Colors.grey.shade600;
+                                    }();
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 5),
+                                      child: Row(children: [
+                                        Icon(icon, size: 16, color: color),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                method.isNotEmpty
+                                                    ? method
+                                                        .toUpperCase()
+                                                    : 'Unknown',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w700),
+                                              ),
+                                              if (count > 0)
+                                                Text(
+                                                  '${count.toInt()} transactions',
+                                                  style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: AppColors
+                                                          .kTextSecondary),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          _money(amt),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ]),
+                                    );
+                                  }),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                });
+              }),
+
               _TwoColumn(
                 left: _SectionCard(
                   title: 'Shift Identity',
