@@ -4656,6 +4656,35 @@ class BrandedPDFGenerator:
         
         if not bills:
             elements.append(Paragraph(empty_message, self.styles['Normal']))
+        elif len(bills) > 15:
+            # High-performance single Master Table for large datasets (>15 items)
+            table_data = [
+                ['#', 'Staff / Customer', 'Ref / Invoice', 'Date', 'Amount', 'Paid', 'Balance', 'Status']
+            ]
+            for b in bills:
+                table_data.append([
+                    str(b.get('position', '')),
+                    Paragraph(str(b.get('customer_name', 'Customer')), self.styles['SmallText']),
+                    str(b.get('invoice_number') or b.get('reference_code') or 'N/A'),
+                    str(b.get('bill_date', '')),
+                    self._format_currency(b.get('total_amount', 0)),
+                    self._format_currency(b.get('paid_amount', 0)),
+                    self._format_currency(b.get('outstanding_amount', 0)),
+                    b.get('status', 'PENDING')
+                ])
+            master_table = Table(table_data, colWidths=[0.3*inch, 2.0*inch, 1.2*inch, 0.9*inch, 0.9*inch, 0.8*inch, 0.9*inch, 0.7*inch], repeatRows=1)
+            master_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), FG_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), FG_WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (4, 1), (6, -1), 'RIGHT'),
+                ('ALIGN', (7, 0), (7, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                ('PADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(master_table)
         else:
             for bill in bills:
                 # Bill Header

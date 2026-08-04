@@ -5612,13 +5612,21 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
             { responseType: 'arraybuffer' }
         );
 
+        const pdfBuf = Buffer.from(pythonResponse.data);
+        if (!pdfBuf || pdfBuf.length < 50 || pdfBuf.toString('utf8', 0, 4) !== '%PDF') {
+            logger.error('Python service returned non-PDF response for cashier unpaid bills', {
+                snippet: pdfBuf.toString('utf8', 0, 200)
+            });
+            throw new AppError('Failed to generate valid PDF document. Please try again.', 500);
+        }
+
         const filename = `Cashier_Unpaid_Bills_${date}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-        res.setHeader('Content-Length', Buffer.from(pythonResponse.data).length.toString());
+        res.setHeader('Content-Length', pdfBuf.length.toString());
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.send(Buffer.from(pythonResponse.data));
+        res.send(pdfBuf);
     } catch (error) {
         if (axios.isAxiosError(error)) {
             logger.error('Failed to generate cashier unpaid bills PDF', error);

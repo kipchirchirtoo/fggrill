@@ -780,7 +780,7 @@ class _BranchAccountantBottomNav extends StatelessWidget {
     const items = [
       BranchAccountantSection.overview,
       BranchAccountantSection.cashierLogbooks,
-      BranchAccountantSection.creditBills,
+      BranchAccountantSection.staffAccounts,
       BranchAccountantSection.discrepancies,
     ];
     return BottomNavigationBar(
@@ -1089,7 +1089,11 @@ class _QuickActions extends StatelessWidget {
       ),
       ('Daily Close', Icons.lock_clock, BranchAccountantSection.financialClose),
       ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
-      ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
+      (
+        'Staff Accounts',
+        Icons.account_balance_wallet,
+        BranchAccountantSection.staffAccounts
+      ),
       (
         'Supplier Finance',
         Icons.account_balance_wallet,
@@ -11360,9 +11364,19 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       _notify(context, 'No credit bill items to export');
       return;
     }
+    _notify(context, 'Preparing PDF report...');
     try {
-      final fontRegular = await PdfGoogleFonts.robotoRegular();
-      final fontBold = await PdfGoogleFonts.robotoBold();
+      pw.Font fontRegular;
+      pw.Font fontBold;
+      try {
+        final regData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
+        final boldData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
+        fontRegular = pw.Font.ttf(regData);
+        fontBold = pw.Font.ttf(boldData);
+      } catch (_) {
+        fontRegular = await PdfGoogleFonts.robotoRegular();
+        fontBold = await PdfGoogleFonts.robotoBold();
+      }
 
       final pdf = pw.Document(
         theme: pw.ThemeData.withFont(
@@ -20518,11 +20532,19 @@ String _paymentReference(Map<String, dynamic> payment) {
   return ref;
 }
 
-IconData _icon(BranchAccountantSection section) =>
-    _navItems.firstWhere((item) => item.section == section).icon;
+IconData _icon(BranchAccountantSection section) {
+  for (final item in _navItems) {
+    if (item.section == section) return item.icon;
+  }
+  return Icons.circle_outlined;
+}
 
-String _label(BranchAccountantSection section) =>
-    _navItems.firstWhere((item) => item.section == section).label;
+String _label(BranchAccountantSection section) {
+  for (final item in _navItems) {
+    if (item.section == section) return item.label;
+  }
+  return section.name;
+}
 
 String _shortLabel(BranchAccountantSection section) {
   switch (section) {
