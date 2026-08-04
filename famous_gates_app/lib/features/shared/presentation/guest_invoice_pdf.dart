@@ -361,11 +361,42 @@ List<Map<String, dynamic>> buildFolioInvoiceItems({
     });
   }
 
+  // Filter out room accommodation items from itemised list because 'Accommodation' above ALREADY includes roomLine (room_charges)
+  bool isRoomItem(Map<String, dynamic> it) {
+    final dept = '${it['department'] ?? ''}'.trim().toLowerCase();
+    final desc = '${it['description'] ?? ''}'.trim().toLowerCase();
+    return dept == 'room' ||
+        desc.contains('room charge') ||
+        desc.contains('extended stay') ||
+        desc.contains('accommodation');
+  }
+
+  // Check if a line is a summary master-bill line (e.g. "Restaurant POS · Bill TVGNXA")
+  bool isSummaryBillItem(Map<String, dynamic> it) {
+    final desc = '${it['description'] ?? ''}'.trim().toLowerCase();
+    return desc.contains('· bill ') ||
+        desc.startsWith('pos · bill') ||
+        desc.startsWith('restaurant pos · bill') ||
+        desc.startsWith('bar pos · bill') ||
+        desc.startsWith('pos bill');
+  }
+
   // Tier 1 — per-ITEM detail (outlet · item) from folio_items (newest posts).
-  final detailed = folioItems.where((it) => n(it['amount']) > 0).toList();
-  // Tier 2 — per-BILL detail (outlet + bill) from folio_transactions charge
-  // lines, for charges posted before per-item capture existed.
-  final lines = chargeLines.where((it) => n(it['amount']) > 0).toList();
+  final rawDetailed =
+      folioItems.where((it) => n(it['amount']) > 0 && !isRoomItem(it)).toList();
+
+  final hasItemizedPosLines = rawDetailed.any((it) => !isSummaryBillItem(it));
+  final detailed = hasItemizedPosLines
+      ? rawDetailed.where((it) => !isSummaryBillItem(it)).toList()
+      : rawDetailed;
+
+  // Tier 2 — per-BILL detail (outlet + bill) from folio_transactions charge lines
+  final rawLines =
+      chargeLines.where((it) => n(it['amount']) > 0 && !isRoomItem(it)).toList();
+  final hasItemizedChargeLines = rawLines.any((it) => !isSummaryBillItem(it));
+  final lines = hasItemizedChargeLines
+      ? rawLines.where((it) => !isSummaryBillItem(it)).toList()
+      : rawLines;
 
   if (detailed.isNotEmpty) {
     for (final it in detailed) {

@@ -44,12 +44,22 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
   bool _isAdditionalServiceTransaction(Map<String, dynamic> tx) {
     final type = '${tx['type'] ?? tx['transaction_type'] ?? ''}'.trim().toLowerCase();
+    final cat = '${tx['category'] ?? ''}'.trim().toLowerCase();
+    final dept = '${tx['department'] ?? ''}'.trim().toLowerCase();
+    final desc = '${tx['description'] ?? ''}'.trim().toLowerCase();
     final status = '${tx['status'] ?? ''}'.trim().toLowerCase();
     final voided = tx['voided'] == true;
     if (voided || status == 'voided' || status == 'cancelled' || status == 'reversed') {
       return false;
     }
-    return type != 'payment';
+    if (type == 'payment') return false;
+    if (dept == 'room' || desc.contains('room charge') || desc.contains('extended stay')) {
+      return false;
+    }
+    if (dept.contains('pos') || desc.contains('pos') || desc.contains('· bill ')) {
+      return false;
+    }
+    return cat == 'additional service' || type == 'additional_service' || type == 'checkout_service' || tx['is_manual_service'] == true;
   }
 
   List<Map<String, dynamic>> get _additionalServiceTransactions =>
@@ -325,16 +335,23 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
       bookingTotal: booking.totalAmount ?? 0.0,
     );
 
+    final existingDescs = items
+        .map((e) => '${e['description'] ?? ''}'.trim().toLowerCase())
+        .toSet();
+
     for (final service in _additionalServiceTransactions) {
       final amount = (service['amount'] as num?)?.toDouble() ?? 0.0;
       if (amount <= 0) continue;
+      final desc = '${service['description'] ?? 'Additional Service'}'.trim();
+      if (existingDescs.contains(desc.toLowerCase())) continue;
+
       items.add({
-        'description':
-            '${service['description'] ?? 'Additional Service'}'.trim(),
+        'description': desc,
         'qty': 1,
         'unitPrice': amount,
         'totalAmount': amount,
       });
+      existingDescs.add(desc.toLowerCase());
     }
 
     if (items.isEmpty) {
