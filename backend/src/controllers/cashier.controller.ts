@@ -8057,6 +8057,14 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         : { data: null, error: null };
     if (branchResult.error) throw branchResult.error;
     const branch = branchResult.data;
+    const storedRawLines = await safeLogbookQuery(
+        'cashier_logbook_lines',
+        supabase
+            .from('cashier_logbook_lines')
+            .select('*')
+            .eq('logbook_id', logbook.id)
+            .order('created_at', { ascending: true })
+    );
 
     let shift: any = null;
     let outletShift: any = null;
