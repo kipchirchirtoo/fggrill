@@ -8436,24 +8436,19 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         ['bank', breakdown.total_bank ?? shift?.total_bank_sales],
         ['other', breakdown.total_other ?? shift?.total_other_sales],
     ] as const;
+
     const payments = paymentRows.reduce<Record<string, number>>((acc, [method, explicit]) => {
         const explicitAmount = logbookNumber(explicit);
         const evidenceAmount =
             logbookNumber(clearedPaymentTotals[method])
             || logbookNumber(allLinePaymentTotals[method])
             || logbookNumber(outletOrderPaymentTotals[method]);
-        if (outletShiftIds.length > 0) {
-            if (method === 'credit_bill') {
-                acc[method] = evidenceAmount || creditBillsTotal || explicitAmount;
-            } else {
-                acc[method] = evidenceAmount || explicitAmount;
-            }
+
+        if (method === 'credit_bill') {
+            acc[method] = evidenceAmount || creditBillsTotal || explicitAmount;
         } else {
-            if (method === 'credit_bill') {
-                acc[method] = creditBillsTotal || explicitAmount || evidenceAmount;
-            } else {
-                acc[method] = explicitAmount || evidenceAmount;
-            }
+            // Prioritize actual cleared line transaction evidence over stale snapshot fields
+            acc[method] = evidenceAmount || explicitAmount;
         }
         return acc;
     }, {});
@@ -8477,18 +8472,13 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const grossSales = netSales + logbookNumber(voidAudit.summary.total_void_amount);
     const openingFloat = logbookNumber(logbook.opening_float ?? shift?.opening_float);
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
-    const cashDrops = 0; // cash_deposited is not a cashier-declared deposit
+    const cashDrops = 0;
     const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
     const expenseTotal = logbookNumber(breakdown.expense_total ?? shift?.expense_total);
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
-    // For new-path logbooks (source: cashier_shift_logs) the shift row stores
-    // expected_closing_float and variance using the correct formula at close time.
-    // breakdown.total_cash is already net of cash expenses, so recomputing here
-    // would double-subtract expenses. Use the stored shift values as the authority.
+
     const hasStoredExpected = shift != null && shift.expected_closing_float !== undefined && shift.expected_closing_float !== null;
     const hasStoredVariance = shift != null && shift.variance !== undefined && shift.variance !== null;
-    // totalCash is NET (expenses already deducted). Fallback formula: opening + NET_cash + paid_credits.
-    // Do NOT subtract expenseTotal — it is already absent from totalCash.
     const expectedCash = hasStoredExpected
         ? logbookNumber(shift.expected_closing_float)
         : (openingFloat + totalCash + creditPaymentsReceived);
@@ -8496,35 +8486,35 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         ? logbookNumber(shift.variance)
         : (closingFloat - expectedCash);
 
+    // Build revenue stream evidence ONCE without double/triple counting lines
     const revenueEvidence: Record<string, number> = {
-        restaurant: restaurantOrders.reduce((sum, line) => sum + logbookNumber(line.total_amount), 0),
-        bar: barOrders.reduce((sum, line) => sum + logbookNumber(line.total_amount ?? line.total), 0),
+        restaurant: 0,
+        bar: 0,
         rooms: 0,
         conference: 0,
         pool: 0,
         other: 0
     };
 
-    // Aggregate from the authoritative, fully-deduplicated cleared payment lines
-    clearedPaymentLines.forEach((line: any) => {
-        const bucket = inferRevenueBucket(line);
-        if (bucket) {
+    if (clearedPaymentLines.length > 0) {
+        clearedPaymentLines.forEach((line: any) => {
+            const bucket = inferRevenueBucket(line) || 'restaurant';
             revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount);
-        }
-    });
-
-    // Aggregate from POS outlet shift payments or orders (preventing double counting)
-    const activeOutletPayments = outletPayments.filter((p: any) => !voidedOrderIds.has(String(p.order_id)));
-    const activeOutletOrders2 = outletOrders.filter((o: any) => !voidedOrderIds.has(String(o.id)));
-    const posLines = activeOutletPayments.length > 0 ? activeOutletPayments : activeOutletOrders2;
-    posLines.forEach((line: any) => {
-        const bucket = inferRevenueBucket(line);
-        if (bucket) {
+        });
+    } else if (activeOutletOrders.length > 0 || outletPayments.length > 0) {
+        const activeOutletPayments = outletPayments.filter((p: any) => !voidedOrderIds.has(String(p.order_id)));
+        const posLines = activeOutletPayments.length > 0 ? activeOutletPayments : activeOutletOrders;
+        posLines.forEach((line: any) => {
+            const bucket = inferRevenueBucket(line) || 'restaurant';
             revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount ?? line.total_amount ?? line.total);
-        }
-    });
-    // Include other types of payments / credit bills
-    revenueEvidence.other += creditPaymentsReceived;
+        });
+    } else {
+        revenueEvidence.restaurant = restaurantOrders.reduce((sum, line) => sum + logbookNumber(line.total_amount), 0);
+        revenueEvidence.bar = barOrders.reduce((sum, line) => sum + logbookNumber(line.total_amount ?? line.total), 0);
+    }
+    if (creditPaymentsReceived > 0 && revenueEvidence.other === 0) {
+        revenueEvidence.other += creditPaymentsReceived;
+    }
 
     const revenueBreakdown = [
         {
@@ -8604,18 +8594,21 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     );
     const reconciliationRow = (method: 'cash' | 'mpesa' | 'card') => {
         const row = actualCollectionByMethod.get(method) || {};
+        const sysExpected = method === 'cash'
+            ? expectedCash
+            : (paymentBreakdownByMethod.get(method) || logbookNumber(row.system_amount));
+        const cashierLogged = method === 'cash'
+            ? (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_cash_counted ?? closingFloat))
+            : method === 'mpesa'
+                ? (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_mpesa_logged ?? logbook.total_mpesa ?? sysExpected))
+                : (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_card_logged ?? logbook.total_swipe ?? sysExpected));
+
+        const calcVariance = cashierLogged - sysExpected;
+
         return {
-            system_expected: logbookNumber(row.system_amount ?? (method === 'cash'
-                ? expectedCash
-                : method === 'mpesa'
-                    ? paymentBreakdownByMethod.get('mpesa')
-                    : paymentBreakdownByMethod.get('card'))),
-            cashier_logged: logbookNumber(row.actual_amount ?? (method === 'cash'
-                ? logbookNumber(shift?.actual_cash_counted ?? closingFloat)
-                : method === 'mpesa'
-                    ? logbookNumber(shift?.actual_mpesa_logged)
-                    : logbookNumber(shift?.actual_card_logged))),
-            variance: logbookNumber(row.variance),
+            system_expected: sysExpected,
+            cashier_logged: cashierLogged,
+            variance: calcVariance,
             reference: logbookText(row.entry_reference)
         };
     };
