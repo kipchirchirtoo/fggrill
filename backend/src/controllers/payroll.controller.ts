@@ -986,3 +986,24 @@ export const forceGeneratePayroll = async (
     next(error);
   }
 };
+
+export const generateStatementPDFProxy = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const pythonResponse = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/payroll/generate-statement-pdf`,
+      req.body,
+      { responseType: 'arraybuffer' }
+    );
+    const pdfBuf = Buffer.from(pythonResponse.data);
+    if (!pdfBuf || pdfBuf.length < 50) {
+      throw new Error('Invalid PDF buffer returned from Python service');
+    }
+    const title = (req.body?.title || 'Statement').replace(/[^A-Za-z0-9]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="FG_${title}.pdf"`);
+    res.send(pdfBuf);
+  } catch (error) {
+    logger.error('Failed to proxy statement PDF generation', error);
+    next(error);
+  }
+};

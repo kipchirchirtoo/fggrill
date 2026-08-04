@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'dart:io';
 
 import '../../../core/network/dio_client.dart';
@@ -725,6 +729,143 @@ class BranchAccountantRepository {
     return _saveBytes(res.data ?? const <int>[], 'FG_Payroll_$safe.pdf');
   }
 
+  /// Generic branded PDF for the Staff Accounts exports (credit bills, advances,
+  /// loans, overview). Renders via the python payroll template
+  /// Generic branded PDF for the Staff Accounts exports (credit bills, advances,
+  /// loans, overview). Renders via python, backend proxy, or local fallback.
+  Future<File> generateStatementPdf(Map<String, dynamic> payload) async {
+    try {
+      final dio = _ref.read(pythonDioProvider);
+      final res = await dio.post(
+        '/api/payroll/generate-statement-pdf',
+        data: payload,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = (res.data as List?)?.cast<int>();
+      if (bytes != null && bytes.length > 50) {
+        final title = '${payload['title'] ?? 'statement'}'
+            .replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+        return _saveBytes(bytes, 'FG_$title.pdf');
+      }
+    } catch (_) {
+      try {
+        final res = await _dio.post(
+          '/payroll/generate-statement-pdf',
+          data: payload,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final bytes = (res.data as List?)?.cast<int>();
+        if (bytes != null && bytes.length > 50) {
+          final title = '${payload['title'] ?? 'statement'}'
+              .replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+          return _saveBytes(bytes, 'FG_$title.pdf');
+        }
+      } catch (_) {}
+    }
+
+    return _buildLocalStatementPdf(payload);
+  }
+
+  String _cleanTxt(String? input) {
+    if (input == null || input.isEmpty) return '';
+    return input
+        .replaceAll('—', '-')
+        .replaceAll('–', '-')
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('•', '*')
+        .replaceAll(RegExp(r'[^\x00-\x7F]'), '');
+  }
+
+  Future<File> _buildLocalStatementPdf(Map<String, dynamic> payload) async {
+    final pdf = pw.Document();
+    pw.Font fontRegular;
+    pw.Font fontBold;
+    try {
+      final regData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
+      final boldData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
+      fontRegular = pw.Font.ttf(regData);
+      fontBold = pw.Font.ttf(boldData);
+    } catch (_) {
+      fontRegular = await PdfGoogleFonts.robotoRegular();
+      fontBold = await PdfGoogleFonts.robotoBold();
+    }
+
+    final title = _cleanTxt(payload['title']?.toString() ?? 'STATEMENT');
+    final branch = _cleanTxt(payload['branch']?.toString() ?? 'All Branches');
+    final period = _cleanTxt(payload['period']?.toString() ?? '');
+    final cols = (payload['columns'] as List?)?.map((e) => _cleanTxt(e.toString())).toList() ?? [];
+    final rawRows = (payload['rows'] as List?) ?? [];
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        maxPages: 1000,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+        build: (pw.Context ctx) {
+          final tableData = <List<String>>[];
+          if (cols.isNotEmpty) tableData.add(cols);
+          for (final row in rawRows) {
+            if (row is List) {
+              tableData.add(row.map((cell) => _cleanTxt(cell?.toString() ?? '')).toList());
+            }
+          }
+
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('FamousGate Hotels', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                    pw.Text('Branch: $branch', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColors.blue800)),
+                    if (period.isNotEmpty) pw.Text('Period: $period', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 6),
+            pw.Divider(thickness: 1, color: PdfColors.grey400),
+            pw.SizedBox(height: 10),
+
+            if (tableData.length > 1)
+              pw.Table.fromTextArray(
+                headers: tableData.first,
+                data: tableData.sublist(1),
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+                cellStyle: const pw.TextStyle(fontSize: 7.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              ),
+            pw.SizedBox(height: 20),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Prepared By: Branch Accountant ________________', style: const pw.TextStyle(fontSize: 8.5)),
+                pw.Text('Approved By: Internal Auditor ________________', style: const pw.TextStyle(fontSize: 8.5)),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final fileTitle = title.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+    return _saveBytes(bytes, 'FG_$fileTitle.pdf');
+  }
+
   Future<Map<String, dynamic>> createPayrollAdjustment({
     required String staffId,
     required String type,
@@ -1336,6 +1477,12 @@ class BranchAccountantRepository {
     }
     final res = await _dio.put('/staff/$staffId', data: data);
     return _asMap(res.data);
+  }
+
+  /// Set/adjust a staff member's basic monthly salary (audited server-side as a
+  /// `salary_adjustment`). Used by the Staff Accounts → Salaries tab.
+  Future<void> updateStaffSalary(String staffId, num basicSalary) async {
+    await _dio.put('/staff/$staffId', data: {'basic_salary': basicSalary});
   }
 
   Future<List<Map<String, dynamic>>> getPayrollCreditBills({

@@ -100,6 +100,12 @@ app.register_blueprint(payroll_bp)
 app.register_blueprint(search_bp)
 app.register_blueprint(behavior_bp, url_prefix='/api/behavior')
 
+@app.route('/api/payroll/generate-statement-pdf', methods=['POST', 'OPTIONS'])
+@app.route('/generate-statement-pdf', methods=['POST', 'OPTIONS'])
+def direct_generate_statement_pdf():
+    from payroll.routes import generate_statement_pdf_route
+    return generate_statement_pdf_route()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

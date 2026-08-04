@@ -4,7 +4,7 @@ import os, zipfile, io, shutil, logging
 from datetime import datetime
 from reports.branded_pdf_generator import BrandedPDFGenerator
 from email_automation.routes import email_service
-from payroll.payroll_generator import generate_payroll_xlsx, generate_payroll_pdf
+from payroll.payroll_generator import generate_payroll_xlsx, generate_payroll_pdf, generate_statement_pdf
 from payroll.cashier_logbook_pdf import generate_cashier_logbook_pdf
 
 payroll_bp = Blueprint('payroll', __name__, url_prefix='/api/payroll')
@@ -59,6 +59,25 @@ def generate_pdf():
         )
     except Exception as e:
         logger.error(f"PDF generation error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+# ── NEW: generic branded statement PDF (Staff Accounts exports) ───────────────
+@payroll_bp.route('/generate-statement-pdf', methods=['POST', 'OPTIONS'])
+@payroll_bp.route('/api/payroll/generate-statement-pdf', methods=['POST', 'OPTIONS'])
+def generate_statement_pdf_route():
+    try:
+        data = request.json or {}
+        pdf_bytes = generate_statement_pdf(data)
+        title_slug = (data.get('title') or 'Statement').replace(' ', '_')
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"FG_{title_slug}.pdf",
+        )
+    except Exception as e:
+        logger.error(f"Statement PDF generation error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 

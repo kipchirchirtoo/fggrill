@@ -8,7 +8,8 @@ import {
   generatePayslip,
   downloadPayslipsZip,
   downloadSummaryPDF,
-  forceGeneratePayroll
+  forceGeneratePayroll,
+  generateStatementPDFProxy
 } from '../controllers/payroll.controller';
 import {
   createCreditBill,
@@ -100,6 +101,12 @@ router.get(
   '/run/:runId/summary-pdf',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   downloadSummaryPDF
+);
+
+// Generic branded statement PDF proxy endpoint
+router.post(
+  '/generate-statement-pdf',
+  generateStatementPDFProxy
 );
 
 // Credit Bills (Deductions from staff)
