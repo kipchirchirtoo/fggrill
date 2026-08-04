@@ -801,9 +801,9 @@ class BranchAccountantRepository {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: PdfPageFormat.a4.landscape,
         maxPages: 1000,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
         build: (pw.Context ctx) {
           final tableData = <List<String>>[];
@@ -813,6 +813,9 @@ class BranchAccountantRepository {
               tableData.add(row.map((cell) => _cleanTxt(cell?.toString() ?? '')).toList());
             }
           }
+
+          final headers = tableData.isNotEmpty ? tableData.first : <String>[];
+          final dataRows = tableData.length > 1 ? tableData.sublist(1) : <List<String>>[];
 
           return [
             pw.Row(
@@ -838,15 +841,62 @@ class BranchAccountantRepository {
             pw.Divider(thickness: 1, color: PdfColors.grey400),
             pw.SizedBox(height: 10),
 
-            if (tableData.length > 1)
-              pw.Table.fromTextArray(
-                headers: tableData.first,
-                data: tableData.sublist(1),
+            if (headers.isNotEmpty)
+              pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
-                cellStyle: const pw.TextStyle(fontSize: 7.5),
-                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.blue900),
+                    children: headers.map((h) => pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: pw.Text(
+                        h,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5, color: PdfColors.white),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    )).toList(),
+                  ),
+                  ...dataRows.asMap().entries.map((entry) {
+                    final rowIndex = entry.key;
+                    final row = entry.value;
+
+                    bool isRedRow = false;
+                    if (row.isNotEmpty) {
+                      final lastCell = row.last.trim();
+                      if (lastCell == '-' || lastCell == '0' || lastCell == '0.00' || lastCell.startsWith('-')) {
+                        isRedRow = true;
+                      } else if (row.length >= 4 && (row[3].trim() == '-' || row[3].trim() == 'Not set')) {
+                        isRedRow = true;
+                      }
+                    }
+
+                    final bgColor = isRedRow
+                        ? PdfColors.red50
+                        : (rowIndex % 2 == 1 ? PdfColors.grey100 : PdfColors.white);
+                    final textColor = isRedRow ? PdfColors.red900 : PdfColors.black;
+                    final fontW = isRedRow ? pw.FontWeight.bold : pw.FontWeight.normal;
+
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(color: bgColor),
+                      children: row.asMap().entries.map((cellEntry) {
+                        final colIdx = cellEntry.key;
+                        final cellTxt = cellEntry.value;
+                        final align = colIdx == 0 || colIdx == 2
+                            ? pw.TextAlign.left
+                            : (colIdx == 1 ? pw.TextAlign.center : pw.TextAlign.right);
+
+                        return pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                          child: pw.Text(
+                            cellTxt,
+                            style: pw.TextStyle(fontSize: 7.5, color: textColor, fontWeight: fontW),
+                            textAlign: align,
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }),
+                ],
               ),
             pw.SizedBox(height: 20),
             pw.Row(

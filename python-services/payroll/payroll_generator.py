@@ -468,3 +468,213 @@ def generate_payroll_pdf(data: dict) -> bytes:
     doc.build(story)
     buf.seek(0)
     return buf.read()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  GENERIC STATEMENT PDF  (same FamousGate branding as payroll, arbitrary table)
+#  Used by the Branch Accountant "Staff Accounts" exports (credit bills, salary
+#  advances, staff loans, combined overview). The caller supplies pre-formatted
+#  cell strings so this stays fully generic.
+#
+#  data = {
+#    "title":   "STAFF CREDIT BILLS",
+#    "period":  "05 Jul 2026 - 04 Aug 2026",
+#    "branch":  "Kyogong",
+#    "generated": "...",              # optional
+#    "columns": [ {"header": "Date", "align": "center", "weight": 1.2}, ... ],
+#    "rows":    [ ["04/08/26", "John Doe", "1,200.00", ...], ... ],
+#    "summary": [ {"label": "Records", "value": "12"}, ... ],   # up to 4
+#    "totals":  ["TOTALS", "", "", "45,000.00", ...],           # optional, aligned to columns
+#  }
+# ══════════════════════════════════════════════════════════════════════════════
+def generate_statement_pdf(data: dict) -> bytes:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                     Paragraph, Spacer, HRFlowable, Image)
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    DARK_GREEN  = colors.HexColor("#1A4731")
+    MID_GREEN   = colors.HexColor("#2D6A4F")
+    ACCENT      = colors.HexColor("#40916C")
+    LIGHT_GREEN = colors.HexColor("#D8F3DC")
+    LIGHT_GRAY  = colors.HexColor("#F2F2F2")
+    WHITE       = colors.white
+    BORDER_CLR  = colors.HexColor("#B0B0B0")
+
+    def S(name, **kw): return ParagraphStyle(name, **kw)
+    ST = {
+        "company":    S("company",    fontName="Helvetica-Bold",    fontSize=18, textColor=WHITE,      alignment=TA_CENTER),
+        "contact":    S("contact",    fontName="Helvetica-Oblique", fontSize=8,  textColor=WHITE,      alignment=TA_CENTER),
+        "title":      S("title",      fontName="Helvetica-Bold",    fontSize=14, textColor=DARK_GREEN, alignment=TA_CENTER, spaceBefore=4, spaceAfter=4),
+        "branch_tag": S("branch_tag", fontName="Helvetica-Bold",    fontSize=11, textColor=WHITE,      alignment=TA_CENTER),
+        "meta_label": S("meta_label", fontName="Helvetica-Bold",    fontSize=8,  textColor=DARK_GREEN),
+        "meta_value": S("meta_value", fontName="Helvetica",         fontSize=8,  textColor=colors.black),
+        "sum_lbl":    S("sum_lbl",    fontName="Helvetica-Bold",    fontSize=7,  textColor=colors.HexColor("#555555"), alignment=TA_CENTER),
+        "sum_val":    S("sum_val",    fontName="Helvetica-Bold",    fontSize=12, textColor=DARK_GREEN, alignment=TA_CENTER),
+        "col_hdr":    S("col_hdr",    fontName="Helvetica-Bold",    fontSize=7.5,textColor=WHITE,      alignment=TA_CENTER, leading=9),
+        "cell_l":     S("cell_l",     fontName="Helvetica",         fontSize=7.5,textColor=colors.black, alignment=TA_LEFT,   leading=9),
+        "cell_c":     S("cell_c",     fontName="Helvetica",         fontSize=7.5,textColor=colors.black, alignment=TA_CENTER, leading=9),
+        "cell_r":     S("cell_r",     fontName="Helvetica",         fontSize=7.5,textColor=colors.black, alignment=TA_RIGHT,  leading=9),
+        "cell_l_red": S("cell_l_red", fontName="Helvetica-Bold",    fontSize=7.5,textColor=colors.HexColor("#C62828"), alignment=TA_LEFT,   leading=9),
+        "cell_c_red": S("cell_c_red", fontName="Helvetica-Bold",    fontSize=7.5,textColor=colors.HexColor("#C62828"), alignment=TA_CENTER, leading=9),
+        "cell_r_red": S("cell_r_red", fontName="Helvetica-Bold",    fontSize=7.5,textColor=colors.HexColor("#C62828"), alignment=TA_RIGHT,  leading=9),
+        "total_lbl":  S("total_lbl",  fontName="Helvetica-Bold",    fontSize=8,  textColor=WHITE,      alignment=TA_CENTER),
+        "total_val":  S("total_val",  fontName="Helvetica-Bold",    fontSize=8,  textColor=WHITE,      alignment=TA_RIGHT,  leading=9),
+        "sig":        S("sig",        fontName="Helvetica-Oblique", fontSize=8,  textColor=colors.HexColor("#444444")),
+        "footer":     S("footer",     fontName="Helvetica-Oblique", fontSize=7,  textColor=colors.HexColor("#888888"), alignment=TA_CENTER),
+    }
+    def P(text, style): return Paragraph(str(text), ST[style])
+
+    title     = data.get("title", "STATEMENT")
+    period    = data.get("period", "")
+    branch    = data.get("branch", "All Branches")
+    generated = data.get("generated", datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+    company   = data.get("company_name", "FAMOUSGATE HOTELS")
+    address   = data.get("company_address", "Bomet, Kenya")
+    email     = data.get("company_email", "famousgateshotelsbmt@gmail.com")
+    phone     = data.get("company_phone", "0706 782 828")
+    columns   = data.get("columns", [])
+    rows      = data.get("rows", [])
+    summary   = data.get("summary", [])
+    totals    = data.get("totals")
+
+    page_w, page_h = landscape(A4)
+    margin = 12 * mm
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=margin, rightMargin=margin,
+                            topMargin=margin, bottomMargin=margin)
+    usable_w = page_w - 2 * margin
+    story = []
+
+    # ── HEADER BANNER with logo ───────────────────────────────────────────────
+    logo_cell = ""
+    if os.path.exists(LOGO_PATH):
+        try:
+            logo_cell = Image(LOGO_PATH, width=18*mm, height=18*mm)
+        except Exception:
+            logo_cell = P("FG", "company")
+    logo_w = 22 * mm
+    hdr = Table([[logo_cell, P(company, "company")]], colWidths=[logo_w, usable_w - logo_w])
+    hdr.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), DARK_GREEN), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("LEFTPADDING",(0,0),(0,0), 4), ("TOPPADDING",(0,0),(-1,-1),10), ("BOTTOMPADDING",(0,0),(-1,-1),10),
+    ]))
+    contact = Table([[P(f"{address}   |   {email}   |   Tel: {phone}", "contact")]], colWidths=[usable_w])
+    contact.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1), MID_GREEN),
+        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),5),
+    ]))
+    story += [hdr, contact, Spacer(1, 3*mm)]
+
+    # ── TITLE + BRANCH TAG ────────────────────────────────────────────────────
+    story.append(P(title, "title"))
+    if branch and branch != "All Branches":
+        bt = Table([[P(f"Branch: {branch}", "branch_tag")]], colWidths=[usable_w])
+        bt.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1), ACCENT),
+            ("TOPPADDING",(0,0),(-1,-1),5), ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ]))
+        story += [bt, Spacer(1, 2*mm)]
+    story.append(HRFlowable(width=usable_w, thickness=2, color=DARK_GREEN, spaceAfter=3*mm))
+
+    # ── META ──────────────────────────────────────────────────────────────────
+    hw = usable_w / 2
+    meta = Table([
+        [P("Period:",    "meta_label"), P(period,           "meta_value"), P("Branch:",  "meta_label"), P(branch,          "meta_value")],
+        [P("Generated:", "meta_label"), P(generated,        "meta_value"), P("Records:", "meta_label"), P(str(len(rows)),  "meta_value")],
+    ], colWidths=[25*mm, hw-25*mm, 25*mm, hw-25*mm])
+    meta.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(0,-1),LIGHT_GRAY), ("BACKGROUND",(2,0),(2,-1),LIGHT_GRAY),
+        ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ("LEFTPADDING",(0,0),(-1,-1),4), ("GRID",(0,0),(-1,-1),0.4,BORDER_CLR),
+    ]))
+    story += [meta, Spacer(1, 3*mm)]
+
+    # ── SUMMARY BOXES (up to 4) ───────────────────────────────────────────────
+    if summary:
+        sb = summary[:4]
+        n = len(sb)
+        qw = usable_w / n
+        sum_tbl = Table([
+            [P(b.get("label", ""), "sum_lbl") for b in sb],
+            [P(b.get("value", ""), "sum_val") for b in sb],
+        ], colWidths=[qw] * n)
+        sum_tbl.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),LIGHT_GRAY), ("BACKGROUND",(0,1),(-1,1),WHITE),
+            ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ("GRID",(0,0),(-1,-1),0.8,colors.HexColor("#555555")),
+            ("LINEABOVE",(0,0),(-1,0),1.5,DARK_GREEN), ("LINEBELOW",(0,1),(-1,1),1.5,DARK_GREEN),
+        ]))
+        story += [sum_tbl, Spacer(1, 4*mm)]
+
+    # ── MAIN TABLE ────────────────────────────────────────────────────────────
+    aligns  = [c.get("align", "left") for c in columns]
+    weights = [float(c.get("weight", 1) or 1) for c in columns]
+    wsum    = sum(weights) or 1
+    col_pts = [usable_w * (w / wsum) for w in weights]
+    style_for = {"left": "cell_l", "center": "cell_c", "right": "cell_r"}
+
+    table_data = [[P(c.get("header", ""), "col_hdr") for c in columns]]
+    red_rows = []
+    for r_idx, row in enumerate(rows):
+        is_red = False
+        if row:
+            last_val = str(row[-1]).strip()
+            if last_val in ('-', '0', '0.00', 'KES 0.00') or last_val.startswith('-'):
+                is_red = True
+            elif len(row) >= 4 and str(row[3]).strip() in ('-', '0', '0.00', 'Not set'):
+                is_red = True
+        if is_red:
+            red_rows.append(r_idx + 1)
+
+        cells = []
+        for i, val in enumerate(row):
+            al = aligns[i] if i < len(aligns) else "left"
+            align_code = al[0] if al else "l"
+            style_key = f"cell_{align_code}_red" if is_red else style_for.get(al, "cell_l")
+            cells.append(P(val, style_key))
+        table_data.append(cells)
+
+    has_totals = bool(totals)
+    if has_totals:
+        table_data.append([P(v, "total_lbl" if i == 0 else "total_val")
+                           for i, v in enumerate(totals)])
+
+    n_rows = len(table_data)
+    last = n_rows - 1
+    data_last = last - 1 if has_totals else last
+    tbl = Table(table_data, colWidths=col_pts, repeatRows=1)
+    cmds = [
+        ("BACKGROUND",(0,0),(-1,0),DARK_GREEN),
+        ("GRID",(0,0),(-1,-1),0.4,BORDER_CLR),
+        ("LINEBELOW",(0,0),(-1,0),1.0,WHITE),
+        ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ("LEFTPADDING",(0,0),(-1,-1),3), ("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+    ]
+    if data_last >= 1:
+        cmds.append(("ROWBACKGROUNDS",(0,1),(-1,data_last),[WHITE, LIGHT_GREEN]))
+    for r_idx in red_rows:
+        cmds.append(("BACKGROUND", (0, r_idx), (-1, r_idx), colors.HexColor("#FFEBEE")))
+    if has_totals:
+        cmds += [("BACKGROUND",(0,last),(-1,last),ACCENT),
+                 ("LINEABOVE",(0,last),(-1,last),1.5,colors.HexColor("#555555"))]
+    tbl.setStyle(TableStyle(cmds))
+    story += [tbl, Spacer(1, 8*mm)]
+
+    # ── SIGNATURES + FOOTER ───────────────────────────────────────────────────
+    sig = Table([[P("Prepared by: "+"_"*38, "sig"), P("", "sig"), P("Verified by: "+"_"*38, "sig")]],
+                colWidths=[usable_w*0.44, usable_w*0.12, usable_w*0.44])
+    sig.setStyle(TableStyle([("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    story += [sig, Spacer(1, 4*mm),
+              HRFlowable(width=usable_w, thickness=0.5, color=BORDER_CLR),
+              Spacer(1, 2*mm),
+              P(f"(c) 2026 {company} - Confidential Document   |   Generated: {generated}", "footer")]
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
