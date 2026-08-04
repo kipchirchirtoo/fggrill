@@ -7908,7 +7908,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                           // ── Tappable Total Sales ──────────────────────────
                           GestureDetector(
                             onTap: () =>
-                                setSalesState((_) => salesExpanded = !salesExpanded),
+                                setSalesState(() => salesExpanded = !salesExpanded),
                             child: Card(
                               elevation: 0,
                               margin: EdgeInsets.zero,
