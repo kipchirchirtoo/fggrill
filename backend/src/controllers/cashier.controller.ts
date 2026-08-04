@@ -8057,14 +8057,6 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         : { data: null, error: null };
     if (branchResult.error) throw branchResult.error;
     const branch = branchResult.data;
-    const storedRawLines = await safeLogbookQuery(
-        'cashier_logbook_lines',
-        supabase
-            .from('cashier_logbook_lines')
-            .select('*')
-            .eq('logbook_id', logbook.id)
-            .order('created_at', { ascending: true })
-    );
 
     let shift: any = null;
     let outletShift: any = null;
@@ -8075,6 +8067,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     let outletOrders: any[] = [];
     let outletPayments: any[] = [];
     let creditBillRecords: any[] = [];
+    let shiftReconciliationExpenses: any[] = [];
+    let generalExpenses: any[] = [];
     let shiftActualCollections: any[] = [];
     let voidAudit = {
         lines: [] as any[],
@@ -8115,6 +8109,15 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                 .select('*')
                 .eq('shift_id', logbook.cashier_shift_id)
                 .order('transaction_time', { ascending: true })
+        );
+
+        shiftReconciliationExpenses = await safeLogbookQuery(
+            'shift_reconciliation_expenses',
+            supabase
+                .from('shift_reconciliation_expenses')
+                .select('*')
+                .eq('shift_id', logbook.cashier_shift_id)
+                .order('created_at', { ascending: true })
         );
 
         if (shift?.branch_id && shift?.cashier_id && shift?.shift_start) {
@@ -8181,6 +8184,18 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                     .from('credit_bills')
                     .select('*')
                     .eq('branch_id', shift.branch_id)
+                    .gte('created_at', startedAt)
+                    .lte('created_at', endedAt)
+                    .order('created_at', { ascending: true })
+            );
+
+            generalExpenses = await safeLogbookQuery(
+                'expenses',
+                supabase
+                    .from('expenses')
+                    .select('*')
+                    .eq('branch_id', shift.branch_id)
+                    .eq('created_by', shift.cashier_id)
                     .gte('created_at', startedAt)
                     .lte('created_at', endedAt)
                     .order('created_at', { ascending: true })
@@ -8323,6 +8338,22 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const generatedLines = [
         ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
         ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction')),
+        ...shiftReconciliationExpenses.map((exp) => normalizeLogbookLine({
+            ...exp,
+            amount: exp.amount,
+            section: 'petty_cash_expenses',
+            payment_method: 'cash',
+            customer_name: exp.paid_to_name || exp.description || exp.category || 'Shift Expense',
+            reference: exp.receipt_number || exp.po_reference || 'EXP'
+        })),
+        ...(generalExpenses || []).map((exp) => normalizeLogbookLine({
+            ...exp,
+            amount: exp.amount,
+            section: 'petty_cash_expenses',
+            payment_method: exp.payment_method || 'cash',
+            customer_name: exp.description || exp.category || 'General Expense',
+            reference: exp.expense_number || 'EXP'
+        })),
         ...restaurantOrders.map((line) => normalizeLogbookLine({
             ...line,
             amount: line.total_amount,
@@ -8473,15 +8504,25 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const openingFloat = logbookNumber(logbook.opening_float ?? shift?.opening_float);
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
     const cashDrops = 0;
-    const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
-    const expenseTotal = logbookNumber(breakdown.expense_total ?? shift?.expense_total);
+
+    const shiftExpenseSum = shiftReconciliationExpenses.reduce((sum, e) => sum + logbookNumber(e.amount), 0);
+    const generalExpenseSum = (generalExpenses || []).reduce((sum, e) => sum + logbookNumber(e.amount), 0);
+    const totalRecordedExpenses = shiftExpenseSum + generalExpenseSum;
+
+    const payouts = totalRecordedExpenses > 0
+        ? totalRecordedExpenses
+        : logbookNumber(breakdown.payouts ?? breakdown.paid_outs ?? breakdown.expense_total ?? shift?.expense_total);
+    const expenseTotal = totalRecordedExpenses > 0
+        ? totalRecordedExpenses
+        : logbookNumber(breakdown.expense_total ?? shift?.expense_total);
+
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
 
     const hasStoredExpected = shift != null && shift.expected_closing_float !== undefined && shift.expected_closing_float !== null;
     const hasStoredVariance = shift != null && shift.variance !== undefined && shift.variance !== null;
     const expectedCash = hasStoredExpected
         ? logbookNumber(shift.expected_closing_float)
-        : (openingFloat + totalCash + creditPaymentsReceived);
+        : (openingFloat + totalCash + creditPaymentsReceived - payouts);
     const variance = hasStoredVariance
         ? logbookNumber(shift.variance)
         : (closingFloat - expectedCash);
@@ -8618,6 +8659,27 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         card: reconciliationRow('card')
     };
 
+    const expenseDetails = [
+        ...shiftReconciliationExpenses.map((e) => ({
+            id: e.id,
+            category: e.category,
+            description: e.description || e.category || 'Shift Expense',
+            amount: logbookNumber(e.amount),
+            paid_to_name: e.paid_to_name || null,
+            receipt_number: e.receipt_number || null,
+            created_at: e.created_at
+        })),
+        ...(generalExpenses || []).map((e) => ({
+            id: e.id,
+            category: e.category,
+            description: e.description || e.category || 'Expense',
+            amount: logbookNumber(e.amount),
+            paid_to_name: null,
+            receipt_number: e.expense_number || null,
+            created_at: e.created_at
+        }))
+    ];
+
     return {
         id: logbook.id,
         status: logbook.status,
@@ -8696,6 +8758,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         revenue_breakdown: revenueBreakdown,
         credit_bills: creditBills,
         credit_bills_total: creditBillsTotal,
+        expense_details: expenseDetails,
         void_summary: voidAudit.summary,
         void_lines: voidLines,
         lines: allLines,
