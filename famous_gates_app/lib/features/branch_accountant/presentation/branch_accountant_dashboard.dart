@@ -37,6 +37,7 @@ import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
+import 'staff_accounts_screen.dart';
 import 'waiter_audit_screen.dart';
 import 'daily_controls_screen.dart';
 import 'event_orders_screen.dart';
@@ -75,6 +76,7 @@ enum BranchAccountantSection {
   payments,
   outboundPayments,
   creditBills,
+  staffAccounts,
   staffPosAccounting,
   bookingsInvoices,
   inventoryJournals,
@@ -271,6 +273,8 @@ class _BranchAccountantDashboardState
         );
       case BranchAccountantSection.creditBills:
         return const _CreditBillsSection();
+      case BranchAccountantSection.staffAccounts:
+        return const StaffAccountsScreen();
       case BranchAccountantSection.staffPosAccounting:
         return const StaffPosAccountingScreen();
       case BranchAccountantSection.bookingsInvoices:
@@ -356,8 +360,8 @@ final _navItems = [
       BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
   _NavItem(
       BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
-  _NavItem(
-      BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
+  _NavItem(BranchAccountantSection.staffAccounts, 'Staff Accounts',
+      Icons.account_balance_wallet),
   _NavItem(BranchAccountantSection.staffPosAccounting, 'Staff POS Accounting',
       Icons.receipt_long),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
@@ -10633,7 +10637,7 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         _buildDateButton(context, 'To', _to, false),
         _RefreshButton(onPressed: _refresh),
         OutlinedButton.icon(
-          onPressed: () => _printCreditBillsPdfReport(selectedItems),
+          onPressed: () => _generateCreditBillsPdf(selectedItems),
           icon: const Icon(Icons.picture_as_pdf),
           label: const Text('Export PDF'),
         ),
@@ -11338,6 +11342,167 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     _refresh();
   }
 
+  Future<void> _generateCreditBillsPdf(List<Map<String, dynamic>> items) async {
+    final pdf = pw.Document();
+    pw.MemoryImage? logoImage;
+    try {
+      final logoBytes = await rootBundle.load('assets/frontend_public/fglogo.png');
+      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+    } catch (_) {}
+
+    final totalAmount = items.fold<num>(0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
+    final totalPaid = items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
+    final totalBalance = items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
+    final numFormat = NumberFormat('#,##0.00', 'en_KE');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        build: (pw.Context ctx) {
+          return [
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (logoImage != null)
+                  pw.Image(logoImage, width: 64, height: 44)
+                else
+                  pw.Container(width: 64),
+                pw.SizedBox(width: 14),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('FamousGate Hotels',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
+                      pw.Text('Bomet, Kenya  ·  Tel: 0706782828',
+                          style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                      pw.Text('Email: famousgatesbmt@gmail.com  ·  www.famousgatehotels.com',
+                          style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey600)),
+                    ],
+                  ),
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('CREDIT LEDGER REPORT',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.blue800)),
+                    pw.Text('Period: $_from to $_to',
+                        style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 6),
+            pw.Divider(thickness: 1, color: PdfColors.grey400),
+            pw.SizedBox(height: 8),
+
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.blue50,
+                    borderRadius: pw.BorderRadius.circular(6),
+                    border: pw.Border.all(color: PdfColors.blue700, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text('Total Credit Granted', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.blue800, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('KES ${numFormat.format(totalAmount)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.blue900, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.green50,
+                    borderRadius: pw.BorderRadius.circular(6),
+                    border: pw.Border.all(color: PdfColors.green700, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text('Total Paid/Applied', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.green800, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('KES ${numFormat.format(totalPaid)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.green900, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.orange50,
+                    borderRadius: pw.BorderRadius.circular(6),
+                    border: pw.Border.all(color: PdfColors.orange700, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text('Net Outstanding Balance', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.orange800, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('KES ${numFormat.format(totalBalance)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.orange900, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+
+            pw.Table(
+              columnWidths: const {
+                0: pw.FlexColumnWidth(2.5),
+                1: pw.FlexColumnWidth(3.0),
+                2: pw.FlexColumnWidth(1.8),
+                3: pw.FlexColumnWidth(1.8),
+                4: pw.FlexColumnWidth(1.8),
+                5: pw.FlexColumnWidth(1.5),
+              },
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Staff / Customer', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Paid', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Balance', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                  ],
+                ),
+                ...items.map((it) => pw.TableRow(
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_staffName(it), style: const pw.TextStyle(fontSize: 8))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_text(it, ['description']), style: const pw.TextStyle(fontSize: 8))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_money(_num(it['amount'])), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_money(_num(it['paid_amount'])), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_money(_staffCreditBalance(it)), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_text(it, ['status']), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                  ],
+                )),
+              ],
+            ),
+            pw.SizedBox(height: 24),
+
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Prepared By: Branch Accountant ________________', style: const pw.TextStyle(fontSize: 9)),
+                pw.Text('Approved By: Internal Auditor ________________', style: const pw.TextStyle(fontSize: 9)),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Credit_Ledger_Report_${_from}_to_${_to}.pdf',
+    );
+  }
+
   void _printCreditBillsPdfReport(List<Map<String, dynamic>> items) {
     final totalAmount = items.fold<num>(0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
     final totalPaid = items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
@@ -11428,9 +11593,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close')),
           FilledButton.icon(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(dialogCtx);
-              _notify(context, 'PDF report sent to printer / download queue');
+              await _generateCreditBillsPdf(items);
             },
             icon: const Icon(Icons.print),
             label: const Text('Print / Save PDF'),
