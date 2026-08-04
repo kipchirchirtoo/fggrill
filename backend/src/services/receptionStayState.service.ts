@@ -458,6 +458,40 @@ export async function performReceptionCheckIn(input: {
         throw new AppError('Room is out of service and cannot be checked in', 409);
       }
 
+      // Auto-clear / auto-checkout stale active reservations for this room if:
+      // 1. The room is NOT currently 'occupied' (it is vacant, clean, dirty, or available)
+      // 2. OR the prior reservation has a check_out_date < CURRENT_DATE
+      if (physicalStatus !== 'occupied') {
+        await client.query(
+          `
+            UPDATE reservations
+            SET status = 'checked_out',
+                checked_out_at = COALESCE(checked_out_at, NOW()),
+                updated_at = NOW()
+            WHERE room_id = $1
+              AND id <> $2
+              AND checked_out_at IS NULL
+              AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
+          `,
+          [booking.room_id, booking.id]
+        );
+      } else {
+        await client.query(
+          `
+            UPDATE reservations
+            SET status = 'checked_out',
+                checked_out_at = COALESCE(checked_out_at, NOW()),
+                updated_at = NOW()
+            WHERE room_id = $1
+              AND id <> $2
+              AND checked_out_at IS NULL
+              AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
+              AND check_out_date < CURRENT_DATE
+          `,
+          [booking.room_id, booking.id]
+        );
+      }
+
       const conflictRes = await client.query(
         `
           SELECT id, confirmation_number

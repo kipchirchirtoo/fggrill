@@ -141,21 +141,62 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   }
 
   String _staffName(Map m) {
-    final direct = _t(m, ['staff_name']);
-    if (direct.isNotEmpty) return direct;
-    final id = _t(m, ['staff_id']);
-    final s = _staffIndex[id];
-    if (s != null) return _t(s, ['staff_name', 'full_name']).ifEmptyName(s);
-    final joined =
-        '${_t(m, ['first_name'])} ${_t(m, ['last_name'])}'.trim();
-    return joined.isEmpty ? 'Staff' : joined;
+    // 1. Direct top-level name keys
+    final direct = _t(m, ['staff_name', 'full_name', 'name', 'employee_name', 'customer_name']);
+    if (direct.isNotEmpty && direct.toLowerCase() != 'staff' && direct.toLowerCase() != 'null') {
+      return direct;
+    }
+
+    // 2. Nested staff/user/profile objects
+    for (final parentKey in ['staff', 'staff_profile', 'user', 'employee', 'created_by_user']) {
+      final parent = m[parentKey];
+      if (parent is Map) {
+        final nestedName = _t(parent, ['full_name', 'staff_name', 'name', 'username']);
+        if (nestedName.isNotEmpty) return nestedName;
+        final joinedNested = '${_t(parent, ['first_name'])} ${_t(parent, ['last_name'])}'.trim();
+        if (joinedNested.isNotEmpty) return joinedNested;
+      }
+    }
+
+    // 3. First + last name on top level
+    final joined = '${_t(m, ['first_name'])} ${_t(m, ['last_name'])}'.trim();
+    if (joined.isNotEmpty) return joined;
+
+    // 4. Lookup via staff index using all possible ID keys
+    final id = _t(m, ['staff_id', 'staff_profile_id', 'user_id', 'employee_id']);
+    if (id.isNotEmpty) {
+      final s = _staffIndex[id];
+      if (s != null) {
+        final sName = _t(s, ['full_name', 'staff_name', 'name', 'first_name']);
+        if (sName.isNotEmpty) {
+          final sLast = _t(s, ['last_name']);
+          return sLast.isNotEmpty && !sName.contains(sLast) ? '$sName $sLast'.trim() : sName;
+        }
+      }
+    }
+
+    // 5. Fallback to description / reference if available
+    final desc = _t(m, ['description', 'remarks', 'reason']);
+    if (desc.contains('-')) {
+      final parts = desc.split('-');
+      if (parts.length > 1 && parts.last.trim().isNotEmpty) {
+        final potentialName = parts.last.trim();
+        if (!potentialName.toUpperCase().startsWith('CRD') && !potentialName.toUpperCase().startsWith('FG')) {
+          return potentialName;
+        }
+      }
+    }
+
+    return 'Staff';
   }
 
   Map<String, Map<String, dynamic>> get _staffIndex {
     final map = <String, Map<String, dynamic>>{};
     for (final s in _staffList) {
-      final id = _t(s, ['id', 'staff_id']);
-      if (id.isNotEmpty) map[id] = s;
+      for (final idKey in ['id', 'staff_id', 'user_id', 'employee_id', 'employee_number', 'national_id']) {
+        final id = _t(s, [idKey]);
+        if (id.isNotEmpty) map[id] = s;
+      }
     }
     return map;
   }
