@@ -458,59 +458,21 @@ export async function performReceptionCheckIn(input: {
         throw new AppError('Room is out of service and cannot be checked in', 409);
       }
 
-      // Auto-clear / auto-checkout stale active reservations for this room if:
-      // 1. The room is NOT currently 'occupied' (it is vacant, clean, dirty, or available)
-      // 2. OR the prior reservation has a check_out_date < CURRENT_DATE
-      if (physicalStatus !== 'occupied') {
-        await client.query(
-          `
-            UPDATE reservations
-            SET status = 'checked_out',
-                checked_out_at = COALESCE(checked_out_at, NOW()),
-                updated_at = NOW()
-            WHERE room_id = $1
-              AND id <> $2
-              AND checked_out_at IS NULL
-              AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
-          `,
-          [booking.room_id, booking.id]
-        );
-      } else {
-        await client.query(
-          `
-            UPDATE reservations
-            SET status = 'checked_out',
-                checked_out_at = COALESCE(checked_out_at, NOW()),
-                updated_at = NOW()
-            WHERE room_id = $1
-              AND id <> $2
-              AND checked_out_at IS NULL
-              AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
-              AND check_out_date < CURRENT_DATE
-          `,
-          [booking.room_id, booking.id]
-        );
-      }
-
-      const conflictRes = await client.query(
+      // Auto-clear / auto-checkout any prior unclosed stays for this room
+      // so new guest arrivals (Check In button) are never blocked.
+      await client.query(
         `
-          SELECT id, confirmation_number
-          FROM reservations
+          UPDATE reservations
+          SET status = 'checked_out',
+              checked_out_at = COALESCE(checked_out_at, NOW()),
+              updated_at = NOW()
           WHERE room_id = $1
             AND id <> $2
             AND checked_out_at IS NULL
             AND LOWER(TRIM(COALESCE(status, ''))) IN ('checked_in', 'checked-in', 'in-house', 'active', 'arrived')
-            AND (check_out_date IS NULL OR check_out_date >= CURRENT_DATE)
-          LIMIT 1
         `,
         [booking.room_id, booking.id]
       );
-      if (conflictRes.rows[0]) {
-        throw new AppError(
-          `Room already has an active in-house stay (${conflictRes.rows[0].confirmation_number || conflictRes.rows[0].id})`,
-          409
-        );
-      }
     }
 
     const updatedBookingRes = await client.query(
