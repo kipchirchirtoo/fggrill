@@ -3140,7 +3140,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
           transactionId: code.isEmpty ? DateTime.now().toString() : code,
           createdAt: DateTime.now(),
           receiptNumber: code.isEmpty ? null : code,
-          cashierName: nav.user?.name,
+          cashierName: _text(bill, ['waiter_name', 'staff_name', 'waiter']).isNotEmpty
+              ? _text(bill, ['waiter_name', 'staff_name', 'waiter'])
+              : nav.user?.name,
           total: total.toDouble(),
           paymentMethod: 'pending',
         ),

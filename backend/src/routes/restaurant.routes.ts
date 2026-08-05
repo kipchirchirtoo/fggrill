@@ -554,22 +554,26 @@ router.get('/kitchen/orders',
         const { data: outletShifts, error: shiftError } = await shiftQuery;
         if (shiftError) throw shiftError;
 
-        const allBranchShiftIds = (outletShifts || []).map((shift: any) => shift.id);
-        const restaurantShiftSet = new Set(
-          (outletShifts || [])
-            .filter((shift: any) => {
-              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-              return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
-            })
-            .map((shift: any) => shift.id)
-        );
+
+        // Only shifts whose outlet_type matches the requested KDS scope.
+        // This is what isolates Choma Zone KDS from restaurant shifts and vice versa.
+        const scopedShiftIds = (outletShifts || [])
+          .filter((shift: any) => {
+            const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+            return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
+          })
+          .map((shift: any) => shift.id);
+        // restaurantShiftSet keeps the same semantics as before (used to drive
+        // the food-category heuristic inside isKitchenVisiblePosOrder), but now
+        // equals scopedShiftIds when outletScope === 'restaurant'.
+        const restaurantShiftSet = new Set(outletScope === 'restaurant' ? scopedShiftIds : []);
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
-        if (allBranchShiftIds.length) {
+        if (scopedShiftIds.length) {
           const { data: posOrders, error: posOrdersError } = await supabase
             .from('pos_shift_orders')
             .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, total_amount, captain_printed_at, items')
-            .in('shift_id', allBranchShiftIds)
+            .in('shift_id', scopedShiftIds)
             .gte('created_at', stopSignalSince)
             .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
             .order('created_at', { ascending: true });
