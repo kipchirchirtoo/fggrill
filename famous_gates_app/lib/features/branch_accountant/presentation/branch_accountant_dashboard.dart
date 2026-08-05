@@ -391,12 +391,6 @@ final _navItems = [
   // ── Finance & oversight ──
   _NavItem(
       BranchAccountantSection.financialClose, 'Daily Close', Icons.lock_clock),
-  _NavItem(BranchAccountantSection.branchPayroll, 'Branch Payroll',
-      Icons.people_alt),
-  _NavItem(
-      BranchAccountantSection.payrollPolicies, 'Payroll Policies', Icons.tune),
-  _NavItem(BranchAccountantSection.payrollAdjustments, 'Payroll Adjustments',
-      Icons.adjust),
   _NavItem(
       BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
   _NavItem(
@@ -10255,6 +10249,92 @@ class _PaymentsInvoicesSectionState
     }
   }
 
+  Future<void> _downloadPdf(
+      List<Map<String, dynamic>> payments, Map<String, dynamic> stats) async {
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final payload = {
+        'title': 'BRANCH PAYMENTS DASHBOARD REPORT',
+        'period': 'Period: $_from to $_to',
+        'branch': 'Kyogong',
+        'company_name': 'FAMOUSGATE HOTELS',
+        'columns': const [
+          {'header': 'Date', 'align': 'center', 'weight': 1.5},
+          {'header': 'Source', 'align': 'left', 'weight': 1.5},
+          {'header': 'Description', 'align': 'left', 'weight': 3.5},
+          {'header': 'Method', 'align': 'center', 'weight': 1.8},
+          {'header': 'Reference', 'align': 'left', 'weight': 2.2},
+          {'header': 'Amount (KES)', 'align': 'right', 'weight': 2.0},
+          {'header': 'Recorded By', 'align': 'left', 'weight': 2.5},
+          {'header': 'Status', 'align': 'center', 'weight': 1.5},
+        ],
+        'rows': payments.map((p) {
+          final amt = _num(p['amount']);
+          return [
+            _shortDate(_text(p, [
+              '_transaction_date',
+              'recorded_at',
+              'created_at',
+              'transaction_date'
+            ])),
+            _paymentSourceLabel(p),
+            _paymentDescription(p),
+            _title(_text(p, ['payment_method'])),
+            _paymentReference(p),
+            NumberFormat('#,##0.00').format(amt),
+            _paymentRecordedBy(p),
+            _paymentStatusLabel(_text(p, ['status'])).toUpperCase(),
+          ];
+        }).toList(),
+        'summary': [
+          {
+            'label': 'Total Payments',
+            'value': '${_num(stats['total_payments']).toInt()}'
+          },
+          {
+            'label': 'Total Amount',
+            'value':
+                'KES ${NumberFormat('#,##0.00').format(_num(stats['total_amount']))}'
+          },
+          {
+            'label': 'Pending Payments',
+            'value': '${_num(stats['pending']).toInt()}'
+          },
+          {
+            'label': 'Approved Payments',
+            'value': '${_num(stats['auditor_verified']).toInt()}'
+          },
+          {
+            'label': 'Banking Total',
+            'value':
+                'KES ${NumberFormat('#,##0.00').format(_num(stats['banking_total']))}'
+          },
+          {
+            'label': 'POS / Cashier Total',
+            'value':
+                'KES ${NumberFormat('#,##0.00').format(_num(stats['pos_total']) + _num(stats['payments_total']))}'
+          },
+        ],
+        'totals': [
+          'TOTALS',
+          '',
+          '',
+          '',
+          '',
+          NumberFormat('#,##0.00').format(_num(stats['total_amount'])),
+          '',
+          ''
+        ],
+      };
+
+      final file = await repo.generateStatementPdf(payload);
+      await Printing.layoutPdf(onLayout: (format) async => file.readAsBytes());
+      if (mounted) _notify(context, 'Payments PDF prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to export payments PDF: $e');
+    }
+  }
+
   String _csvCell(Object? value) {
     var text = '${value ?? ''}'.replaceAll('\r', ' ').replaceAll('\n', ' ');
     if (text.startsWith('=') ||
@@ -10345,6 +10425,13 @@ class _PaymentsInvoicesSectionState
                 }),
               ),
               _RefreshButton(onPressed: _refresh),
+              OutlinedButton.icon(
+                onPressed: filteredPayments.isEmpty
+                    ? null
+                    : () => _downloadPdf(filteredPayments, stats),
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                label: const Text('Export PDF'),
+              ),
               OutlinedButton.icon(
                 onPressed: filteredPayments.isEmpty
                     ? null

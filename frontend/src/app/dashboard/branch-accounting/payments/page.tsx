@@ -9,7 +9,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import {
     CreditCard, RefreshCw, CheckCircle, AlertTriangle, Clock,
-    TrendingUp, Eye, Banknote, Filter, X
+    TrendingUp, Eye, Banknote, Filter, X, FileText, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentsVerificationAPI } from '@/lib/api';
@@ -159,6 +159,102 @@ export default function BranchPaymentsPage() {
         { id: 'flagged', label: 'Flagged', icon: AlertTriangle, countKey: 'flagged' as keyof PaymentStats },
     ];
 
+    const handleExportPdf = async () => {
+        try {
+            toast.loading('Generating payments PDF report...');
+            const payload = {
+                title: 'BRANCH PAYMENTS DASHBOARD REPORT',
+                period: `Period: ${startDate || 'All'} to ${endDate || 'Current'}`,
+                branch: 'Kyogong',
+                company_name: 'FAMOUSGATE HOTELS',
+                columns: [
+                    { header: 'Date', align: 'center', weight: 1.5 },
+                    { header: 'Source', align: 'left', weight: 1.5 },
+                    { header: 'Description', align: 'left', weight: 3.5 },
+                    { header: 'Method', align: 'center', weight: 1.8 },
+                    { header: 'Reference', align: 'left', weight: 2.2 },
+                    { header: 'Amount (KES)', align: 'right', weight: 2.0 },
+                    { header: 'Recorded By', align: 'left', weight: 2.5 },
+                    { header: 'Status', align: 'center', weight: 1.5 },
+                ],
+                rows: payments.map((p) => [
+                    p.recorded_at ? new Date(p.recorded_at).toLocaleDateString() : 'N/A',
+                    p.payment_source || 'Cashier',
+                    p.description || 'Branch Payment',
+                    p.payment_method || 'N/A',
+                    p.reference_number || 'N/A',
+                    Number(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    p.recorded_by_name || 'Staff',
+                    (p.status || 'PENDING').toUpperCase(),
+                ]),
+                summary: [
+                    { label: 'Total Payments', value: `${stats?.total_payments || payments.length}` },
+                    { label: 'Total Amount', value: `KES ${(stats?.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+                    { label: 'Pending Payments', value: `${stats?.pending || 0}` },
+                    { label: 'Approved Payments', value: `${stats?.auditor_verified || 0}` },
+                    { label: 'Banking Total', value: `KES ${(stats?.banking_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+                    { label: 'POS / Cashier Total', value: `KES ${((stats?.pos_total || 0) + (stats?.payments_total || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+                ],
+                totals: [
+                    'TOTALS', '', '', '', '',
+                    (stats?.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
+                    '', ''
+                ],
+            };
+
+            const response = await fetch('http://localhost:5001/api/payroll/generate-statement-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) throw new Error('PDF generation failed');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `FG_Payments_Dashboard_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            toast.dismiss();
+            toast.success('Payments PDF exported successfully!');
+        } catch (e: any) {
+            toast.dismiss();
+            toast.error(e.message || 'Failed to export PDF');
+        }
+    };
+
+    const handleExportCsv = () => {
+        try {
+            const headers = ['Date', 'Source', 'Description', 'Method', 'Reference', 'Amount', 'Recorded By', 'Status'];
+            const rows = payments.map((p) => [
+                p.recorded_at ? new Date(p.recorded_at).toLocaleDateString() : 'N/A',
+                p.payment_source || 'Cashier',
+                p.description || 'Branch Payment',
+                p.payment_method || 'N/A',
+                p.reference_number || 'N/A',
+                Number(p.amount || 0).toFixed(2),
+                p.recorded_by_name || 'Staff',
+                (p.status || 'PENDING').toUpperCase(),
+            ]);
+
+            const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `FG_Payments_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success('Payments CSV downloaded!');
+        } catch (e: any) {
+            toast.error('Failed to download CSV');
+        }
+    };
+
     return (
         <ProtectedRoute allowedRoles={[
             UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER,
@@ -175,14 +271,32 @@ export default function BranchPaymentsPage() {
                             </h1>
                             <p className="text-gray-500">All Branch Payments Including Banking Transactions</p>
                         </div>
-                        <IOSButton
-                            variant="secondary"
-                            onClick={() => { fetchPayments(); fetchStats(); }}
-                            leftIcon={<RefreshCw className={loading ? 'animate-spin' : ''} />}
-                            disabled={loading}
-                        >
-                            Refresh
-                        </IOSButton>
+                        <div className="flex items-center gap-2">
+                            <IOSButton
+                                variant="secondary"
+                                onClick={handleExportPdf}
+                                leftIcon={<FileText className="h-4 w-4 text-red-600" />}
+                                disabled={loading || payments.length === 0}
+                            >
+                                Export PDF
+                            </IOSButton>
+                            <IOSButton
+                                variant="secondary"
+                                onClick={handleExportCsv}
+                                leftIcon={<Download className="h-4 w-4 text-emerald-600" />}
+                                disabled={loading || payments.length === 0}
+                            >
+                                Export CSV
+                            </IOSButton>
+                            <IOSButton
+                                variant="secondary"
+                                onClick={() => { fetchPayments(); fetchStats(); }}
+                                leftIcon={<RefreshCw className={loading ? 'animate-spin' : ''} />}
+                                disabled={loading}
+                            >
+                                Refresh
+                            </IOSButton>
+                        </div>
                     </div>
 
                     {/* Date Filter */}
