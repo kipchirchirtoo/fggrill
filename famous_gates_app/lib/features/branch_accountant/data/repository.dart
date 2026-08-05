@@ -2418,6 +2418,11 @@ class BranchAccountantRepository {
     return _asList(await _dio.get('/corporate/customers'));
   }
 
+  Future<Map<String, dynamic>> createCorporateCustomer(Map<String, dynamic> data) async {
+    final res = await _dio.post('/corporate/customers', data: data);
+    return _asMap(res);
+  }
+
   Future<Map<String, dynamic>> updateCorporateCustomer(String id, Map<String, dynamic> data) async {
     final res = await _dio.put('/corporate/customers/$id', data: data);
     return _asMap(res.data);

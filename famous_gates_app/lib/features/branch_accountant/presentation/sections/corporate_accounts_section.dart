@@ -27,14 +27,36 @@ class _CorporateAccountsSectionState extends ConsumerState<CorporateAccountsSect
     super.dispose();
   }
 
+  void _showCreateDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => const _CreateCorporateDialog(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Corporate Accounts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Corporate Accounts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              ElevatedButton.icon(
+                onPressed: _showCreateDialog,
+                icon: const Icon(Icons.add_business),
+                label: const Text('New Corporate Account'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.kPrimary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ],
+          ),
         ),
         TabBar(
           controller: _tabCtrl,
@@ -62,6 +84,184 @@ class _CorporateAccountsSectionState extends ConsumerState<CorporateAccountsSect
   }
 }
 
+class _CreateCorporateDialog extends ConsumerStatefulWidget {
+  const _CreateCorporateDialog();
+
+  @override
+  ConsumerState<_CreateCorporateDialog> createState() => _CreateCorporateDialogState();
+}
+
+class _CreateCorporateDialogState extends ConsumerState<_CreateCorporateDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _contactCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _limitCtrl = TextEditingController(text: '500000');
+  final _periodCtrl = TextEditingController(text: '30');
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _contactCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _limitCtrl.dispose();
+    _periodCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _submitting = true);
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      await repo.createCorporateCustomer({
+        'name': _nameCtrl.text.trim(),
+        'contact_person': _contactCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'email': _emailCtrl.text.trim(),
+        'credit_limit': double.tryParse(_limitCtrl.text.trim()) ?? 500000.0,
+        'credit_period_days': int.tryParse(_periodCtrl.text.trim()) ?? 30,
+        'is_active': true,
+      });
+
+      ref.invalidate(corporateCustomersProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(
+            content: Text('Corporate Account Created Successfully!'),
+            backgroundColor: AppColors.kSuccess,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Failed to create corporate account: $e'),
+            backgroundColor: AppColors.kError,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.add_business, color: AppColors.kPrimary),
+          SizedBox(width: 8),
+          Text('Create Corporate Account'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 480,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Company / Organization Name *',
+                    hintText: 'e.g. Safaricom PLC, Bomet County Government',
+                    prefixIcon: Icon(Icons.business),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Company name is required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _contactCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact Person / Manager',
+                    hintText: 'e.g. John Doe (Finance)',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _phoneCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          hintText: 'e.g. 0712345678',
+                          prefixIcon: Icon(Icons.phone),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _emailCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Email Address',
+                          hintText: 'accounts@company.com',
+                          prefixIcon: Icon(Icons.email),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _limitCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Credit Limit (KES)',
+                          prefixIcon: Icon(Icons.payments),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _periodCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Credit Period (Days)',
+                          prefixIcon: Icon(Icons.calendar_today),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.kPrimary, foregroundColor: Colors.white),
+          child: _submitting
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Create Account'),
+        ),
+      ],
+    );
+  }
+}
+
 class _CompaniesTab extends ConsumerWidget {
   const _CompaniesTab();
 
@@ -70,20 +270,47 @@ class _CompaniesTab extends ConsumerWidget {
     final asyncData = ref.watch(corporateCustomersProvider);
     return asyncData.when(
       data: (customers) {
-        if (customers.isEmpty) return const Center(child: Text('No Corporate Companies.'));
+        if (customers.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.business_center_outlined, size: 64, color: AppColors.kTextSecondary),
+                const SizedBox(height: 12),
+                const Text('No Corporate Companies Created Yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                const Text('Click "New Corporate Account" at the top right to add a company.', style: TextStyle(color: AppColors.kTextSecondary)),
+              ],
+            ),
+          );
+        }
         return ListView.builder(
           itemCount: customers.length,
+          padding: const EdgeInsets.all(12),
           itemBuilder: (context, index) {
             final c = customers[index];
+            final limit = double.tryParse(c['credit_limit']?.toString() ?? '0') ?? 0.0;
+            final period = c['credit_period_days'] ?? 30;
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              elevation: 1.5,
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: ListTile(
-                title: Text(c['name'] ?? ''),
-                subtitle: Text('Credit Limit: KES ${c['credit_limit']} | Terms: ${c['credit_period_days']} Days'),
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                  child: const Icon(Icons.business, color: AppColors.kPrimary),
+                ),
+                title: Text(c['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    'Contact: ${c['contact_person'] ?? 'N/A'} | Phone: ${c['phone'] ?? 'N/A'} | Credit Limit: KES ${limit.toStringAsFixed(0)} (${period}d terms)',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
                 trailing: Switch(
                   value: c['is_active'] ?? true,
+                  activeColor: AppColors.kPrimary,
                   onChanged: (v) async {
-                    // Quick toggle active status
                     await ref.read(branchAccountantRepositoryProvider).updateCorporateCustomer(c['id'], {'is_active': v});
                     ref.invalidate(corporateCustomersProvider);
                   },
@@ -94,7 +321,7 @@ class _CompaniesTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Error: $err')),
+      error: (err, _) => Center(child: Text('Error loading corporate accounts: $err')),
     );
   }
 }
