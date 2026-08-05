@@ -7,8 +7,6 @@ add_library(${PLUGIN_NAME} SHARED
   "passkeys_windows_plugin.cpp"
 )
 
-apply_standard_cpp_compiler_flags(${PLUGIN_NAME})
-
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 
 target_include_directories(${PLUGIN_NAME} INTERFACE
