@@ -5,6 +5,7 @@ Matches the UI/UX designs from provided templates
 
 import os
 import io
+import tempfile
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import hashlib
@@ -674,7 +675,10 @@ class BrandedPDFGenerator:
             import random
             import string
             suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-            filename = f"/tmp/FG_Report_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{suffix}.pdf"
+            filename = os.path.join(tempfile.gettempdir(), f"FG_Report_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{suffix}.pdf")
+        elif filename.startswith("/tmp/") or filename.startswith("\\tmp\\"):
+            fname = os.path.basename(filename)
+            filename = os.path.join(tempfile.gettempdir(), fname)
         
         pagesize = landscape(A4) if landscape_mode else A4
         
@@ -2813,7 +2817,7 @@ class BrandedPDFGenerator:
         height_mm += 6  # bottom margin
 
         height = height_mm * mm
-        filename = f"/tmp/Bill_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = os.path.join(tempfile.gettempdir(), f"Bill_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
         c = canvas.Canvas(filename, pagesize=(width, height))
 
         y = height - 12 * mm
@@ -3046,7 +3050,7 @@ class BrandedPDFGenerator:
         height_mm += 6  # bottom margin
 
         height = height_mm * mm
-        filename = f"/tmp/Booking_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = os.path.join(tempfile.gettempdir(), f"Booking_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
         c = canvas.Canvas(filename, pagesize=(width, height))
 
         y = height - 12 * mm
@@ -3342,7 +3346,7 @@ class BrandedPDFGenerator:
         elements.append(Spacer(1, 0.1*inch))
         elements.append(Paragraph("<i>Issued by: FamousGate Hotels</i>", self.styles['SmallText']))
         
-        return self._create_pdf(elements, filename=f"/tmp/CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf")
+        return self._create_pdf(elements, filename=os.path.join(tempfile.gettempdir(), f"CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf"))
 
     def _generate_conference_summary_report(self, data: Dict, filters: Dict) -> str:
         """Generate Conference / Hall Booking Summary Report"""
