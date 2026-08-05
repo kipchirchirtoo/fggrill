@@ -5,6 +5,27 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+/// The built-in PDF fonts (Helvetica / WinAnsi encoding) have no glyph for
+/// several General-Punctuation characters — the bullet (•), en/em dashes,
+/// curly quotes and the ellipsis — so they print as a blank "tofu" box on
+/// invoices and receipts. Swap them for ASCII-safe equivalents before drawing
+/// any free text, so no stray boxes ever appear. (The middle dot · used in POS
+/// line descriptions IS in WinAnsi, so it is intentionally left untouched.)
+String _pdfSafe(String? value) {
+  if (value == null || value.isEmpty) return '';
+  return value
+      .replaceAll('•', '-') // • bullet
+      .replaceAll('‣', '-') // ‣ triangular bullet
+      .replaceAll('●', '-') // ● black circle
+      .replaceAll('–', '-') // – en dash
+      .replaceAll('—', '-') // — em dash
+      .replaceAll('…', '...') // … ellipsis
+      .replaceAll('‘', "'") // ' left single quote
+      .replaceAll('’', "'") // ' right single quote
+      .replaceAll('“', '"') // " left double quote
+      .replaceAll('”', '"'); // " right double quote
+}
+
 /// Official A4 Guest Invoice PDF generator for FamousGate Hotels.
 Future<void> printBookingInvoicePDF({
   required BuildContext context,
@@ -19,6 +40,10 @@ Future<void> printBookingInvoicePDF({
   required double amountPaid,
   double? balanceDue,
   String? notes,
+  // Force the document to render as a RECEIPT (title, numbering, colour and
+  // filename) regardless of the outstanding balance. Used by the reception
+  // Receipts screen to reprint a receipt for an already checked-out guest.
+  bool asReceipt = false,
 }) async {
   final pdf = pw.Document();
   pw.MemoryImage? logoImage;
@@ -52,8 +77,9 @@ Future<void> printBookingInvoicePDF({
       balanceDue ?? (grossTotal - paid).clamp(0.0, double.infinity);
 
   final bool isPaid = balance <= 0.01;
-  final String titleText = isPaid ? 'RECEIPT' : 'INVOICE';
-  final String docNumberLabel = isPaid ? 'Receipt #' : 'Invoice #';
+  final bool showAsReceipt = asReceipt || isPaid;
+  final String titleText = showAsReceipt ? 'RECEIPT' : 'INVOICE';
+  final String docNumberLabel = showAsReceipt ? 'Receipt #' : 'Invoice #';
 
   final numFormat = NumberFormat('#,##0.00', 'en_KE');
 
@@ -102,7 +128,9 @@ Future<void> printBookingInvoicePDF({
                       style: pw.TextStyle(
                           fontSize: 22,
                           fontWeight: pw.FontWeight.bold,
-                          color: isPaid ? PdfColors.green800 : PdfColors.grey800)),
+                          color: showAsReceipt
+                              ? PdfColors.green800
+                              : PdfColors.grey800)),
                 ],
               ),
             ],
@@ -121,14 +149,14 @@ Future<void> printBookingInvoicePDF({
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 10)),
                     pw.SizedBox(height: 3),
-                    pw.Text(clientName,
+                    pw.Text(_pdfSafe(clientName),
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 11)),
                     if (clientPhone != null && clientPhone.isNotEmpty)
-                      pw.Text(clientPhone,
+                      pw.Text(_pdfSafe(clientPhone),
                           style: const pw.TextStyle(fontSize: 9)),
                     if (clientDetails != null && clientDetails.isNotEmpty)
-                      pw.Text(clientDetails,
+                      pw.Text(_pdfSafe(clientDetails),
                           style: const pw.TextStyle(fontSize: 9)),
                   ],
                 ),
@@ -176,7 +204,7 @@ Future<void> printBookingInvoicePDF({
                     color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
                   ),
                   children: [
-                    _pdfDataCell(desc),
+                    _pdfDataCell(_pdfSafe(desc)),
                     _pdfDataCell('$qty'),
                     _pdfDataCell('Ksh ${numFormat.format(price)}'),
                     _pdfDataCell('16%'),
@@ -227,7 +255,7 @@ Future<void> printBookingInvoicePDF({
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
             pw.SizedBox(height: 2),
-            pw.Text(notes,
+            pw.Text(_pdfSafe(notes),
                 style: const pw.TextStyle(
                     fontSize: 8, color: PdfColors.grey700)),
           ],
@@ -259,7 +287,7 @@ Future<void> printBookingInvoicePDF({
     ),
   );
 
-  final String pdfDocName = isPaid
+  final String pdfDocName = showAsReceipt
       ? 'Receipt_${invoiceNumber.replaceAll('/', '_')}.pdf'
       : 'Invoice_${invoiceNumber.replaceAll('/', '_')}.pdf';
 

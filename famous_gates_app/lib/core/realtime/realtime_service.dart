@@ -232,6 +232,36 @@ class RealtimeService {
       },
     );
 
+    // 4. Listen to pos_customer_bills table changes
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'pos_customer_bills',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'branch_id',
+        value: branchId,
+      ),
+      callback: (payload) {
+        final newRecord = payload.newRecord;
+        final oldRecord = payload.oldRecord;
+        final eventType = _parseEventType(payload.eventType);
+
+        final record = newRecord.isNotEmpty ? newRecord : oldRecord;
+        if (record.isEmpty) return;
+
+        final event = OrderItemRealtimeEvent(
+          orderId: record['id']?.toString() ?? '',
+          eventType: eventType,
+          status: record['payment_status']?.toString() ?? 'unpaid',
+          orderNumber: record['bill_number']?.toString() ?? record['short_code']?.toString(),
+          branchId: branchId,
+          payload: record,
+        );
+        controller.add(event);
+      },
+    );
+
     channel.subscribe((status, [error]) {
       debugPrint('🔌 RealtimeService Orders subscription status: $status');
       if (status == RealtimeSubscribeStatus.subscribed) {

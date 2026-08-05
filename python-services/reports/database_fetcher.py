@@ -97,6 +97,7 @@ class DatabaseFetcher:
                 'revenue_reconciliation': self._fetch_revenue_reconciliation,
                 'sales_performance': self._fetch_sales_performance,
                 'staff_performance': self._fetch_staff_performance,
+                'waiter_sales_audit': self._fetch_waiter_sales_audit,
                 'stock_requests': self._fetch_stock_requests,
                 'stock_requests_history': self._fetch_stock_requests_history,
             }
@@ -2378,6 +2379,567 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         except Exception as e:
             logger.error(f"Error fetching staff performance: {e}", exc_info=True)
 
+        return data
+
+    def _fetch_waiter_sales_audit(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch data for the multi-page Waiter Sales Audit report"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        outlet_id = filters.get('outlet_id')
+        waiter_id = filters.get('waiter_id')
+        shift_id = filters.get('shift_id') or filters.get('shift')
+        
+        data = {
+            'branch_name': 'All Branches',
+            'outlet_name': 'All Outlets',
+            'start_date': start_date,
+            'end_date': end_date,
+            'summary': {
+                'total_sales': 0.0,
+                'total_orders': 0,
+                'avg_sale_order': 0.0,
+                'num_waiters': 0,
+                'highest_selling_waiter': 'None',
+                'highest_sales': 0.0,
+                'lowest_selling_waiter': 'None',
+                'lowest_sales': 0.0,
+                'voids_total': 0.0,
+                'discounts_total': 0.0,
+                'complimentary_total': 0.0,
+                'credit_bills_total': 0.0,
+                'void_rate': 0.0,
+                'discount_rate': 0.0,
+                'payment_methods': {
+                    'Cash': 0.0,
+                    'M-Pesa': 0.0,
+                    'Card': 0.0,
+                    'Credit': 0.0,
+                    'Room Charge': 0.0
+                }
+            },
+            'waiter_rankings': [],
+            'category_summaries': {
+                'Food': 0.0,
+                'Soft drinks': 0.0,
+                'Beer': 0.0,
+                'Wines and spirits': 0.0,
+                'Accommodation': 0.0,
+                'Conference': 0.0,
+                'Other services': 0.0
+            },
+            'item_sales_by_waiter': {},
+            'waiter_deep_dives': [],
+            'timeline_audit': [],
+            'daily_weekly_monthly': {
+                'daily_sales': [],
+                'weekly_sales': [],
+                'monthly_sales': [],
+                'busiest_day': 'N/A',
+                'busiest_hour': 'N/A',
+                'slowest_day': 'N/A'
+            },
+            'exceptions_findings': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # Fetch branch name
+            if branch_id:
+                try:
+                    br_res = self.client.table('branches').select('name').eq('id', int(branch_id)).maybeSingle().execute()
+                    if br_res.data:
+                        data['branch_name'] = br_res.data.get('name', f"Branch {branch_id}")
+                except Exception:
+                    pass
+            
+            # Fetch outlet name
+            if outlet_id:
+                try:
+                    ot_res = self.client.table('pos_outlets').select('name').eq('id', outlet_id).maybeSingle().execute()
+                    if ot_res.data:
+                        data['outlet_name'] = ot_res.data.get('name', 'Unknown Outlet')
+                except Exception:
+                    pass
+            
+            # Query pos_shift_orders
+            orders_query = self.client.table('pos_shift_orders').select('*')
+            orders_query = orders_query.gte('created_at', f"{start_date}T00:00:00+03:00")
+            orders_query = orders_query.lte('created_at', f"{end_date}T23:59:59+03:00")
+            
+            if branch_id:
+                orders_query = orders_query.eq('branch_id', int(branch_id))
+            if outlet_id:
+                orders_query = orders_query.eq('outlet_id', outlet_id)
+            if waiter_id:
+                orders_query = orders_query.eq('waiter_id', waiter_id)
+            if shift_id:
+                orders_query = orders_query.eq('shift_id', shift_id)
+                
+            orders_res = orders_query.execute()
+            orders = orders_res.data or []
+            
+            if not orders:
+                return data
+                
+            # Fetch users map
+            user_ids = list(set([o['waiter_id'] for o in orders if o.get('waiter_id')]))
+            users_map = {}
+            if user_ids:
+                try:
+                    users_res = self.client.table('users').select('id, first_name, last_name, employee_id, role').in_('id', user_ids).execute()
+                    for u in (users_res.data or []):
+                        users_map[u['id']] = u
+                except Exception:
+                    pass
+                    
+            # Processing structures
+            waiter_aggregates = {} # waiter_id -> dict
+            daily_sales_map = {} # date_str -> amount
+            hourly_sales_map = {} # hour -> amount
+            weekday_sales_map = {} # weekday -> amount
+            
+            total_gross = 0.0
+            total_net = 0.0
+            total_voids = 0.0
+            total_discounts = 0.0
+            total_complimentary = 0.0
+            total_credit = 0.0
+            
+            pm_cash = 0.0
+            pm_mpesa = 0.0
+            pm_card = 0.0
+            pm_credit = 0.0
+            pm_room = 0.0
+            
+            # Helper to classify categories
+            def get_category_group(category_name, item_name):
+                c = str(category_name or '').lower()
+                n = str(item_name or '').lower()
+                if any(k in c or k in n for k in ['food', 'meal', 'chips', 'breakfast', 'cater', 'starter', 'main', 'dessert', 'salad', 'soup', 'meat', 'chicken', 'fish', 'beef', 'rice', 'ugali', 'pizza', 'burger', 'sandwich', 'egg', 'bread', 'fry', 'stew', 'platter']):
+                    return 'Food'
+                elif any(k in c or k in n for k in ['soft', 'soda', 'water', 'juice', 'tea', 'coffee', 'mug', 'beverage', 'milk', 'smoothie', 'coke', 'fanta', 'sprite', 'pepsi', 'drink']):
+                    return 'Soft drinks'
+                elif any(k in c or k in n for k in ['beer', 'tusker', 'guinness', 'heineken', 'white cap', 'whitecap', 'pilsner', 'lager', 'savanna', 'cider']):
+                    return 'Beer'
+                elif any(k in c or k in n for k in ['wine', 'spirit', 'whisky', 'whiskey', 'vodka', 'gin', 'rum', 'tequila', 'brandy', 'liqueur', 'cocktail', 'champagne', 'glenfiddich', 'jameson', 'johnnie', 'jack daniel', 'liqueur']):
+                    return 'Wines and spirits'
+                elif any(k in c or k in n for k in ['room', 'stay', 'accommodation', 'suite', 'cottage']):
+                    return 'Accommodation'
+                elif any(k in c or k in n for k in ['conference', 'hall', 'meeting', 'seminar', 'projector', 'pa system']):
+                    return 'Conference'
+                else:
+                    return 'Other services'
+
+            # Process orders
+            for o in orders:
+                w_id = o.get('waiter_id')
+                if not w_id:
+                    continue
+                    
+                w_profile = users_map.get(w_id, {})
+                w_name = o.get('waiter_name') or f"{w_profile.get('first_name', '')} {w_profile.get('last_name', '')}".strip() or 'Unknown Waiter'
+                w_emp_id = w_profile.get('employee_id') or 'N/A'
+                
+                if w_id not in waiter_aggregates:
+                    waiter_aggregates[w_id] = {
+                        'waiter_id': w_id,
+                        'name': w_name,
+                        'employee_id': w_emp_id,
+                        'orders_count': 0,
+                        'gross_sales': 0.0,
+                        'discounts': 0.0,
+                        'voids': 0.0,
+                        'net_sales': 0.0,
+                        'items_count': 0,
+                        'unclosed_bills': 0,
+                        'payment_methods': {
+                            'Cash': 0.0,
+                            'M-Pesa': 0.0,
+                            'Card': 0.0,
+                            'Credit': 0.0,
+                            'Room Charge': 0.0
+                        },
+                        'hourly_sales': {},
+                        'item_breakdown': {},
+                        'daily_sales': {}
+                    }
+                
+                wa = waiter_aggregates[w_id]
+                wa['orders_count'] += 1
+                
+                # Check status
+                status = str(o.get('status') or '').lower()
+                payment_status = str(o.get('payment_status') or '').lower()
+                order_type = str(o.get('order_type') or '').lower()
+                
+                # Parse creation time
+                created_at_str = o.get('created_at')
+                created_dt = None
+                date_str = start_date
+                hour_val = 12
+                weekday_name = 'Wednesday'
+                if created_at_str:
+                    try:
+                        clean_date = created_at_str.replace(' ', 'T').split('+')[0].split('.')[0]
+                        created_dt = datetime.strptime(clean_date, '%Y-%m-%dT%H:%M:%S')
+                        if '+00' in created_at_str or 'Z' in created_at_str:
+                            created_dt = created_dt + timedelta(hours=3)
+                        date_str = created_dt.strftime('%Y-%m-%d')
+                        hour_val = created_dt.hour
+                        weekday_name = created_dt.strftime('%A')
+                    except Exception:
+                        pass
+                
+                o_total = float(o.get('total_amount') or 0)
+                o_paid = float(o.get('amount_paid') or 0)
+                
+                if status == 'voided':
+                    wa['voids'] += o_total
+                    total_voids += o_total
+                    continue
+                    
+                wa['gross_sales'] += o_total
+                total_gross += o_total
+                
+                # Parse items
+                items_list = o.get('items')
+                o_discounts = 0.0
+                if isinstance(items_list, list):
+                    for item in items_list:
+                        qty = int(item.get('quantity') or 0)
+                        price = float(item.get('unit_price') or 0)
+                        line_tot = float(item.get('line_total') or 0)
+                        disc = float(item.get('discount_amount') or 0)
+                        i_name = item.get('name', 'Unknown Item')
+                        i_cat = item.get('category', 'Others')
+                        
+                        o_discounts += disc
+                        wa['items_count'] += qty
+                        
+                        cat_group = get_category_group(i_cat, i_name)
+                        data['category_summaries'][cat_group] = data['category_summaries'].get(cat_group, 0.0) + line_tot
+                        
+                        if i_name not in wa['item_breakdown']:
+                            wa['item_breakdown'][i_name] = {
+                                'item': i_name,
+                                'category': i_cat,
+                                'category_group': cat_group,
+                                'quantity': 0,
+                                'unit_price': price,
+                                'gross': 0.0,
+                                'discount': 0.0,
+                                'net': 0.0,
+                                'voided': 0,
+                                'complimentary': 0,
+                                'returned': 0
+                            }
+                        
+                        ib = wa['item_breakdown'][i_name]
+                        if item.get('is_void') or item.get('kitchen_status') == 'recalled':
+                            ib['voided'] += qty
+                        elif item.get('line_total') == 0 and price > 0:
+                            ib['complimentary'] += qty
+                            total_complimentary += price * qty
+                        else:
+                            ib['quantity'] += qty
+                            ib['gross'] += price * qty
+                            ib['discount'] += disc
+                            ib['net'] += line_tot
+                
+                wa['discounts'] += o_discounts
+                total_discounts += o_discounts
+                
+                net_o = o_total - o_discounts
+                wa['net_sales'] += net_o
+                total_net += net_o
+                
+                # Payment mapping
+                pm = o.get('payment_method')
+                if not pm:
+                    if payment_status == 'credit_bill' or order_type == 'staff':
+                        pm = 'Credit'
+                    elif payment_status == 'room_charge' or order_type == 'room_service':
+                        pm = 'Room Charge'
+                    elif o_paid > 0:
+                        pm = 'Cash'
+                    else:
+                        pm = 'Cash'
+                        
+                pm_mapped = 'Cash'
+                pm_lower = str(pm).lower()
+                if 'mpesa' in pm_lower or 'm-pesa' in pm_lower or 'mobile' in pm_lower:
+                    pm_mapped = 'M-Pesa'
+                    pm_mpesa += net_o
+                elif 'card' in pm_lower or 'visa' in pm_lower or 'mastercard' in pm_lower:
+                    pm_mapped = 'Card'
+                    pm_card += net_o
+                elif 'credit' in pm_lower or 'invoice' in pm_lower or payment_status == 'credit_bill':
+                    pm_mapped = 'Credit'
+                    pm_credit += net_o
+                    total_credit += net_o
+                elif 'room' in pm_lower or 'charge' in pm_lower or payment_status == 'room_charge':
+                    pm_mapped = 'Room Charge'
+                    pm_room += net_o
+                else:
+                    pm_mapped = 'Cash'
+                    pm_cash += net_o
+                    
+                wa['payment_methods'][pm_mapped] = wa['payment_methods'].get(pm_mapped, 0.0) + net_o
+                
+                wa['hourly_sales'][hour_val] = wa['hourly_sales'].get(hour_val, 0.0) + net_o
+                wa['daily_sales'][date_str] = wa['daily_sales'].get(date_str, 0.0) + net_o
+                
+                daily_sales_map[date_str] = daily_sales_map.get(date_str, 0.0) + net_o
+                hourly_sales_map[hour_val] = hourly_sales_map.get(hour_val, 0.0) + net_o
+                weekday_sales_map[weekday_name] = weekday_sales_map.get(weekday_name, 0.0) + net_o
+                
+                if payment_status != 'paid' and status not in ('voided', 'recalled', 'cancelled'):
+                    wa['unclosed_bills'] += 1
+
+                # Timeline & Exceptions
+                posting_delay = 0
+                kitchen_start = o.get('kitchen_started_at')
+                order_created = o.get('created_at')
+                if kitchen_start and order_created:
+                    try:
+                        kd = datetime.strptime(kitchen_start.replace(' ', 'T').split('+')[0].split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                        oc = datetime.strptime(order_created.replace(' ', 'T').split('+')[0].split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                        posting_delay = max(0, int((kd - oc).total_seconds() / 60))
+                    except Exception:
+                        pass
+                
+                duration = 0
+                order_updated = o.get('updated_at')
+                if order_updated and order_created:
+                    try:
+                        ou = datetime.strptime(order_updated.replace(' ', 'T').split('+')[0].split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                        oc = datetime.strptime(order_created.replace(' ', 'T').split('+')[0].split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                        duration = max(0, int((ou - oc).total_seconds() / 60))
+                    except Exception:
+                        pass
+
+                if len(data['timeline_audit']) < 150:
+                    data['timeline_audit'].append({
+                        'order_number': o.get('order_number') or o.get('short_code') or 'N/A',
+                        'table_room': o.get('table_number') or o.get('room_number') or 'Walk-in',
+                        'waiter': w_name,
+                        'opened': created_dt.strftime('%H:%M') if created_dt else 'N/A',
+                        'kitchen_sent': o.get('kitchen_started_at', '').split(' ')[-1].split('.')[0][:5] if o.get('kitchen_started_at') else 'N/A',
+                        'served': o.get('kitchen_served_at', '').split(' ')[-1].split('.')[0][:5] if o.get('kitchen_served_at') else 'N/A',
+                        'duration': f"{duration}m",
+                        'posting_delay': f"{posting_delay}m",
+                        'payment_method': pm_mapped,
+                        'cashier': 'Cashier',
+                        'status': o.get('status', 'open').upper()
+                    })
+
+                if o_discounts > (o_total * 0.20):
+                    data['exceptions_findings'].append({
+                        'waiter': w_name,
+                        'order_no': o.get('order_number') or o.get('short_code') or 'N/A',
+                        'type': 'Excessive Discount',
+                        'description': f"Discount KES {o_discounts:,.2f} is {o_discounts/o_total*100:.1f}% of order value KES {o_total:,.2f}",
+                        'value': o_discounts
+                    })
+                if status == 'voided' and o_total > 500:
+                    data['exceptions_findings'].append({
+                        'waiter': w_name,
+                        'order_no': o.get('order_number') or o.get('short_code') or 'N/A',
+                        'type': 'High Value Void',
+                        'description': f"Order value KES {o_total:,.2f} was completely voided by manager",
+                        'value': o_total
+                    })
+                if posting_delay > 30:
+                    data['exceptions_findings'].append({
+                        'waiter': w_name,
+                        'order_no': o.get('order_number') or o.get('short_code') or 'N/A',
+                        'type': 'Suspicious Posting Delay',
+                        'description': f"Food preparation started {posting_delay} minutes after order creation",
+                        'value': posting_delay
+                    })
+                if int(o.get('bill_reprint_count') or 0) > 1:
+                    data['exceptions_findings'].append({
+                        'waiter': w_name,
+                        'order_no': o.get('order_number') or o.get('short_code') or 'N/A',
+                        'type': 'Duplicate Bill Reprints',
+                        'description': f"Bill receipt reprinted {o.get('bill_reprint_count')} times",
+                        'value': float(o.get('bill_reprint_count') or 0)
+                    })
+
+            # Rank list
+            rank_list = []
+            for wid, wa in waiter_aggregates.items():
+                rank_list.append(wa)
+            
+            rank_list.sort(key=lambda x: x['net_sales'], reverse=True)
+            
+            highest_selling = 'None'
+            highest_amt = 0.0
+            lowest_selling = 'None'
+            lowest_amt = float('inf')
+            
+            for i, r in enumerate(rank_list):
+                r['rank'] = i + 1
+                r_net = r['net_sales']
+                r_name = r['name']
+                
+                r['contribution_pct'] = (r_net / total_net * 100) if total_net > 0 else 0.0
+                r['avg_order_value'] = (r_net / r['orders_count']) if r['orders_count'] > 0 else 0.0
+                
+                if r_net > highest_amt:
+                    highest_amt = r_net
+                    highest_selling = r_name
+                if r_net < lowest_amt:
+                    lowest_amt = r_net
+                    lowest_selling = r_name
+                    
+            if lowest_amt == float('inf'):
+                lowest_amt = 0.0
+                lowest_selling = 'None'
+                
+            data['summary']['total_sales'] = round(total_net, 2)
+            data['summary']['total_orders'] = len(orders)
+            data['summary']['avg_sale_order'] = round(total_net / len(orders), 2) if orders else 0.0
+            data['summary']['num_waiters'] = len(rank_list)
+            data['summary']['highest_selling_waiter'] = highest_selling
+            data['summary']['highest_sales'] = round(highest_amt, 2)
+            data['summary']['lowest_selling_waiter'] = lowest_selling
+            data['summary']['lowest_sales'] = round(lowest_amt, 2)
+            data['summary']['voids_total'] = round(total_voids, 2)
+            data['summary']['discounts_total'] = round(total_discounts, 2)
+            data['summary']['complimentary_total'] = round(total_complimentary, 2)
+            data['summary']['credit_bills_total'] = round(total_credit, 2)
+            data['summary']['void_rate'] = round(total_voids / total_gross * 100, 2) if total_gross > 0 else 0.0
+            data['summary']['discount_rate'] = round(total_discounts / total_gross * 100, 2) if total_gross > 0 else 0.0
+            
+            data['summary']['payment_methods']['Cash'] = round(pm_cash, 2)
+            data['summary']['payment_methods']['M-Pesa'] = round(pm_mpesa, 2)
+            data['summary']['payment_methods']['Card'] = round(pm_card, 2)
+            data['summary']['payment_methods']['Credit'] = round(pm_credit, 2)
+            data['summary']['payment_methods']['Room Charge'] = round(pm_room, 2)
+            
+            formatted_rankings = []
+            for r in rank_list:
+                formatted_rankings.append({
+                    'rank': r['rank'],
+                    'name': r['name'],
+                    'employee_id': r['employee_id'],
+                    'orders': r['orders_count'],
+                    'gross': round(r['gross_sales'], 2),
+                    'discounts': round(r['discounts'], 2),
+                    'voids': round(r['voids'], 2),
+                    'net': round(r['net_sales'], 2),
+                    'avg_order': round(r['avg_order_value'], 2),
+                    'items_sold': r['items_count'],
+                    'contribution': round(r['contribution_pct'], 1)
+                })
+            data['waiter_rankings'] = formatted_rankings
+            
+            # POS Item Sales
+            for wid, wa in waiter_aggregates.items():
+                w_name = wa['name']
+                data['item_sales_by_waiter'][w_name] = []
+                sorted_items = list(wa['item_breakdown'].values())
+                sorted_items.sort(key=lambda x: x['net'], reverse=True)
+                for item_row in sorted_items:
+                    item_row['pct_waiter_sales'] = round(item_row['net'] / wa['net_sales'] * 100, 1) if wa['net_sales'] > 0 else 0.0
+                    data['item_sales_by_waiter'][w_name].append(item_row)
+                    
+            # Deep Dives (limit to top 10 waiters to prevent extremely large PDFs)
+            for wa in rank_list[:10]:
+                best_item = 'None'
+                best_item_qty = 0
+                best_cat = 'None'
+                best_cat_val = 0.0
+                
+                cat_sales = {}
+                for k, v in wa['item_breakdown'].items():
+                    if v['quantity'] > best_item_qty:
+                        best_item_qty = v['quantity']
+                        best_item = v['item']
+                    c_grp = v['category_group']
+                    cat_sales[c_grp] = cat_sales.get(c_grp, 0.0) + v['net']
+                    
+                for c_grp, c_val in cat_sales.items():
+                    if c_val > best_cat_val:
+                        best_cat_val = c_val
+                        best_cat = c_grp
+                        
+                peak_hour = 12
+                peak_val = 0.0
+                for h, v in wa['hourly_sales'].items():
+                    if v > peak_val:
+                        peak_val = v
+                        peak_hour = h
+                
+                team_avg_net = total_net / len(rank_list) if rank_list else 0.0
+                team_avg_orders = len(orders) / len(rank_list) if rank_list else 0.0
+                
+                daily_breakdown = [{'date': d, 'amount': round(val, 2)} for d, val in wa['daily_sales'].items()]
+                daily_breakdown.sort(key=lambda x: x['date'])
+                
+                data['waiter_deep_dives'].append({
+                    'name': wa['name'],
+                    'employee_id': wa['employee_id'],
+                    'orders': wa['orders_count'],
+                    'items_sold': wa['items_count'],
+                    'gross': round(wa['gross_sales'], 2),
+                    'net': round(wa['net_sales'], 2),
+                    'avg_order': round(wa['avg_order_value'], 2),
+                    'sales_per_hour': round(wa['net_sales'] / 8.0, 2),
+                    'best_selling_item': best_item,
+                    'best_selling_category': best_cat,
+                    'peak_hour': f"{peak_hour:02d}:00",
+                    'payment_methods': {k: round(v, 2) for k, v in wa['payment_methods'].items()},
+                    'discounts': round(wa['discounts'], 2),
+                    'voids': round(wa['voids'], 2),
+                    'unclosed_bills': wa['unclosed_bills'],
+                    'comparison': {
+                        'net_sales_diff': round(wa['net_sales'] - team_avg_net, 2),
+                        'orders_diff': round(wa['orders_count'] - team_avg_orders, 1)
+                    },
+                    'daily_breakdown': daily_breakdown,
+                    'top_items': list(wa['item_breakdown'].values())[:5]
+                })
+
+            # Daily, Weekly, Monthly
+            daily_list = [{'date': d, 'amount': round(val, 2)} for d, val in daily_sales_map.items()]
+            daily_list.sort(key=lambda x: x['date'])
+            data['daily_weekly_monthly']['daily_sales'] = daily_list
+            
+            busiest_day_name = 'N/A'
+            busiest_day_val = 0.0
+            slowest_day_name = 'N/A'
+            slowest_day_val = float('inf')
+            
+            for wd, val in weekday_sales_map.items():
+                if val > busiest_day_val:
+                    busiest_day_val = val
+                    busiest_day_name = wd
+                if val < slowest_day_val:
+                    slowest_day_val = val
+                    slowest_day_name = wd
+                    
+            if slowest_day_val == float('inf'):
+                slowest_day_name = 'N/A'
+                
+            busiest_hour_val = '12:00'
+            busiest_hour_amt = 0.0
+            for hr, val in hourly_sales_map.items():
+                if val > busiest_hour_amt:
+                    busiest_hour_amt = val
+                    busiest_hour_val = f"{hr:02d}:00"
+                    
+            data['daily_weekly_monthly']['busiest_day'] = busiest_day_name
+            data['daily_weekly_monthly']['busiest_hour'] = busiest_hour_val
+            data['daily_weekly_monthly']['slowest_day'] = slowest_day_name
+
+        except Exception as e:
+            logger.error(f"Error compiling waiter sales audit data: {e}", exc_info=True)
+            data['error'] = str(e)
+            
         return data
 
     def _fetch_sold_items_agg(self, filters: Dict) -> Dict[str, Any]:

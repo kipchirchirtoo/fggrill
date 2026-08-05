@@ -397,11 +397,10 @@ export const getWaiterOrders = async (
 
         console.log('🔍 [Waiter Audit] Fetching orders for waiter:', waiterId, 'on date:', date);
 
-        // Calculate date range for the specified day
-        const startDate = new Date(date as string);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(date as string);
-        endDate.setHours(23, 59, 59, 999);
+        // Anchor to Kenya midnight/end-of-day (UTC+3) so that a date like
+        // '2026-08-05' captures the full Nairobi calendar day, not just until 3am UTC.
+        const startDate = new Date(`${date}T00:00:00+03:00`);
+        const endDate = new Date(`${date}T23:59:59+03:00`);
 
         // Fetch all POS orders for this waiter on this date
         let ordersQuery = supabase

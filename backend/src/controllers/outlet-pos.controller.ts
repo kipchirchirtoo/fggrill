@@ -6048,12 +6048,9 @@ export const getWaiterOpenBills = async (req: Request, res: Response, next: Next
     const branchId = branchIdFor(req);
     const requestedWaiter = nullableText(req.query.waiter_id);
     const requestedShiftId = nullableText(req.query.shift_id || req.query.shiftId);
-    const ownerScoped = shouldScopeOrdersToOwner(req);
-    const targetWaiterId = ownerScoped
-      ? String(req.user.id)
-      : (requestedWaiter && (canManageOutlets(req) || isGlobalUser(req)))
-          ? requestedWaiter
-          : null;
+    const targetWaiterId = (requestedWaiter && requestedWaiter.toLowerCase() === 'all' && (canManageOutlets(req) || isGlobalUser(req)))
+      ? null
+      : (requestedWaiter || String(req.user.id));
 
     let query = supabase
       .from('pos_shift_orders')
@@ -6064,6 +6061,9 @@ export const getWaiterOpenBills = async (req: Request, res: Response, next: Next
       .limit(500);
     if (targetWaiterId) {
       query = query.or(`waiter_id.eq.${targetWaiterId},created_by.eq.${targetWaiterId}`);
+    }
+    if (requestedShiftId) {
+      query = query.eq('shift_id', requestedShiftId);
     }
     if (branchId) query = query.eq('branch_id', branchId);
 
@@ -7711,9 +7711,61 @@ const validateVoidReason = (reasonCategory: unknown, reason: unknown, note: unkn
   return { reasonCategory: category, reason: reasonText };
 };
 
+// Resolves the set of outlet IDs a caller is allowed to VOID bills for, or
+// null when the caller is unrestricted. Station cashiers are confined to the
+// outlets whose outlet_type maps to their role (see POS_STATION_CASHIER_ROLE_TYPES:
+// restaurant_cashier -> restaurant/choma_zone/non_consumables, main_bar_cashier
+// -> main_bar/kyogong_sports_bar, executive_bar_cashier -> executive_bar/
+// kyogong_executive_bar) plus any explicitly assigned outlets. This is the gate
+// that stops a main_bar_cashier from voiding a restaurant/choma_zone bill (and
+// vice-versa) — closing the cross-station void loophole. Review roles
+// (branch_accountant/accountant/manager) and global users stay unrestricted.
+const resolveVoidableOutletIds = async (
+  req: Request,
+  branchId: number | null
+): Promise<string[] | null> => {
+  const role = roleFor(req);
+  if (isGlobalUser(req) || REVIEW_ROLES.has(role)) return null;
+
+  const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+  const assignedIds = assignedOutletIds(assignedOutlets);
+  if (!shouldRestrictCashierStationAccess(role, assignedIds, branchId)) return null;
+
+  const ids = new Set<string>(assignedIds);
+  const allowedTypes = stationTypesForCashierRole(role, branchId);
+  if (allowedTypes.length > 0 && branchId) {
+    const { data: outlets } = await supabase
+      .from('pos_outlets')
+      .select('id')
+      .eq('branch_id', branchId)
+      .in('outlet_type', allowedTypes);
+    for (const o of (outlets || []) as Array<{ id: string }>) ids.add(String(o.id));
+  }
+  return Array.from(ids);
+};
+
+// Enforces the same station gate on a single bill before a void is applied.
+// No-op for unrestricted callers; throws 403 when the bill belongs to a
+// station this cashier does not man.
+const ensureCashierCanVoidOrderOutlet = async (
+  req: Request,
+  order: { outlet_id?: string | null; branch_id?: number | string | null }
+): Promise<void> => {
+  const branchId = Number(order.branch_id) || branchIdFor(req);
+  const allowedIds = await resolveVoidableOutletIds(req, branchId || null);
+  if (allowedIds === null) return;
+  if (!order.outlet_id || !allowedIds.includes(String(order.outlet_id))) {
+    throw new AppError(
+      'This bill belongs to another station — you can only void bills from your own POS outlet(s)',
+      403
+    );
+  }
+};
+
 // Section 1: unified search across waiter/server name, bill shortcode, and
-// order number — branch-scoped only (per spec: any cashier in the branch can
-// void any outlet's bill, not just their own station's).
+// order number — branch-scoped AND station-scoped: each cashier only sees
+// bills from the outlet type(s) their role mans (see resolveVoidableOutletIds),
+// so a bar cashier can never surface (let alone void) a restaurant bill.
 export const searchVoidableBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -7730,6 +7782,15 @@ export const searchVoidableBills = async (req: Request, res: Response, next: Nex
     }
     const like = `%${q.replace(/[%_]/g, '')}%`;
 
+    // Station gate: restrict to the caller's own outlets. An empty allow-list
+    // means a restricted cashier whose station has no matching outlet — return
+    // nothing rather than falling through to a branch-wide search.
+    const allowedOutletIds = await resolveVoidableOutletIds(req, branchId);
+    if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
     let query = supabase
       .from('pos_shift_orders')
       .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_id, waiter_name, table_number, room_number, order_type, total_amount, payment_status, items, branch_id, created_at')
@@ -7742,6 +7803,10 @@ export const searchVoidableBills = async (req: Request, res: Response, next: Nex
       query = query.eq('branch_id', branchId);
     } else if (req.query.branch_id) {
       query = query.eq('branch_id', Number(req.query.branch_id));
+    }
+
+    if (allowedOutletIds !== null) {
+      query = query.in('outlet_id', allowedOutletIds);
     }
 
     const { data, error } = await query;
@@ -7783,6 +7848,7 @@ export const cashierVoidWholeBill = async (req: Request, res: Response, next: Ne
       .single();
     if (orderErr || !order) throw new AppError('Bill not found', 404);
     ensureBranchAccess(req, order.branch_id);
+    await ensureCashierCanVoidOrderOutlet(req, order);
     ensureEditableOrder(order, 'void');
     await ensureCashierShiftOpenForVoid(req, Number(order.branch_id));
 
@@ -7927,6 +7993,7 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
       .single();
     if (orderErr || !order) throw new AppError('Bill not found', 404);
     ensureBranchAccess(req, order.branch_id);
+    await ensureCashierCanVoidOrderOutlet(req, order);
     ensureEditableOrder(order, 'void');
     await ensureCashierShiftOpenForVoid(req, Number(order.branch_id));
 

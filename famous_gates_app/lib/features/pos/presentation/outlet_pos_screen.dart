@@ -2202,9 +2202,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   // own open orders across every outlet, combines them into ONE bill, prints
   // it and hands it to Cashier Station for settlement.
   Future<void> _openCustomerBills() async {
+    final user = ref.read(authNotifierProvider).valueOrNull;
     await showCustomerBillsPanel(
       context,
       ref,
+      waiterId: user?.id,
       shiftId: _shift?.id,
       onPrintBill: _printConsolidatedBill,
     );
@@ -2496,6 +2498,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   bool get _usesLightPalette {
     final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
     return type == 'restaurant' ||
+        type == 'non_consumables' ||
+        type == 'non_consumable' ||
         type == 'main_bar' ||
         type == 'kyogong_main_bar' ||
         type == 'sports_bar' ||

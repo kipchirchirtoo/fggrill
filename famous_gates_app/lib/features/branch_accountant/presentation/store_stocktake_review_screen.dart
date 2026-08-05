@@ -140,7 +140,7 @@ class _StoreStocktakeReviewScreenState
     final systemQty = _num(r['system_quantity'] ?? r['quantity'] ?? 0).toInt();
     final physical = _nullableNum(
       r['physical_quantity'] ?? r['counted_quantity'] ?? r['actual_quantity'],
-    )?.toInt();
+    )?.toDouble();
     return StockTakeItem(
       id: '${r['item_id'] ?? r['id']}',
       sku: '${r['item']?['sku'] ?? r['sku'] ?? ''}',

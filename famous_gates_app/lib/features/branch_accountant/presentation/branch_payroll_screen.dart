@@ -60,6 +60,7 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
 
   bool _busy = false;
   bool _pdfBusy = false;
+  bool _zipBusy = false;
   String? _error;
 
   List<Map<String, dynamic>> _batches = [];
@@ -169,6 +170,26 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
       if (mounted) _showSnack('PDF error: $e');
     } finally {
       if (mounted) setState(() { _pdfBusy = false; });
+    }
+  }
+
+  Future<void> _downloadPayslipsZip() async {
+    final batch = _activeBatch;
+    if (batch == null) {
+      _showSnack('Open or generate a payroll batch first');
+      return;
+    }
+    setState(() { _zipBusy = true; });
+    try {
+      final file = await ref.read(branchAccountantRepositoryProvider)
+          .downloadBatchPayslipsZip(
+              batch['id'] as String, batch['period_label'] as String? ?? 'Payroll');
+      if (!mounted) return;
+      _showSnack('Payslips ZIP saved to: ${file.path}', success: true);
+    } catch (e) {
+      if (mounted) _showSnack('Payslips ZIP error: $e');
+    } finally {
+      if (mounted) setState(() { _zipBusy = false; });
     }
   }
 
@@ -545,6 +566,25 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                           foregroundColor: AppColors.kError,
                           side: BorderSide(color: AppColors.kError.withValues(alpha: 0.4)),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                const SizedBox(width: 8),
+                // ── Download all payslips as a ZIP
+                _zipBusy
+                    ? const SizedBox(
+                        width: 24, height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : OutlinedButton.icon(
+                        onPressed: _downloadPayslipsZip,
+                        icon: const Icon(Icons.folder_zip_outlined, size: 16,
+                            color: AppColors.kPrimary),
+                        label: const Text('Payslips ZIP'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.kPrimary,
+                          side: BorderSide(
+                              color: AppColors.kPrimary.withValues(alpha: 0.4)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                         ),
                       ),
               ]),

@@ -4221,14 +4221,15 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       }
 
       if (start_date) {
-        const from = new Date(`${start_date}T00:00:00`);
+        // Anchor to Kenya midnight (UTC+3) so date-only strings capture the full local day
+        const from = new Date(`${start_date}T00:00:00+03:00`);
         if (recordDate < from) {
           return false;
         }
       }
 
       if (end_date) {
-        const to = new Date(`${end_date}T23:59:59`);
+        const to = new Date(`${end_date}T23:59:59+03:00`);
         if (recordDate > to) {
           return false;
         }

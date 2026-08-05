@@ -99,8 +99,12 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      final effectiveWaiterId = (widget.waiterId != null && widget.waiterId!.isNotEmpty)
+          ? widget.waiterId
+          : user?.id;
       final bills = await repo.getWaiterOpenBills(
-        waiterId: widget.waiterId,
+        waiterId: effectiveWaiterId,
         shiftId: widget.shiftId,
       );
       if (!mounted) return;

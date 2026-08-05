@@ -11,7 +11,9 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 import crypto from 'crypto';
+import archiver from 'archiver';
 import { generatePayrollBatchPDF } from '../services/native-pdf-reports.service';
+import { generatePayslipPDF } from '../utils/pdfGenerator';
 
 const n = (v: any): number => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -581,4 +583,85 @@ export const downloadPayrollBatchPdf = asyncWrap(async (req, res) => {
   }
 
   await generatePayrollBatchPDF(res, batch, rows, branchName, staffRoleMap, staffCreditBills);
+});
+
+// ── GET /api/finance/payroll/batches/:id/payslips-zip ─────────────────────────
+// Individual payslip PDFs for every line in the batch, zipped. Generated
+// natively in Node (pdfkit + archiver) from the batch lines, so figures match
+// the batch exactly and no external PDF service is required.
+export const downloadBatchPayslipsZip = asyncWrap(async (req, res) => {
+  const { id } = req.params;
+
+  const { data: batch, error: bErr } = await supabase
+    .from('payroll_batches')
+    .select('id, period_label, period_month, period_year, branch_id')
+    .eq('id', id)
+    .single();
+  if (bErr || !batch) throw new AppError('Payroll batch not found', 404);
+
+  const { data: lines } = await supabase
+    .from('payroll_batch_lines')
+    .select('*')
+    .eq('batch_id', id)
+    .order('staff_name');
+  const rows: any[] = lines || [];
+  if (rows.length === 0) throw new AppError('No payroll lines for this batch', 404);
+
+  const year = Number(batch.period_year) || new Date().getFullYear();
+  const monthName = new Date(year, (Number(batch.period_month) || 1) - 1)
+    .toLocaleString('en-US', { month: 'long' });
+  const periodSafe = String(batch.period_label || `${monthName}_${year}`)
+    .replace(/[^A-Za-z0-9]/g, '_');
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename=Payslips_${periodSafe}.zip`);
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', (err: any) => {
+    logger.error('Payslip ZIP archiver error:', err);
+    if (!res.headersSent) res.status(500).end();
+  });
+  archive.pipe(res);
+
+  for (const l of rows) {
+    try {
+      const name = String(l.staff_name || 'Staff').trim();
+      const parts = name.split(/\s+/);
+      const first = parts[0] || 'Staff';
+      const last = parts.slice(1).join(' ');
+      const allowances =
+        n(l.house_allowance) + n(l.transport_allowance) + n(l.other_allowances);
+
+      const buf = await generatePayslipPDF({
+        month: monthName,
+        year,
+        base_salary: n(l.basic_salary),
+        overtime_pay: n(l.overtime_pay),
+        allowances,
+        gross_pay: n(l.gross_salary),
+        nssf_deduction: n(l.nssf),
+        shif_deduction: n(l.sha),
+        total_deductions: n(l.total_deductions),
+        net_salary: n(l.net_pay),
+        employee: {
+          national_id: String(l.staff_number || ''),
+          department: String(l.department || ''),
+          user: { first_name: first, last_name: last },
+        },
+        company: 'Famous Gates Hotels',
+        company_email: 'famousgateshotelsbmt@gmail.com',
+        company_address: 'Bomet, Kenya',
+      });
+
+      const safeName = name.replace(/[^A-Za-z0-9]/g, '_') || String(l.staff_id);
+      archive.append(buf, { name: `Payslip_${safeName}_${periodSafe}.pdf` });
+    } catch (e) {
+      logger.error(`Failed to build payslip for ${l.staff_name}:`, e);
+      archive.append(`Failed to generate payslip for ${l.staff_name}`, {
+        name: `ERROR_${l.staff_id}.txt`,
+      });
+    }
+  }
+
+  await archive.finalize();
 });

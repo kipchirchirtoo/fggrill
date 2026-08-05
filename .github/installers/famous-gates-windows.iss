@@ -1,6 +1,10 @@
 #define MyAppName "Famous Gates"
 #define MyAppPublisher "Famous Gates Hotels"
-#define MyAppExeName "famous_gates_app.exe"
+; MUST match BINARY_NAME in famous_gates_app/windows/CMakeLists.txt.
+; The Flutter release build produces famousgate_hotels_system.exe — using the
+; old name here makes the [Run]/[Icons]/uninstaller point at a file that does
+; not exist ("CreateProcess failed; code 2").
+#define MyAppExeName "famousgate_hotels_system.exe"
 #ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
 #endif
@@ -38,6 +42,14 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "{#MyAppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ── WebAuthn shim for older Windows ───────────────────────────────────────────
+; The transitive `passkeys` plugin (pulled in by Supabase gotrue) ships
+; passkeys_windows_plugin.dll, which imports WebAuthNCancelCurrentOperation —
+; only present in webauthn.dll on Windows 10 1903+. Bundling the build host's
+; newer webauthn.dll next to the exe makes the loader resolve it from the app
+; folder, so the app launches on machines with an older system webauthn.dll.
+Source: "{sys}\webauthn.dll"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: FileExists(ExpandConstant('{sys}\webauthn.dll'))
 
 [Icons]
 Name: "{group}\Famous Gates"; Filename: "{app}\{#MyAppExeName}"

@@ -1187,6 +1187,33 @@ class BranchAccountantRepository {
     );
   }
 
+  /// Generate and download the waiter sales audit pack PDF.
+  Future<File> exportWaiterSalesAuditPdf({
+    required String fromDate,
+    required String toDate,
+    String? role,
+  }) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post<List<int>>(
+      '/reports/export',
+      data: {
+        'reportType': 'waiter_sales_audit',
+        'format': 'pdf',
+        'filters': {
+          if (branchId.isNotEmpty) 'branch_id': branchId,
+          'start_date': fromDate,
+          'end_date': toDate,
+          if (role != null && role != 'all') 'role': role,
+        },
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'FG_Waiter_Sales_Audit_${fromDate}_$toDate.pdf',
+    );
+  }
+
   Future<Map<String, dynamic>> getSoldItems({
     required String startDate,
     required String endDate,

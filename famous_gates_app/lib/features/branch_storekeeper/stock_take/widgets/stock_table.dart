@@ -363,7 +363,7 @@ class _StockTableState extends State<StockTable> {
       }
 
       final rowNumber = index + 1;
-      final variance = item.physicalCount != null ? item.variance : 0;
+      final variance = item.physicalCount != null ? item.variance : 0.0;
       final hasCount = item.physicalCount != null;
       final hasVariance = hasCount && variance != 0;
       final isEven = rowNumber.isEven;

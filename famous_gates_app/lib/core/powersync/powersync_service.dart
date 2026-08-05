@@ -207,10 +207,10 @@ class PowerSyncService {
 
     if (search != null && search.trim().isNotEmpty) {
       conditions.add(
-        "(LOWER(o.order_number) LIKE ? OR LOWER(o.customer_name) LIKE ? OR LOWER(o.table_number) LIKE ?)",
+        "(LOWER(o.order_number) LIKE ? OR LOWER(COALESCE(o.short_code, '')) LIKE ? OR LOWER(o.customer_name) LIKE ? OR LOWER(o.table_number) LIKE ?)",
       );
       final pat = '%${search.trim().toLowerCase()}%';
-      params.addAll([pat, pat, pat]);
+      params.addAll([pat, pat, pat, pat]);
     }
 
     final where = conditions.join(' AND ');

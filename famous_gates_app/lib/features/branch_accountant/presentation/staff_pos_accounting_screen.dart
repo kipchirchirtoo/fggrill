@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/repository.dart';
@@ -34,6 +35,7 @@ class StaffPosAccountingScreen extends ConsumerStatefulWidget {
 class _StaffPosAccountingScreenState
     extends ConsumerState<StaffPosAccountingScreen> {
   bool _busy = false;
+  bool _exporting = false;
   String? _error;
   String _role = 'all';
   DateTimeRange? _range;
@@ -150,6 +152,39 @@ class _StaffPosAccountingScreenState
     }
   }
 
+  Future<void> _exportPdf() async {
+    setState(() => _exporting = true);
+    final fromDate = _range == null
+        ? DateFormat('yyyy-MM-dd').format(DateTime.now())
+        : DateFormat('yyyy-MM-dd').format(_range!.start);
+    final toDate = _range == null
+        ? DateFormat('yyyy-MM-dd').format(DateTime.now())
+        : DateFormat('yyyy-MM-dd').format(_range!.end);
+
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .exportWaiterSalesAuditPdf(
+            fromDate: fromDate,
+            toDate: toDate,
+            role: _role,
+          );
+      final bytes = await file.readAsBytes();
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'FG_Waiter_Sales_Audit_${fromDate}_$toDate.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _pickRange() async {
     final picked = await showDateRangePicker(
       context: context,
@@ -192,6 +227,18 @@ class _StaffPosAccountingScreenState
                     ),
                     icon: Icon(PhosphorIcons.magnifyingGlass(), size: 18),
                     label: const Text('Deep Drill'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _exporting ? null : _exportPdf,
+                    icon: _exporting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(PhosphorIcons.filePdf(), size: 18),
+                    label: Text(_exporting ? 'Exporting...' : 'Export PDF'),
                   ),
                   const SizedBox(width: 8),
                   IconButton(

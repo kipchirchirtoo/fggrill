@@ -214,7 +214,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
             sales: sales,
             sdds: sdds,
             physicalCount: isSubmittedRow
-                ? _toInt(r['physical_quantity'])
+                ? (r['physical_quantity'] as num?)?.toDouble()
                 : null,
             reason: r['reason_for_variance'] ?? r['notes'],
             explanation: r['explanation'] ?? r['reason_for_variance'] ?? r['notes'],

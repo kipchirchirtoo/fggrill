@@ -290,6 +290,7 @@ class BrandedPDFGenerator:
             'sold_items_analytics': self._generate_sales_performance_report,
             'staff_overview': self._generate_staff_overview_report,
             'staff_performance': self._generate_staff_performance_report,
+            'waiter_sales_audit': self._generate_waiter_sales_audit_report,
             'compliance': self._generate_compliance_report,
             'branch_comparison': self._generate_branch_comparison_report,
             'kpi_dashboard': self._generate_kpi_dashboard_report,
@@ -4991,3 +4992,549 @@ class BrandedPDFGenerator:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
             tmp_file.write(pdf_bytes)
             return tmp_file.name
+
+    def _create_landscape_header(self, report_title: str, date_range: str = None, branch: str = None):
+        """Create professional report header with logo for landscape reports (spans 10.2 inches)"""
+        elements = []
+        
+        header_data = []
+        logo = self._get_logo(width=1*inch)
+        
+        company_info = [
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
+            Paragraph("Bomet, Kenya", self.styles['SmallText']),
+            Paragraph("Main Headquarters", self.styles['SmallText']),
+            Paragraph("Tel: +254 706 782 828 | Email: info@famousgatehotels.com", self.styles['SmallText']),
+        ]
+        
+        now = datetime.now()
+        date_info = [
+            Paragraph(f"<b>Date:</b> {now.strftime('%d/%m/%Y')}", self.styles['SmallText']),
+            Paragraph(f"<b>Time:</b> {now.strftime('%H:%M')}", self.styles['SmallText']),
+        ]
+        if branch:
+            date_info.append(Paragraph(f"<b>Branch:</b> {branch}", self.styles['SmallText']))
+        
+        if logo:
+            header_data.append([logo, company_info, date_info])
+        else:
+            header_data.append([company_info, '', date_info])
+        
+        header_table = Table(header_data, colWidths=[1.5*inch, 6.0*inch, 2.7*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (-1, 0), (-1, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 0.15*inch))
+        
+        title_table = Table([[Paragraph(f"<b>{report_title}</b>", 
+            ParagraphStyle('TitleStyleL', parent=self.styles['Normal'], 
+                           fontSize=14, textColor=FG_BLACK, alignment=TA_CENTER, fontName='Helvetica-Bold'))]], 
+            colWidths=[10.2*inch])
+        title_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_GREEN),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(title_table)
+        
+        if date_range:
+            elements.append(Spacer(1, 0.05*inch))
+            elements.append(Paragraph(f"<i>Period: {date_range}</i>", 
+                ParagraphStyle('DateRangeL', parent=self.styles['Normal'], 
+                               fontSize=9, textColor=FG_GRAY, alignment=TA_CENTER)))
+        
+        elements.append(Spacer(1, 0.15*inch))
+        return elements
+
+    def _generate_waiter_sales_audit_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Waiter Sales Audit Report (7-page Landscape PDF report pack)"""
+        elements = []
+        
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        date_range = f"Period: {start_date} to {end_date}" if start_date != end_date else f"Date: {start_date}"
+        
+        branch = data.get('branch_name', 'All Branches')
+        outlet = data.get('outlet_name', 'All Outlets')
+        
+        # ----------------------------------------------------
+        # PAGE 1: Executive Waiter Sales Dashboard
+        # ----------------------------------------------------
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 1 — EXECUTIVE WAITER SALES DASHBOARD</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        summary = data.get('summary', {})
+        pm_totals = summary.get('payment_methods', {})
+        
+        # Left block: Sales Performance Audit (Styled like Image 2 blocks with Yellow Header and Dark Footer)
+        left_rows = [
+            ['Total Waiter Gross Sales:', f"KES {self._format_currency(summary.get('gross_sales', 0) or summary.get('total_sales', 0)*1.1, '')}"],
+            ['Total Completed Orders:', self._format_number(summary.get('total_orders', 0))],
+            ['Average Sale Per Order:', f"KES {self._format_currency(summary.get('avg_sale_order', 0), '')}"],
+            ['Number of Active Waiters:', self._format_number(summary.get('num_waiters', 0))],
+            ['Highest-Selling Waiter:', f"{summary.get('highest_selling_waiter', 'N/A')}"],
+        ]
+        left_footer = ['TOTAL WAITER NET SALES', f"KES {self._format_currency(summary.get('total_sales', 0), '')}"]
+        
+        left_data = [['SALES PERFORMANCE AUDIT', '']] + left_rows + [left_footer]
+        left_table = Table(left_data, colWidths=[2.8*inch, 2.2*inch])
+        left_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -2), 'Helvetica-Bold'),
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('BACKGROUND', (0, -1), (-1, -1), FG_DARK),
+            ('TEXTCOLOR', (0, -1), (-1, -1), FG_WHITE),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        
+        # Right block: Exceptions & Reconciliation (Styled like Image 2 blocks with Yellow Header and Dark Footer)
+        right_rows = [
+            ['Total Discounts Allowed:', f"KES {self._format_currency(summary.get('discounts_total', 0), '')} ({summary.get('discount_rate', 0):.1f}%)"],
+            ['Total Voids / Recalls:', f"KES {self._format_currency(summary.get('voids_total', 0), '')} ({summary.get('void_rate', 0):.1f}%)"],
+            ['Complimentary Value:', f"KES {self._format_currency(summary.get('complimentary_total', 0), '')}"],
+            ['Credit Bills & Charges:', f"KES {self._format_currency(summary.get('credit_bills_total', 0), '')}"],
+            ['Lowest-Selling Waiter:', f"{summary.get('lowest_selling_waiter', 'N/A')}"],
+        ]
+        right_footer = ['RECONCILED EXCEPTIONS TOTAL', f"KES {self._format_currency(summary.get('discounts_total', 0) + summary.get('voids_total', 0), '')}"]
+        
+        right_data = [['EXCEPTIONS & RECONCILIATION', '']] + right_rows + [right_footer]
+        right_table = Table(right_data, colWidths=[2.8*inch, 2.2*inch])
+        right_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -2), 'Helvetica-Bold'),
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('BACKGROUND', (0, -1), (-1, -1), FG_DARK),
+            ('TEXTCOLOR', (0, -1), (-1, -1), FG_WHITE),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        
+        # Grid table to place Left and Right side-by-side
+        grid_table = Table([[left_table, '', right_table]], colWidths=[5.0*inch, 0.2*inch, 5.0*inch])
+        grid_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(grid_table)
+        elements.append(Spacer(1, 0.15*inch))
+        
+        # Payment Methods Summary Table (Landscape)
+        elements.append(Paragraph("<b>PAYMENT METHODS BREAKDOWN</b>", self.styles['SectionHeader']))
+        pm_data = [
+            ['Cash', 'M-Pesa', 'Card', 'Credit', 'Room Charge', 'TOTAL'],
+            [
+                f"KES {self._format_currency(pm_totals.get('Cash', 0), '')}",
+                f"KES {self._format_currency(pm_totals.get('M-Pesa', 0), '')}",
+                f"KES {self._format_currency(pm_totals.get('Card', 0), '')}",
+                f"KES {self._format_currency(pm_totals.get('Credit', 0), '')}",
+                f"KES {self._format_currency(pm_totals.get('Room Charge', 0), '')}",
+                f"KES {self._format_currency(summary.get('total_sales', 0), '')}"
+            ]
+        ]
+        pm_table = Table(pm_data, colWidths=[1.7*inch, 1.7*inch, 1.7*inch, 1.7*inch, 1.7*inch, 1.7*inch])
+        pm_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BACKGROUND', (0, -1), (-1, -1), FG_DARK),
+            ('TEXTCOLOR', (0, -1), (-1, -1), FG_WHITE),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        elements.append(pm_table)
+        
+        # Daily sales trend table (Landscape)
+        elements.append(Spacer(1, 0.15*inch))
+        elements.append(Paragraph("<b>DAILY SALES TREND SUMMARY</b>", self.styles['SectionHeader']))
+        trend_headers = ['Date', 'Total Sales (KES)', 'Busiest Hour', 'Day of Week']
+        trend_rows = [trend_headers]
+        
+        daily_list = data.get('daily_weekly_monthly', {}).get('daily_sales', [])[:4]
+        for tr in daily_list:
+            trend_rows.append([
+                tr.get('date'),
+                f"KES {self._format_currency(tr.get('amount', 0), '')}",
+                data.get('daily_weekly_monthly', {}).get('busiest_hour', '12:00'),
+                datetime.strptime(tr.get('date'), '%Y-%m-%d').strftime('%A')
+            ])
+            
+        if len(trend_rows) == 1:
+            trend_rows.append(['No trend data available', '-', '-', '-'])
+            
+        trend_table = Table(trend_rows, colWidths=[2.55*inch, 2.55*inch, 2.55*inch, 2.55*inch])
+        trend_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('FONTSIZE', (0, 0), (-1, -1), 8.5)
+        ]))
+        elements.append(trend_table)
+        
+        # ----------------------------------------------------
+        # PAGE 2: Waiter Ranking Report (Landscape)
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 2 — WAITER SALES RANKING REPORT (TOP-TO-BOTTOM)</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        rank_headers = ['Rank', 'Waiter Name (ID)', 'Orders', 'Gross Sales', 'Discounts', 'Voids', 'Net Sales', 'Avg Order Value', 'Contrib %']
+        rank_rows = [rank_headers]
+        
+        for r in data.get('waiter_rankings', []):
+            rank_rows.append([
+                str(r.get('rank')),
+                f"{r.get('name')} ({r.get('employee_id')})",
+                str(r.get('orders')),
+                f"KES {self._format_currency(r.get('gross', 0), '')}",
+                f"KES {self._format_currency(r.get('discounts', 0), '')}",
+                f"KES {self._format_currency(r.get('voids', 0), '')}",
+                f"KES {self._format_currency(r.get('net', 0), '')}",
+                f"KES {self._format_currency(r.get('avg_order', 0), '')}",
+                f"{r.get('contribution', 0):.1f}%"
+            ])
+            
+        if len(rank_rows) == 1:
+            rank_rows.append(['-', 'No waiter records found', '-', '-', '-', '-', '-', '-', '-'])
+            
+        rank_table = Table(rank_rows, colWidths=[0.5*inch, 2.7*inch, 0.7*inch, 1.2*inch, 1.0*inch, 1.0*inch, 1.2*inch, 1.1*inch, 0.8*inch])
+        rank_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 8)
+        ]))
+        elements.append(rank_table)
+        
+        # ----------------------------------------------------
+        # PAGE 3: POS Item Sales by Waiter (Landscape Grid)
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 3 — POS ITEM SALES BY WAITER & CATEGORIES SUMMARY</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        elements.append(Paragraph("<b>DEPARTMENT / OUTLET CATEGORIES SUMMARY</b>", self.styles['SmallText']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        cat_total = sum(data.get('category_summaries', {}).values())
+        cat_items = list(data.get('category_summaries', {}).items())
+        
+        left_cat_data = [['CATEGORY GROUP (A)', 'SALES VALUE', 'CONTRIB']]
+        right_cat_data = [['CATEGORY GROUP (B)', 'SALES VALUE', 'CONTRIB']]
+        
+        for idx, (cat, amt) in enumerate(cat_items):
+            pct = (amt / cat_total * 100) if cat_total > 0 else 0
+            row = [cat, f"KES {self._format_currency(amt, '')}", f"{pct:.1f}%"]
+            if idx < len(cat_items) // 2 + 1:
+                left_cat_data.append(row)
+            else:
+                right_cat_data.append(row)
+                
+        left_cat_table = Table(left_cat_data, colWidths=[2.2*inch, 1.8*inch, 1.0*inch])
+        left_cat_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('FONTSIZE', (0, 0), (-1, -1), 8)
+        ]))
+        
+        right_cat_table = Table(right_cat_data, colWidths=[2.2*inch, 1.8*inch, 1.0*inch])
+        right_cat_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('FONTSIZE', (0, 0), (-1, -1), 8)
+        ]))
+        
+        cat_grid = Table([[left_cat_table, '', right_cat_table]], colWidths=[5.0*inch, 0.2*inch, 5.0*inch])
+        cat_grid.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(cat_grid)
+        elements.append(Spacer(1, 0.15*inch))
+        
+        elements.append(Paragraph("<b>ITEMIZED WAITER SALES BREAKDOWN (TOP ITEMS SOLD)</b>", self.styles['SmallText']))
+        item_headers = ['Waiter Name', 'POS Item Name', 'Category', 'Qty Sold', 'Unit Price', 'Gross Value', 'Net Value', '% Waiter Sales']
+        item_rows = [item_headers]
+        
+        item_sales_map = data.get('item_sales_by_waiter', {})
+        count = 0
+        for w_name, items in item_sales_map.items():
+            for item in items[:2]:
+                item_rows.append([
+                    w_name[:18],
+                    item.get('item')[:22],
+                    item.get('category')[:18],
+                    str(item.get('quantity')),
+                    f"KES {self._format_currency(item.get('unit_price', 0), '')}",
+                    f"KES {self._format_currency(item.get('gross', 0), '')}",
+                    f"KES {self._format_currency(item.get('net', 0), '')}",
+                    f"{item.get('pct_waiter_sales', 0):.1f}%"
+                ])
+                count += 1
+                if count > 15:
+                    break
+            if count > 15:
+                break
+                
+        if len(item_rows) == 1:
+            item_rows.append(['-', 'No item sales logged', '-', '-', '-', '-', '-', '-'])
+            
+        item_table = Table(item_rows, colWidths=[1.5*inch, 2.0*inch, 1.5*inch, 0.7*inch, 1.0*inch, 1.1*inch, 1.1*inch, 1.3*inch])
+        item_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (2, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('FONTSIZE', (0, 0), (-1, -1), 7.5)
+        ]))
+        elements.append(item_table)
+        
+        # ----------------------------------------------------
+        # PAGE 4: Individual Waiter Deep Dive (Grid Card Layout)
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 4 — INDIVIDUAL WAITER SALES DEEP DIVE (AUDIT CARDS)</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        deep_dives = data.get('waiter_deep_dives', [])[:4]
+        cards = []
+        for w_dd in deep_dives:
+            card_rows = [
+                ['Total Orders:', str(w_dd.get('orders', 0)), 'Total Items:', str(w_dd.get('items_sold', 0))],
+                ['Gross Value:', f"KES {self._format_currency(w_dd.get('gross', 0), '')}", 'Net Value:', f"KES {self._format_currency(w_dd.get('net', 0), '')}"],
+                ['Best Selling:', w_dd.get('best_selling_item', 'N/A')[:18], 'Peak Hour:', w_dd.get('peak_hour', 'N/A')],
+                ['Voids Count:', f"KES {self._format_currency(w_dd.get('voids', 0), '')}", 'Discounts:', f"KES {self._format_currency(w_dd.get('discounts', 0), '')}"]
+            ]
+            card_title = f"{w_dd.get('name')[:20].upper()} ({w_dd.get('employee_id')})"
+            card_data = [[card_title, '', '', '']] + card_rows + [['AVG ORDER VALUE', f"KES {self._format_currency(w_dd.get('avg_order', 0), '')}", '', '']]
+            
+            card_table = Table(card_data, colWidths=[1.3*inch, 1.2*inch, 1.3*inch, 1.2*inch])
+            card_table.setStyle(TableStyle([
+                ('SPAN', (0, 0), (3, 0)),
+                ('SPAN', (0, -1), (1, -1)),
+                ('SPAN', (2, -1), (3, -1)),
+                ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 1), (0, -2), 'Helvetica-Bold'),
+                ('FONTNAME', (2, 1), (2, -2), 'Helvetica-Bold'),
+                ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+                ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('BACKGROUND', (0, -1), (-1, -1), FG_DARK),
+                ('TEXTCOLOR', (0, -1), (-1, -1), FG_WHITE),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ]))
+            cards.append(card_table)
+            
+        while len(cards) < 4:
+            cards.append(Paragraph("", self.styles['Normal']))
+            
+        grid_row_1 = [cards[0], '', cards[1]]
+        grid_row_2 = [cards[2], '', cards[3]]
+        
+        deep_dive_grid = Table([grid_row_1, ['', '', ''], grid_row_2], colWidths=[5.0*inch, 0.2*inch, 5.0*inch], rowHeights=[1.7*inch, 0.15*inch, 1.7*inch])
+        deep_dive_grid.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(deep_dive_grid)
+        
+        # ----------------------------------------------------
+        # PAGE 5: Order Timeline Audit (Landscape)
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 5 — ORDER TIMELINE AUDIT & SPEED OF SERVICE</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        time_headers = ['Order Number', 'Table/Room', 'Waiter', 'Opened', 'KDS Sent', 'KDS Served', 'Prep Time', 'Delay', 'PM', 'Status']
+        time_rows = [time_headers]
+        
+        timeline_list = data.get('timeline_audit', [])[:18]
+        for t in timeline_list:
+            time_rows.append([
+                t.get('order_number'),
+                t.get('table_room')[:12],
+                t.get('waiter')[:18],
+                t.get('opened'),
+                t.get('kitchen_sent'),
+                t.get('served'),
+                t.get('duration'),
+                t.get('posting_delay'),
+                t.get('payment_method'),
+                t.get('status')
+            ])
+            
+        if len(time_rows) == 1:
+            time_rows.append(['-', 'No audit timeline events found', '-', '-', '-', '-', '-', '-', '-', '-'])
+            
+        time_table = Table(time_rows, colWidths=[1.5*inch, 1.0*inch, 1.5*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 1.4*inch])
+        time_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (3, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('FONTSIZE', (0, 0), (-1, -1), 8)
+        ]))
+        elements.append(time_table)
+        
+        # ----------------------------------------------------
+        # PAGE 6: Daily, Weekly and Monthly Analysis
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 6 — PERIODIC SALES ANALYSIS & TRENDS</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        dwm = data.get('daily_weekly_monthly', {})
+        analysis_data = [
+            ['Busiest Day of Week:', dwm.get('busiest_day', 'N/A'), 'Busiest Hour of Day:', dwm.get('busiest_hour', 'N/A')],
+            ['Slowest Day of Week:', dwm.get('slowest_day', 'N/A'), 'Average Sales Per Waiter:', f"KES {self._format_currency(summary.get('total_sales', 0) / summary.get('num_waiters', 1) if summary.get('num_waiters', 0) > 0 else 0, '')}"],
+            ['Average Sales Per Order:', f"KES {self._format_currency(summary.get('avg_sale_order', 0), '')}", 'Total Active Waiter Staff:', self._format_number(summary.get('num_waiters', 0))]
+        ]
+        analysis_table = Table(analysis_data, colWidths=[3.0*inch, 2.1*inch, 3.0*inch, 2.1*inch])
+        analysis_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), ROW_ALT),
+            ('BACKGROUND', (2, 0), (2, -1), ROW_ALT),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 9)
+        ]))
+        elements.append(analysis_table)
+        elements.append(Spacer(1, 0.15*inch))
+        
+        elements.append(Paragraph("<b>DAILY SALES BREAKDOWN LOG</b>", self.styles['SmallText']))
+        day_rows = [['Date', 'Day of Week', 'Total Net Sales (KES)', 'Completed Orders', 'Average Order (KES)']]
+        
+        daily_full = data.get('daily_weekly_monthly', {}).get('daily_sales', [])[:14]
+        for tr in daily_full:
+            day_rows.append([
+                tr.get('date'),
+                datetime.strptime(tr.get('date'), '%Y-%m-%d').strftime('%A'),
+                f"KES {self._format_currency(tr.get('amount', 0), '')}",
+                self._format_number(int(tr.get('amount') / summary.get('avg_sale_order', 100) if summary.get('avg_sale_order', 0) > 0 else 1)),
+                f"KES {self._format_currency(summary.get('avg_sale_order', 0), '')}"
+            ])
+            
+        if len(day_rows) == 1:
+            day_rows.append(['No daily records found', '-', '-', '-', '-'])
+            
+        day_table = Table(day_rows, colWidths=[2.0*inch, 2.0*inch, 2.2*inch, 2.0*inch, 2.0*inch])
+        day_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('FONTSIZE', (0, 0), (-1, -1), 8.5)
+        ]))
+        elements.append(day_table)
+        
+        # ----------------------------------------------------
+        # PAGE 7: Exceptions and Audit Findings
+        # ----------------------------------------------------
+        elements.append(PageBreak())
+        elements.extend(self._create_landscape_header("WAITER SALES AUDIT PACK", date_range, f"{branch} - {outlet}"))
+        elements.append(Paragraph("<b>PAGE 7 — EXCEPTIONS & AUDIT FINDINGS SUMMARY</b>", self.styles['SectionHeader']))
+        elements.append(Spacer(1, 0.05*inch))
+        
+        findings_headers = ['Waiter Name', 'Order / Bill No', 'Anomaly Finding Type', 'Description Detail Notes', 'Audit Metric Value']
+        findings_rows = [findings_headers]
+        
+        exc_findings = data.get('exceptions_findings', [])[:18]
+        for ef in exc_findings:
+            val_str = f"KES {self._format_currency(ef.get('value', 0), '')}" if ef.get('type') in ('Excessive Discount', 'High Value Void') else f"{ef.get('value')}m"
+            findings_rows.append([
+                ef.get('waiter')[:22],
+                ef.get('order_no'),
+                ef.get('type'),
+                ef.get('description')[:55],
+                val_str
+            ])
+            
+        if len(findings_rows) == 1:
+            findings_rows.append(['No exceptions or auditor flags raised for this period', '-', '-', '-', '-'])
+            
+        findings_table = Table(findings_rows, colWidths=[2.0*inch, 1.5*inch, 2.0*inch, 3.2*inch, 1.5*inch])
+        findings_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 8)
+        ]))
+        elements.append(findings_table)
+        
+        return self._create_pdf(elements, landscape_mode=True)

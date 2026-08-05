@@ -128,7 +128,7 @@ class _BarStocktakeReviewScreenState
     final sdds = -additions;
     final physical = _nullableNum(
       r['physical_quantity'] ?? r['counted_quantity'] ?? r['actual_quantity'],
-    )?.toInt();
+    )?.toDouble();
     final name = '${r['item_name'] ?? r['name'] ?? 'Item'}';
     return StockTakeItem(
       id: '${r['item_id'] ?? r['id']}',

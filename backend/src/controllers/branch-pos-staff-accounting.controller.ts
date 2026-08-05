@@ -44,6 +44,17 @@ function resolveBranchId(req: Request): number {
 
 type DateRange = { from?: string; to?: string };
 
+// Kenya is UTC+3. When clients send date-only strings (YYYY-MM-DD) we must
+// anchor them to the Nairobi calendar day so that e.g. 'to=2026-08-05'
+// captures orders right up to 23:59:59 EAT, not just midnight UTC which
+// would silently drop 21 hours worth of data.
+function toKenyaStart(date: string): string {
+  return `${date}T00:00:00+03:00`;
+}
+function toKenyaEnd(date: string): string {
+  return `${date}T23:59:59+03:00`;
+}
+
 function dateRangeFrom(req: Request): DateRange {
   const from = String(req.query.from || '').trim();
   const to = String(req.query.to || '').trim();
@@ -104,11 +115,12 @@ async function fetchOrdersForBranch(
   if (extra?.waiterId) {
     query = query.eq('waiter_id', extra.waiterId);
   }
+  // Use Kenya timezone anchors so date-only strings capture the full local day
   if (range.from) {
-    query = query.gte('created_at', range.from);
+    query = query.gte('created_at', toKenyaStart(range.from));
   }
   if (range.to) {
-    query = query.lte('created_at', range.to);
+    query = query.lte('created_at', toKenyaEnd(range.to));
   }
 
   const { data, error } = await query;
@@ -156,8 +168,9 @@ async function fetchDeepDrillOrders(
   if (filters.waiterId) query = query.eq('waiter_id', filters.waiterId);
   if (filters.status) query = query.eq('status', filters.status);
   if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
-  if (filters.from) query = query.gte('created_at', filters.from);
-  if (filters.to) query = query.lte('created_at', filters.to);
+  // Use Kenya timezone anchors so date-only strings capture the full local day
+  if (filters.from) query = query.gte('created_at', toKenyaStart(filters.from));
+  if (filters.to) query = query.lte('created_at', toKenyaEnd(filters.to));
   if (filters.search) {
     const term = filters.search.replace(/[%_]/g, '');
     query = query.or(

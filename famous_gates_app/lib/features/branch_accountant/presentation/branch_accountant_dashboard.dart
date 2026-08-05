@@ -4904,8 +4904,21 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                     setState(() => _summaryMode = v.first),
               ),
               _DateField(
-                  value: _from, onChanged: (v) => setState(() => _from = v)),
-              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+                  value: _from,
+                  onChanged: (v) {
+                    setState(() {
+                      _from = v;
+                      _future = _load();
+                    });
+                  }),
+              _DateField(
+                  value: _to,
+                  onChanged: (v) {
+                    setState(() {
+                      _to = v;
+                      _future = _load();
+                    });
+                  }),
               _Dropdown(
                 value: _type,
                 values: const [

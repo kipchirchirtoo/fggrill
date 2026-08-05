@@ -86,7 +86,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
 
     // Categories list for filter bar
     final categories =
-        scopedItems.map((i) => itemCategoryName(i)).toSet().toList()..sort();
+        scopedItems.map((i) => i.category).toSet().toList()..sort();
 
     // Filter items based on local search & category (not date/location which require backend refresh)
     final filteredItems = scopedItems.where((item) {
@@ -95,7 +95,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
           item.sku.toLowerCase().contains(_localSearch.toLowerCase());
 
       final matchesCategory = _localCategory == 'all' ||
-          itemCategoryName(item).toLowerCase() == _localCategory.toLowerCase();
+          item.category.toLowerCase() == _localCategory.toLowerCase();
 
       return matchesSearch && matchesCategory;
     }).toList();

@@ -512,6 +512,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   final _tenderedController = TextEditingController();
   String _unpaidSearch = '';
   Timer? _unpaidSearchDebounce;
+  Timer? _lookupDebounce;
   String? _selectedUnpaidRef;
   String _method = 'cash';
 
@@ -777,6 +778,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   void dispose() {
     _captainOrderTimer?.cancel();
     _unpaidSearchDebounce?.cancel();
+    _lookupDebounce?.cancel();
     _lookupController.dispose();
     _amountController.dispose();
     _referenceController.dispose();
@@ -1048,6 +1050,37 @@ class _StationTabState extends ConsumerState<_StationTab> {
               controller: _lookupController,
               autofocus: _scannerMode == 'hardware',
               onSubmitted: (_) => _lookupBill(),
+              onChanged: (value) {
+                _lookupDebounce?.cancel();
+                final trimmed = value.trim();
+                if (trimmed.length < 3) return;
+                _lookupDebounce = Timer(const Duration(milliseconds: 350), () {
+                  if (!mounted) return;
+                  final bills = ref
+                      .read(cashierUnpaidBillsProvider(
+                          CashierBillFilters(search: _unpaidSearch)))
+                      .valueOrNull;
+                  if (bills == null || bills.isEmpty) return;
+                  final term = trimmed.toLowerCase();
+                  final matches = bills.where((row) {
+                    final refStr = _billLookupReference(row).toLowerCase();
+                    final queueRef = _queueLookupReference(row).toLowerCase();
+                    final shortCode = _billShortCode(row).toLowerCase();
+                    return refStr.endsWith(term) ||
+                        queueRef.endsWith(term) ||
+                        shortCode.endsWith(term) ||
+                        refStr == term ||
+                        queueRef == term ||
+                        shortCode == term;
+                  }).toList();
+                  if (matches.length == 1) {
+                    final matchRef = _billLookupReference(matches.first);
+                    if (matchRef != _selectedUnpaidRef) {
+                      _loadUnpaidBill(matches.first);
+                    }
+                  }
+                });
+              },
               decoration: InputDecoration(
                 labelText:
                     'Order number, short code, barcode, invoice, booking, POS ref',
@@ -2116,7 +2149,32 @@ class _StationTabState extends ConsumerState<_StationTab> {
     }
     setState(() => _loading = true);
     try {
-      final bill = await ref.read(cashierRepositoryProvider).getBillDetails(id);
+      var targetId = id;
+      final bills = ref
+          .read(cashierUnpaidBillsProvider(
+              CashierBillFilters(search: _unpaidSearch)))
+          .valueOrNull;
+      if (bills != null && bills.isNotEmpty) {
+        final term = id.toLowerCase();
+        final matches = bills.where((row) {
+          final refStr = _billLookupReference(row).toLowerCase();
+          final queueRef = _queueLookupReference(row).toLowerCase();
+          final shortCode = _billShortCode(row).toLowerCase();
+          return refStr.endsWith(term) ||
+              queueRef.endsWith(term) ||
+              shortCode.endsWith(term) ||
+              refStr == term ||
+              queueRef == term ||
+              shortCode == term;
+        }).toList();
+        if (matches.length == 1) {
+          final directId = _queueLookupReference(matches.first);
+          final displayRef = _billLookupReference(matches.first);
+          targetId = directId.isNotEmpty ? directId : displayRef;
+        }
+      }
+
+      final bill = await ref.read(cashierRepositoryProvider).getBillDetails(targetId);
       final data = _payload(bill);
       setState(() {
         _bill = data;

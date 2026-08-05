@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class VarianceBadge extends StatelessWidget {
-  final int variance;
+  final double variance;
   final bool hasCount;
 
   const VarianceBadge({
@@ -22,15 +22,21 @@ class VarianceBadge extends StatelessWidget {
     Color color;
     String text;
 
-    if (variance == 0) {
+    // Whole counts show as integers (12), fractional as 1dp (12.5).
+    final magnitude = variance.abs();
+    final formatted = magnitude == magnitude.truncateToDouble()
+        ? magnitude.toInt().toString()
+        : magnitude.toStringAsFixed(1);
+
+    if (magnitude < 0.0005) {
       color = const Color(0xFF2E7D32); // Success
       text = '0';
     } else if (variance > 0) {
       color = const Color(0xFFF9A825); // Warning
-      text = '+$variance';
+      text = '+$formatted';
     } else {
       color = const Color(0xFFD32F2F); // Error
-      text = '$variance';
+      text = '-$formatted';
     }
 
     return Container(

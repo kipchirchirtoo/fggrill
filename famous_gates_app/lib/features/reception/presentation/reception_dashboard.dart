@@ -33,6 +33,7 @@ enum ReceptionSection {
   breakfastPax,
   rooms,
   roomBills,
+  receipts,
   guests,
   guestProfile,
   housekeeping,
@@ -307,6 +308,11 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             icon: Icons.receipt_long_outlined,
             group: 'Front Desk'),
         MasterNavItem(
+            section: ReceptionSection.receipts,
+            label: 'Receipts',
+            icon: Icons.receipt_outlined,
+            group: 'Front Desk'),
+        MasterNavItem(
             section: ReceptionSection.cashier,
             label: 'Cashier',
             icon: Icons.point_of_sale_outlined,
@@ -398,6 +404,8 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
           canSettle: false,
           onPayAtCashier: _openCashierWithBill,
         );
+      case ReceptionSection.receipts:
+        return const _ReceiptsSection();
       case ReceptionSection.guests:
         return _GuestsSection(
           data: data,
@@ -4369,6 +4377,208 @@ class _CashierSection extends StatelessWidget {
   }
 }
 
+/// Reception → Receipts. Lists every checked-out guest so the front desk can
+/// reprint an official RECEIPT (same layout as the guest invoice, forced to the
+/// RECEIPT variant) for guests who ask for one after checkout.
+class _ReceiptsSection extends ConsumerStatefulWidget {
+  const _ReceiptsSection();
+
+  @override
+  ConsumerState<_ReceiptsSection> createState() => _ReceiptsSectionState();
+}
+
+class _ReceiptsSectionState extends ConsumerState<_ReceiptsSection> {
+  final TextEditingController _search = TextEditingController();
+  late Future<List<Booking>> _future;
+  String _query = '';
+  String? _busyId;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<List<Booking>> _load() async {
+    final repo = ref.read(receptionRepositoryProvider);
+    // Checked-out stays are the ones eligible for a post-checkout receipt.
+    final list = await repo.getBookings(status: 'checked_out');
+    list.sort((a, b) => b.checkOut.compareTo(a.checkOut));
+    return list;
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  List<Booking> _filter(List<Booking> all) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return all;
+    return all
+        .where((b) =>
+            (b.guestName ?? '').toLowerCase().contains(q) ||
+            (b.roomNumber ?? '').toLowerCase().contains(q) ||
+            (b.confirmationNumber ?? '').toLowerCase().contains(q))
+        .toList();
+  }
+
+  Future<void> _print(Booking b) async {
+    setState(() => _busyId = b.id);
+    try {
+      await _downloadCheckoutBill(context, ref, b, asReceipt: true);
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PageScaffold(
+      title: 'Guest Receipts',
+      subtitle:
+          'Reprint an official RECEIPT for any checked-out & cleared guest.',
+      actions: [
+        OutlinedButton.icon(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Refresh')),
+      ],
+      child: _CardPanel(
+        title: 'Checked-out Guests',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _search,
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search, size: 18),
+                hintText: 'Search guest, room or booking number...',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<Booking>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snap.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text('Failed to load receipts: ${snap.error}',
+                        style: TextStyle(color: Colors.red.shade700)),
+                  );
+                }
+                final rows = _filter(snap.data ?? const []);
+                if (rows.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 40, color: AppColors.kTextSecondary),
+                          SizedBox(height: 8),
+                          Text('No checked-out guests found.',
+                              style:
+                                  TextStyle(color: AppColors.kTextSecondary)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: rows.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) => _receiptTile(rows[i]),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _receiptTile(Booking b) {
+    final money = NumberFormat('#,##0.00', 'en_KE');
+    final paid = b.amountPaid ?? 0;
+    final total = b.totalAmount ?? 0;
+    final balance = b.balance;
+    final cleared = balance <= 0.01;
+    final busy = _busyId == b.id;
+    return ListTile(
+      isThreeLine: true,
+      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      leading: CircleAvatar(
+        backgroundColor: AppColors.kPrimary.withValues(alpha: 0.12),
+        child: const Icon(Icons.person_outline, color: AppColors.kPrimary),
+      ),
+      title: Text(b.guestName ?? 'Guest',
+          style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          Text(
+            'Room ${b.roomNumber ?? '-'}  •  ${b.confirmationNumber ?? b.id.substring(0, 8)}  •  Out ${DateFormat('dd MMM yyyy').format(b.checkOut)}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 12,
+            runSpacing: 2,
+            children: [
+              Text('Total Ksh ${money.format(total)}',
+                  style: const TextStyle(fontSize: 12)),
+              Text('Paid Ksh ${money.format(paid)}',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.kSuccess,
+                      fontWeight: FontWeight.w600)),
+              if (cleared)
+                const Text('CLEARED',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.kSuccess,
+                        fontWeight: FontWeight.w800))
+              else
+                Text('Balance Ksh ${money.format(balance)}',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
+      trailing: ElevatedButton.icon(
+        onPressed: busy ? null : () => _print(b),
+        icon: busy
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.print_outlined, size: 18),
+        label: Text(busy ? 'Printing…' : 'Print Receipt'),
+      ),
+    );
+  }
+}
+
 class _HistorySection extends StatelessWidget {
   const _HistorySection({required this.data, required this.onRefresh});
   final _ReceptionSnapshot data;
@@ -5430,31 +5640,119 @@ class _RoomsTable extends StatelessWidget {
   }
 }
 
-class _HorizontalTable extends StatelessWidget {
-  const _HorizontalTable({required this.columns, required this.rows});
+class _HorizontalTable extends StatefulWidget {
+  const _HorizontalTable({super.key, required this.columns, required this.rows});
 
   final List<String> columns;
   final List<List<Widget>> rows;
 
   @override
+  State<_HorizontalTable> createState() => _HorizontalTableState();
+}
+
+class _HorizontalTableState extends State<_HorizontalTable> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scroll(double delta) {
+    if (!_scrollController.hasClients) return;
+    final target = (_scrollController.offset + delta).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowColor: WidgetStatePropertyAll(Colors.grey.shade50),
-        // Allow rows to grow so wrapped action buttons are never clipped.
-        dataRowMinHeight: 52,
-        dataRowMaxHeight: 96,
-        columns: columns
-            .map((c) => DataColumn(
-                label: Text(c,
-                    style: const TextStyle(fontWeight: FontWeight.w800))))
-            .toList(),
-        rows: rows
-            .map((cells) =>
-                DataRow(cells: cells.map((cell) => DataCell(cell)).toList()))
-            .toList(),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.blue.shade100),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.swap_horiz, size: 16, color: AppColors.kPrimary),
+              const SizedBox(width: 6),
+              const Text(
+                'Scroll Tool:',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.kPrimary,
+                ),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.kPrimary,
+                  elevation: 1,
+                ),
+                onPressed: () => _scroll(-250),
+                icon: const Icon(Icons.arrow_back, size: 12),
+                label: const Text('Scroll Left', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: AppColors.kPrimary,
+                  foregroundColor: Colors.white,
+                  elevation: 1,
+                ),
+                onPressed: () => _scroll(250),
+                icon: const Icon(Icons.arrow_forward, size: 12),
+                label: const Text('Scroll Right', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+        Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStatePropertyAll(Colors.grey.shade50),
+              dataRowMinHeight: 52,
+              dataRowMaxHeight: 96,
+              columns: widget.columns
+                  .map((c) => DataColumn(
+                      label: Text(c,
+                          style: const TextStyle(fontWeight: FontWeight.w800))))
+                  .toList(),
+              rows: widget.rows
+                  .map((cells) =>
+                      DataRow(cells: cells.map((cell) => DataCell(cell)).toList()))
+                  .toList(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -8864,7 +9162,8 @@ Future<void> printReceptionPaymentReceipt({
 }
 
 Future<void> _downloadCheckoutBill(
-    BuildContext context, WidgetRef ref, Booking booking) async {
+    BuildContext context, WidgetRef ref, Booking booking,
+    {bool asReceipt = false}) async {
   try {
     // Pull the guest folio so the checkout bill lists accommodation + every POS
     // Charge-to-Room item (outlet · item), with the folio's real totals/balance.
@@ -8901,8 +9200,9 @@ Future<void> _downloadCheckoutBill(
     final amountPaid = folioPaid > 0 ? folioPaid : (booking.amountPaid ?? 0.0);
     final balanceDue = folioBal > 0 ? folioBal : booking.balance;
 
-    final String invNo =
-        booking.confirmationNumber ?? 'INV-${booking.id.substring(0, 8)}';
+    final String docPrefix = asReceipt ? 'RCP' : 'INV';
+    final String invNo = booking.confirmationNumber ??
+        '$docPrefix-${booking.id.substring(0, 8)}';
     final String todayStr = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final String checkOutStr =
         DateFormat('dd/MM/yyyy').format(booking.checkOut);
@@ -8937,12 +9237,15 @@ Future<void> _downloadCheckoutBill(
       totalAmount: grandTotal,
       amountPaid: amountPaid,
       balanceDue: balanceDue,
+      asReceipt: asReceipt,
       notes:
           'Thank you for staying at FamousGate Hotels! Visit www.famousgatehotels.com',
     );
   } catch (error) {
     if (context.mounted) {
-      _snack(context, 'Checkout bill print failed: $error', error: true);
+      _snack(context,
+          '${asReceipt ? 'Receipt' : 'Checkout bill'} print failed: $error',
+          error: true);
     }
   }
 }

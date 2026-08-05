@@ -7,6 +7,8 @@ import 'package:printing/printing.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../data/repository.dart';
 import 'branch_payroll_screen.dart';
+import 'payroll_policies_screen.dart';
+import 'payroll_adjustments_screen.dart';
 
 /// Unified **Staff Accounts** control panel.
 ///
@@ -41,7 +43,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   bool _loading = true;
   bool _busy = false;
-  String _tab = 'overview'; // overview | credit | advances | loans | payroll
+  String _tab = 'overview'; // overview | credit | advances | loans | salaries | payroll
+  String _payrollSubTab = 'batch'; // batch | deductions | adjustments
   String _status = 'all';
   String _staff = 'all';
   String _query = '';
@@ -659,12 +662,76 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       case 'salaries':
         return _salariesGrid();
       case 'payroll':
-        // Embed the existing Branch Payroll screen (batch generate, payslips,
-        // statutory deductions) — same one used elsewhere in the module.
-        return Container(color: Colors.white, child: const BranchPayrollScreen());
+        return _payrollWorkspace();
       default:
         return _overviewGrid();
     }
+  }
+
+  /// Payroll workspace — consolidates every payroll feature into the tab:
+  /// the batch run (generate / review / PDF / payslips ZIP), the statutory
+  /// deduction toggles (NSSF / SHIF / Housing), and manual adjustments.
+  Widget _payrollWorkspace() {
+    Widget body;
+    switch (_payrollSubTab) {
+      case 'deductions':
+        body = const PayrollPoliciesScreen();
+        break;
+      case 'adjustments':
+        body = const PayrollAdjustmentsScreen();
+        break;
+      default:
+        body = const BranchPayrollScreen();
+    }
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          Container(
+            color: _gridHead,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                _payrollSubTabBtn(
+                    'batch', 'Payroll Batch', Icons.receipt_long),
+                _payrollSubTabBtn('deductions',
+                    'Deductions (NSSF / SHIF / Housing)', Icons.toggle_on_outlined),
+                _payrollSubTabBtn('adjustments', 'Adjustments', Icons.tune),
+              ],
+            ),
+          ),
+          Expanded(child: body),
+        ],
+      ),
+    );
+  }
+
+  Widget _payrollSubTabBtn(String id, String label, IconData icon) {
+    final selected = _payrollSubTab == id;
+    return InkWell(
+      onTap: () => setState(() => _payrollSubTab = id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+                color: selected ? _accent : Colors.transparent, width: 2.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 15, color: selected ? _accent : _muted),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        selected ? FontWeight.w900 : FontWeight.w600,
+                    color: selected ? _accent : _muted)),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Grids ──────────────────────────────────────────────────────────────────
@@ -1735,19 +1802,117 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   InputDecoration _dec(String label) =>
       InputDecoration(labelText: label, isDense: true);
 
+  /// Searchable staff picker used by the New Credit Bill / Advance / Loan
+  /// dialogs — tap to open a type-to-filter list (name, employee ID, dept).
   Widget _staffField(String value, ValueChanged<String> onChanged) {
-    final items = <DropdownMenuItem<String>>[];
-    for (final s in _staffList) {
-      final id = _t(s, ['id', 'staff_id']);
-      if (id.isEmpty) continue;
-      items.add(DropdownMenuItem(value: id, child: Text(_staffName(s))));
+    String selectedLabel = '';
+    if (value.isNotEmpty) {
+      final s = _staffIndex[value];
+      if (s != null) selectedLabel = _staffName(s);
     }
-    return DropdownButtonFormField<String>(
-      initialValue: value.isEmpty ? null : value,
-      isExpanded: true,
-      decoration: _dec('Staff member *'),
-      items: items,
-      onChanged: (v) => onChanged(v ?? ''),
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () async {
+        final picked = await _pickStaff();
+        if (picked != null) onChanged(picked);
+      },
+      child: InputDecorator(
+        decoration: _dec('Staff member *').copyWith(
+          suffixIcon: const Icon(Icons.search, size: 18),
+        ),
+        child: Text(
+          selectedLabel.isEmpty ? 'Tap to search staff…' : selectedLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: selectedLabel.isEmpty ? _muted : _text,
+            fontWeight:
+                selectedLabel.isEmpty ? FontWeight.w400 : FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _pickStaff() {
+    var query = '';
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          final q = query.trim().toLowerCase();
+          final filtered = _staffList.where((s) {
+            if (q.isEmpty) return true;
+            final hay = '${_staffName(s)} '
+                    '${_t(s, ['employee_id', 'employee_number', 'national_id'])} '
+                    '${_t(s, ['department', 'role'])}'
+                .toLowerCase();
+            return hay.contains(q);
+          }).toList();
+          return AlertDialog(
+            title: const Text('Select staff member'),
+            content: SizedBox(
+              width: 480,
+              height: 460,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      hintText: 'Search name, employee ID, department',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setD(() => query = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text('No staff found',
+                                style: TextStyle(color: _muted)))
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, i) {
+                              final s = filtered[i];
+                              final id = _t(s, ['id', 'staff_id']);
+                              final sub = [
+                                _t(s, [
+                                  'employee_id',
+                                  'employee_number',
+                                  'national_id'
+                                ]),
+                                _t(s, ['department', 'role']),
+                              ].where((e) => e.isNotEmpty).join('  •  ');
+                              return ListTile(
+                                dense: true,
+                                title: Text(_staffName(s),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                subtitle: sub.isEmpty ? null : Text(sub),
+                                onTap: id.isEmpty
+                                    ? null
+                                    : () => Navigator.pop(ctx, id),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel')),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1788,10 +1953,4 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
 extension _Str on String {
   String ifEmpty(String fallback) => trim().isEmpty ? fallback : this;
-  String ifEmptyName(Map s) {
-    if (trim().isNotEmpty) return this;
-    final j =
-        '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
-    return j.isEmpty ? 'Staff' : j;
-  }
 }

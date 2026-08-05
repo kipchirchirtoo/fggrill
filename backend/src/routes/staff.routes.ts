@@ -32,6 +32,7 @@ import {
   getStaffDocuments,
   getStaffByIdentifier
 } from '../controllers/staff.controller';
+import { getBranchWaiters, getWaiterOrders } from '../controllers/staff-audit.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 import multer from 'multer';
@@ -72,6 +73,18 @@ router.post('/',
   // and cannot create global/executive user roles (same rules as BRANCH_MANAGER).
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   createStaffMember
+);
+
+// Waiter audit routes – must come before /:id parameterized routes
+// Flutter client calls GET /api/staff/audit/waiters (these were previously
+// only mounted under /staff-audit which resolves to /api/staff-audit/... causing 404)
+router.get('/audit/waiters',
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  getBranchWaiters
+);
+router.get('/audit/waiters/:waiterId/orders',
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  getWaiterOrders
 );
 
 // Specific paths MUST come before parameterized routes like /:id

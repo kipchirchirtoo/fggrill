@@ -54,6 +54,7 @@ import {
   approvePayrollBatch,
   getDirectorPayrollSummary,
   downloadPayrollBatchPdf,
+  downloadBatchPayslipsZip,
 } from "../controllers/branch-payroll.controller";
 import {
   getStaffPosAccountingSummary,
@@ -1058,6 +1059,7 @@ const PAYROLL_DIRECTOR_ROLES = [UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRol
 router.get("/payroll/batches", authorize(PAYROLL_ROLES), listPayrollBatches);
 router.get("/payroll/batches/:id", authorize(PAYROLL_ROLES), getPayrollBatch);
 router.get("/payroll/batches/:id/pdf", authorize(PAYROLL_ROLES), downloadPayrollBatchPdf);
+router.get("/payroll/batches/:id/payslips-zip", authorize(PAYROLL_ROLES), downloadBatchPayslipsZip);
 router.post("/payroll/batches/generate", authorize(PAYROLL_GENERATE_ROLES), generatePayrollBatch);
 router.post("/payroll/batches/:id/submit", authorize(PAYROLL_GENERATE_ROLES), submitPayrollBatch);
 router.patch("/payroll/batches/:id/review", authorize(PAYROLL_AUDITOR_ROLES), reviewPayrollBatch);

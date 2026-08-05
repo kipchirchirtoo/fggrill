@@ -163,8 +163,8 @@ class _StockTakeReviewDetailPageState extends ConsumerState<StockTakeReviewDetai
     int totalOpening = 0;
     int totalSales = 0;
     int totalSdds = 0;
-    int physicalCount = 0;
-    int totalVariance = 0;
+    double physicalCount = 0;
+    double totalVariance = 0;
 
     for (final item in _items) {
       totalOpening += item.openingStock;

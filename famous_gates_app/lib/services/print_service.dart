@@ -47,8 +47,27 @@ class PrintService {
     defaultValue: 'http://localhost:5001',
   );
 
+  static DateTime? _pythonServiceOfflineUntil;
+  static pw.MemoryImage? _cachedLogoImage;
+
+  Future<pw.MemoryImage?> _getLogoImage() async {
+    if (_cachedLogoImage != null) return _cachedLogoImage;
+    try {
+      final logoBytes =
+          await rootBundle.load('assets/frontend_public/fglogo.png');
+      _cachedLogoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+      return _cachedLogoImage;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Print directly via Python thermal printer service (NO DIALOG!)
   Future<bool> _printViaPythonService(Map<String, dynamic> receiptData) async {
+    if (_pythonServiceOfflineUntil != null &&
+        DateTime.now().isBefore(_pythonServiceOfflineUntil!)) {
+      return false;
+    }
     try {
       final response = await http
           .post(
@@ -56,19 +75,26 @@ class PrintService {
             headers: {'Content-Type': 'application/json'},
             body: json.encode(receiptData),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(milliseconds: 500));
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
-        if (result['success'] == true) return true;
+        if (result['success'] == true) {
+          _pythonServiceOfflineUntil = null;
+          return true;
+        }
         debugPrint(
             'Python print service ($pythonServiceUrl) reported failure: ${result['error']}');
-        return false;
+      } else {
+        debugPrint(
+            'Python print service ($pythonServiceUrl) returned HTTP ${response.statusCode}: ${response.body}');
       }
-      debugPrint(
-          'Python print service ($pythonServiceUrl) returned HTTP ${response.statusCode}: ${response.body}');
+      _pythonServiceOfflineUntil =
+          DateTime.now().add(const Duration(seconds: 30));
       return false;
     } catch (e) {
+      _pythonServiceOfflineUntil =
+          DateTime.now().add(const Duration(seconds: 30));
       debugPrint('Python print service ($pythonServiceUrl) unreachable: $e');
       return false;
     }
@@ -158,12 +184,7 @@ class PrintService {
     final isPendingPayment =
         ['pending', 'unpaid'].contains(sale.paymentMethod.trim().toLowerCase());
 
-    pw.MemoryImage? logoImage;
-    try {
-      final logoBytes =
-          await rootBundle.load('assets/frontend_public/fglogo.png');
-      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
-    } catch (_) {}
+    final logoImage = await _getLogoImage();
 
     // 79-80mm thermal roll with a 76mm printable area. Keep symmetrical
     // 2mm margins so the printer gets the correct roll size without clipping.
