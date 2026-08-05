@@ -10344,7 +10344,7 @@ class _StockBalanceSummaryCardState
                         Expanded(
                             flex: 2,
                             child: Text(
-                                '${r['item']?['name'] ?? r['item_name'] ?? 'Item'}')),
+                                '${r['item']?['item_name'] ?? r['item']?['name'] ?? r['item_name'] ?? 'Unknown Item'}')),
                         Expanded(
                             child: Text('Open: ${r['opening_balance'] ?? 0}',
                                 style: const TextStyle(fontSize: 11))),
