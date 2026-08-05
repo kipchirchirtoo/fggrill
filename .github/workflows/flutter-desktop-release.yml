@@ -149,6 +149,23 @@ jobs:
           if (Test-Path $webauthn) {
             Copy-Item -Path $webauthn -Destination 'build\windows\x64\runner\Release\' -Force
           }
+          # Bundle the Visual C++ runtime next to the exe (app-local deployment)
+          # so app-compiled plugin DLLs (e.g. flutter_secure_storage_windows)
+          # load on machines without the VC++ Redistributable — fixes the
+          # "Bad Image" 0xc0e90002 loader error on fresh Windows installs. Works
+          # for the per-user install (no admin needed, unlike VC_redist.exe).
+          $vcRuntime = @(
+            'vcruntime140.dll', 'vcruntime140_1.dll',
+            'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
+            'msvcp140_codecvt_ids.dll', 'concrt140.dll'
+          )
+          foreach ($dll in $vcRuntime) {
+            $src = Join-Path $env:WINDIR "System32\$dll"
+            if (Test-Path $src) {
+              Copy-Item -Path $src -Destination 'build\windows\x64\runner\Release\' -Force
+              Write-Host "Bundled runtime: $dll"
+            }
+          }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\FamousGates-$version-windows-x64-portable.zip" -Force
           $stage = "C:\fg-release"
