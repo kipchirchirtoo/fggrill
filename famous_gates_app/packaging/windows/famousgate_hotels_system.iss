@@ -53,11 +53,6 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 ; ── Main application bundle (all files from flutter release build) ─────────────
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; ── Windows system DLLs needed by Flutter passkeys / WebAuthn plugin ──────────
-; Copy webauthn.dll from the host's System32 into the app folder so it is
-; found on machines where it may be an older version or missing from search path.
-Source: "{sys}\webauthn.dll"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: FileExists(ExpandConstant('{sys}\webauthn.dll'))
-
 ; ── Visual C++ runtimes ───────────────────────────────────────────────────────
 Source: "{#RedistDir}\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
