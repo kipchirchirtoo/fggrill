@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { paymentsVerificationAPI } from '@/lib/api';
 import { PaymentVerification, PaymentStats } from '@/lib/api/types';
 import { PaymentDetailModal } from '@/components/modals/PaymentDetailModal';
+import { PYTHON_SERVICE_URL } from '@/lib/config';
 
 type TabId = 'all' | 'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged';
 
@@ -202,15 +203,33 @@ export default function BranchPaymentsPage() {
                 ],
             };
 
-            const response = await fetch('http://localhost:5001/api/payroll/generate-statement-pdf', {
+            const response = await fetch(`${PYTHON_SERVICE_URL}/api/payroll/generate-statement-pdf`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
-            if (!response.ok) throw new Error('PDF generation failed');
+            if (!response.ok) {
+                const text = await response.text();
+                let errMsg = 'PDF generation failed';
+                try {
+                    const json = JSON.parse(text);
+                    errMsg = json.error || json.message || errMsg;
+                } catch (_) {}
+                throw new Error(errMsg);
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const json = await response.json();
+                throw new Error(json.error || json.message || 'Server returned invalid PDF response');
+            }
 
             const blob = await response.blob();
+            if (blob.size < 100) {
+                throw new Error('Generated PDF is empty or corrupted');
+            }
+
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

@@ -752,8 +752,13 @@ class BranchAccountantRepository {
         data: payload,
         options: Options(responseType: ResponseType.bytes),
       );
-      final bytes = (res.data as List?)?.cast<int>();
-      if (bytes != null && bytes.length > 50) {
+      List<int>? bytes;
+      if (res.data is List<int>) {
+        bytes = res.data as List<int>;
+      } else if (res.data is List) {
+        bytes = (res.data as List).cast<int>();
+      }
+      if (bytes != null && bytes.length > 100) {
         final title = '${payload['title'] ?? 'statement'}'
             .replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
         return _saveBytes(bytes, 'FG_$title.pdf');
@@ -765,8 +770,13 @@ class BranchAccountantRepository {
           data: payload,
           options: Options(responseType: ResponseType.bytes),
         );
-        final bytes = (res.data as List?)?.cast<int>();
-        if (bytes != null && bytes.length > 50) {
+        List<int>? bytes;
+        if (res.data is List<int>) {
+          bytes = res.data as List<int>;
+        } else if (res.data is List) {
+          bytes = (res.data as List).cast<int>();
+        }
+        if (bytes != null && bytes.length > 100) {
           final title = '${payload['title'] ?? 'statement'}'
               .replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
           return _saveBytes(bytes, 'FG_$title.pdf');
