@@ -1,0 +1,16 @@
+name: passkeys_windows
+description: Stub passkeys_windows plugin for compatibility with older Windows 10 builds
+version: 0.1.1
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      windows:
+        pluginClass: PasskeysWindowsPlugin

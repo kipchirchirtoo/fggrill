@@ -64,10 +64,6 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   data_table_2: ^2.7.2
 
-dependency_overrides:
-  phosphor_flutter:
-    path: packages/phosphor_flutter_compat
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -77,6 +73,12 @@ dev_dependencies:
   freezed: ^2.5.2
   json_serializable: ^6.8.0
   drift_dev: ^2.18.0
+
+dependency_overrides:
+  phosphor_flutter:
+    path: packages/phosphor_flutter_compat
+  passkeys_windows:
+    path: ./stubs/passkeys_windows
 
 flutter:
   uses-material-design: true

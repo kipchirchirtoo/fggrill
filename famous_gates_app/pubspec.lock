@@ -1033,12 +1033,11 @@ packages:
     source: hosted
     version: "2.9.0"
   passkeys_windows:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: passkeys_windows
-      sha256: acea5ff790a8c6de0366d1b87dd591c0d6e6770bf17d62efbd9fac7747724cc7
-      url: "https://pub.dev"
-    source: hosted
+      path: "stubs/passkeys_windows"
+      relative: true
+    source: path
     version: "0.1.1"
   path:
     dependency: "direct main"
