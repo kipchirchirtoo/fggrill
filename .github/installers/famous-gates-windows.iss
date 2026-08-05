@@ -41,16 +41,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Files]
-Source: "{#MyAppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; NOTE: the WebAuthn shim (webauthn.dll — see the release workflow) is staged
-; INTO {#MyAppSource} by the CI Windows build step, so the wildcard above bundles
-; it automatically. It must NOT be listed here with a "{sys}\webauthn.dll" source:
-; Inno resolves [Files] Source paths at COMPILE time and {sys} is a run-time
-; constant, so ISCC failed with 'Source file "{sys}\webauthn.dll" does not exist'.
+Source: "{#MyAppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "VC_redist.x64.exe"
+Source: "{#MyAppSource}\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: FileExists(ExpandConstant('{#MyAppSource}\VC_redist.x64.exe'))
 
 [Icons]
 Name: "{group}\Famous Gates"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\Famous Gates"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ Runtime..."; Flags: waituntilterminated; Check: FileExists(ExpandConstant('{tmp}\VC_redist.x64.exe'))
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Famous Gates"; Flags: nowait postinstall skipifsilent

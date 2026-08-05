@@ -149,6 +149,12 @@ jobs:
           if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Path "build\windows\x64\runner\Release\*" -Destination $stage -Recurse -Force
+          try {
+            Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "$stage\VC_redist.x64.exe"
+            Write-Host "Downloaded official Microsoft VC_redist.x64.exe installer into staging"
+          } catch {
+            Write-Host "VC_redist download skipped or failed: $_"
+          }
 
       - name: Install Inno Setup
         shell: pwsh
