@@ -4491,11 +4491,13 @@ class BrandedPDFGenerator:
         total_amount = subtotal + tax_amount
         
         # Add subtotal, tax, and total rows
+        num_item_rows = max(len(items), 1)
         items_data.append(['', '', Paragraph('<b>Subtotal:</b>', self.styles['Normal']), self._format_currency(subtotal)])
         if tax_amount > 0:
             items_data.append(['', '', Paragraph(f'<b>Tax ({tax_rate}%):</b>', self.styles['Normal']), self._format_currency(tax_amount)])
         items_data.append(['', '', Paragraph('<b>GRAND TOTAL:</b>', self.styles['Heading4']), Paragraph(f"<b>{self._format_currency(total_amount)}</b>", self.styles['Heading4'])])
         
+        summary_start_row = num_item_rows + 1
         item_table = Table(items_data, colWidths=[3.5*inch, 1*inch, 1.5*inch, 1.5*inch])
         item_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
@@ -4504,13 +4506,13 @@ class BrandedPDFGenerator:
             ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
             ('ALIGN', (0, 1), (0, -1), 'LEFT'),
             ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
-            ('GRID', (0, 0), (-1, -4), 0.5, FG_GRAY),
+            ('GRID', (0, 0), (-1, num_item_rows), 0.5, FG_GRAY),
             ('LINEBELOW', (0, 0), (-1, 0), 1.5, FG_DARK),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -4), [FG_WHITE, ROW_ALT]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, num_item_rows), [FG_WHITE, ROW_ALT]),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('BACKGROUND', (2, -3), (3, -1), FG_LIGHT),
-            ('LINEABOVE', (2, -3), (3, -3), 1, FG_GRAY),
+            ('BACKGROUND', (2, summary_start_row), (3, -1), FG_LIGHT),
+            ('LINEABOVE', (2, summary_start_row), (3, summary_start_row), 1, FG_GRAY),
             ('LINEABOVE', (2, -1), (3, -1), 2, FG_DARK),
         ]))
         elements.append(item_table)
