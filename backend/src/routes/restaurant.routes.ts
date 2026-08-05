@@ -111,16 +111,29 @@ const isCaptainOrderAlreadyPrinted = (order: any, items: Array<Record<string, an
   return printedAt >= latestRecalledAt;
 };
 
-const isKitchenVisiblePosOrder = (order: any): boolean => {
+const isKitchenVisiblePosOrder = (order: any, isRestaurantShift: boolean = true): boolean => {
   const orderStatus = String(order?.status || '').toLowerCase();
   const paymentStatus = String(order?.payment_status || '').toLowerCase();
   const rawKitchenStatus = String(order?.kitchen_status || '').toLowerCase();
   const kitchenStatus = normalizeKitchenStatus(rawKitchenStatus || orderStatus);
   const voidRequestStatus = String(order?.void_request_status || '').toLowerCase();
 
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const hasRecalledItem = items.some((item: any) => item?.is_recalled_item === true);
+
+  if (!isRestaurantShift && !hasRecalledItem && kitchenStatus !== 'recalled') {
+    const hasFoodItems = items.some((item: any) => {
+      const name = String(item?.name || item?.item_name || '').toLowerCase();
+      const category = String(item?.category || item?.department || '').toLowerCase();
+      return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') ||
+             name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali');
+    });
+    if (!hasFoodItems) return false;
+  }
+
   // Kitchen must always see orders it hasn't finished yet, regardless of payment
-  if (['pending', 'preparing', 'ready', 'recalled'].includes(kitchenStatus)) return true;
-  if (['served', 'completed'].includes(kitchenStatus)) return false;
+  if (['pending', 'preparing', 'ready', 'recalled'].includes(kitchenStatus) || hasRecalledItem) return true;
+  if (['served', 'completed'].includes(kitchenStatus) && !hasRecalledItem) return false;
   if (orderStatus === 'open' && ['unpaid', 'partial'].includes(paymentStatus)) return true;
   if (['pending', 'approved'].includes(voidRequestStatus)) return true;
   if (['void_requested', 'cancelled', 'voided'].includes(kitchenStatus)) return true;
@@ -541,19 +554,22 @@ router.get('/kitchen/orders',
         const { data: outletShifts, error: shiftError } = await shiftQuery;
         if (shiftError) throw shiftError;
 
-        const restaurantShiftIds = (outletShifts || [])
-          .filter((shift: any) => {
-            const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-            return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
-          })
-          .map((shift: any) => shift.id);
+        const allBranchShiftIds = (outletShifts || []).map((shift: any) => shift.id);
+        const restaurantShiftSet = new Set(
+          (outletShifts || [])
+            .filter((shift: any) => {
+              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+              return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
+            })
+            .map((shift: any) => shift.id)
+        );
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
-        if (restaurantShiftIds.length) {
+        if (allBranchShiftIds.length) {
           const { data: posOrders, error: posOrdersError } = await supabase
             .from('pos_shift_orders')
             .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, total_amount, captain_printed_at, items')
-            .in('shift_id', restaurantShiftIds)
+            .in('shift_id', allBranchShiftIds)
             .gte('created_at', stopSignalSince)
             .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
             .order('created_at', { ascending: true });
@@ -586,7 +602,7 @@ router.get('/kitchen/orders',
             }
           }
 
-          posOrdersWithTime = (posOrders || []).filter(isKitchenVisiblePosOrder).map((order: any) => {
+          posOrdersWithTime = (posOrders || []).filter((order: any) => isKitchenVisiblePosOrder(order, restaurantShiftSet.has(order.shift_id))).map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
             const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
