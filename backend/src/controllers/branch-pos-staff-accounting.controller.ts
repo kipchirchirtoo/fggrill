@@ -103,29 +103,42 @@ async function fetchOrdersForBranch(
 ): Promise<StaffOrderRow[]> {
   if (outletIds.length === 0) return [];
 
-  let query = supabase
-    .from('pos_shift_orders')
-    .select(
-      'id, waiter_id, waiter_name, total_amount, balance_amount, payment_status, staff_credit_bill_id, order_type, outlet_id, created_at'
-    )
-    .in('outlet_id', outletIds)
-    .not('waiter_id', 'is', null)
-    .order('created_at', { ascending: false });
+  // Paginate: a single PostgREST response is capped (default ~1000 rows), which
+  // silently truncated wider date ranges — the audit then undercounted sales
+  // and showed exactly 1,000 orders. Page through until a short batch returns.
+  const PAGE = 1000;
+  const MAX_PAGES = 200; // safety valve (200k orders)
+  const all: StaffOrderRow[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const offset = page * PAGE;
+    let query = supabase
+      .from('pos_shift_orders')
+      .select(
+        'id, waiter_id, waiter_name, total_amount, balance_amount, payment_status, staff_credit_bill_id, order_type, outlet_id, created_at'
+      )
+      .in('outlet_id', outletIds)
+      .not('waiter_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE - 1);
 
-  if (extra?.waiterId) {
-    query = query.eq('waiter_id', extra.waiterId);
-  }
-  // Use Kenya timezone anchors so date-only strings capture the full local day
-  if (range.from) {
-    query = query.gte('created_at', toKenyaStart(range.from));
-  }
-  if (range.to) {
-    query = query.lte('created_at', toKenyaEnd(range.to));
-  }
+    if (extra?.waiterId) {
+      query = query.eq('waiter_id', extra.waiterId);
+    }
+    // Use Kenya timezone anchors so date-only strings capture the full local day
+    if (range.from) {
+      query = query.gte('created_at', toKenyaStart(range.from));
+    }
+    if (range.to) {
+      query = query.lte('created_at', toKenyaEnd(range.to));
+    }
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []) as StaffOrderRow[];
+    const { data, error } = await query;
+    if (error) throw error;
+    const batch = (data || []) as StaffOrderRow[];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return all;
 }
 
 const DEEP_DRILL_COLUMNS = [

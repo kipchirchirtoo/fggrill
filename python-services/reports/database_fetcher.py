@@ -2463,22 +2463,31 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 except Exception:
                     pass
             
-            # Query pos_shift_orders
-            orders_query = self.client.table('pos_shift_orders').select('*')
-            orders_query = orders_query.gte('created_at', f"{start_date}T00:00:00+03:00")
-            orders_query = orders_query.lte('created_at', f"{end_date}T23:59:59+03:00")
-            
-            if branch_id:
-                orders_query = orders_query.eq('branch_id', int(branch_id))
-            if outlet_id:
-                orders_query = orders_query.eq('outlet_id', outlet_id)
-            if waiter_id:
-                orders_query = orders_query.eq('waiter_id', waiter_id)
-            if shift_id:
-                orders_query = orders_query.eq('shift_id', shift_id)
-                
-            orders_res = orders_query.execute()
-            orders = orders_res.data or []
+            # Query pos_shift_orders — paginate so wider date ranges are not
+            # silently truncated to the PostgREST default of ~1000 rows (which
+            # made the audit undercount and always report exactly 1,000 orders).
+            orders = []
+            _PAGE = 1000
+            for _page_idx in range(200):  # safety valve: up to 200k orders
+                _offset = _page_idx * _PAGE
+                orders_query = self.client.table('pos_shift_orders').select('*')
+                orders_query = orders_query.gte('created_at', f"{start_date}T00:00:00+03:00")
+                orders_query = orders_query.lte('created_at', f"{end_date}T23:59:59+03:00")
+
+                if branch_id:
+                    orders_query = orders_query.eq('branch_id', int(branch_id))
+                if outlet_id:
+                    orders_query = orders_query.eq('outlet_id', outlet_id)
+                if waiter_id:
+                    orders_query = orders_query.eq('waiter_id', waiter_id)
+                if shift_id:
+                    orders_query = orders_query.eq('shift_id', shift_id)
+
+                orders_query = orders_query.order('created_at', desc=False).range(_offset, _offset + _PAGE - 1)
+                _batch = orders_query.execute().data or []
+                orders.extend(_batch)
+                if len(_batch) < _PAGE:
+                    break
             
             if not orders:
                 return data
