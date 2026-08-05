@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_notifier.dart';
 import '../../domain/providers.dart';
@@ -426,6 +428,57 @@ class _PendingBillsTabState extends ConsumerState<_PendingBillsTab> {
 class _InvoicesTab extends ConsumerWidget {
   const _InvoicesTab();
 
+  Future<void> _exportInvoicePdf(BuildContext context, WidgetRef ref, Map<String, dynamic> inv) async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final invNum = inv['invoice_number'] ?? 'INV-000';
+    final compName = inv['corporate_customers']?['name'] ?? 'Corporate Account';
+    final amountDue = double.tryParse(inv['amount_due']?.toString() ?? '0') ?? 0.0;
+    final amountPaid = double.tryParse(inv['amount_paid']?.toString() ?? '0') ?? 0.0;
+    final balance = amountDue - amountPaid;
+    final dueDate = inv['due_date'] != null ? inv['due_date'].toString().split('T')[0] : 'N/A';
+    final status = inv['status'] ?? 'UNPAID';
+
+    final payload = {
+      'title': 'CORPORATE INVOICE - $invNum',
+      'period': 'Due Date: $dueDate',
+      'branch': inv['branches']?['name'] ?? 'All Branches',
+      'columns': const [
+        {'header': 'Invoice Number', 'align': 'center', 'weight': 2.0},
+        {'header': 'Corporate Account', 'align': 'left', 'weight': 3.0},
+        {'header': 'Amount Due (KES)', 'align': 'right', 'weight': 1.8},
+        {'header': 'Amount Paid (KES)', 'align': 'right', 'weight': 1.8},
+        {'header': 'Balance Due (KES)', 'align': 'right', 'weight': 1.8},
+        {'header': 'Status', 'align': 'center', 'weight': 1.5},
+      ],
+      'rows': [
+        [
+          invNum,
+          compName,
+          NumberFormat('#,##0.00').format(amountDue),
+          NumberFormat('#,##0.00').format(amountPaid),
+          NumberFormat('#,##0.00').format(balance),
+          status,
+        ],
+      ],
+      'summary': [
+        {'label': 'Invoice Number', 'value': invNum},
+        {'label': 'Corporate Customer', 'value': compName},
+        {'label': 'Total Amount Due', 'value': 'KES ${NumberFormat('#,##0.00').format(amountDue)}'},
+        {'label': 'Outstanding Balance', 'value': 'KES ${NumberFormat('#,##0.00').format(balance)}'},
+      ],
+      'totals': ['TOTALS', '', NumberFormat('#,##0.00').format(amountDue), NumberFormat('#,##0.00').format(amountPaid), NumberFormat('#,##0.00').format(balance), ''],
+    };
+
+    try {
+      final file = await repo.generateStatementPdf(payload);
+      await Printing.layoutPdf(onLayout: (format) async => file.readAsBytes());
+    } catch (e) {
+      if (context.mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error printing invoice PDF: $e'), backgroundColor: AppColors.kError));
+      }
+    }
+  }
+
   Future<void> _payInvoice(BuildContext context, WidgetRef ref, String id, double amountDue) async {
     final repo = ref.read(branchAccountantRepositoryProvider);
     try {
@@ -453,20 +506,29 @@ class _InvoicesTab extends ConsumerWidget {
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: ListTile(
-                title: Text('${inv['corporate_customers']?['name']} - ${inv['invoice_number']}'),
+                title: Text('${inv['corporate_customers']?['name']} - ${inv['invoice_number']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text('Due: ${inv['due_date'].toString().split('T')[0]} | KES ${inv['amount_due']} (Paid: KES ${inv['amount_paid']})'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                      tooltip: 'Print / Export Branded PDF Invoice',
+                      onPressed: () => _exportInvoicePdf(context, ref, inv),
+                    ),
+                    const SizedBox(width: 4),
                     Chip(
                       label: Text(status), 
                       backgroundColor: status == 'PAID' ? Colors.green.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2)
                     ),
-                    if (status != 'PAID')
+                    if (status != 'PAID') ...[
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(Icons.payment, color: AppColors.kPrimary),
+                        tooltip: 'Record Payment',
                         onPressed: () => _payInvoice(context, ref, inv['id'], (double.tryParse(inv['amount_due'].toString()) ?? 0.0) - (double.tryParse(inv['amount_paid'].toString()) ?? 0.0)),
                       )
+                    ]
                   ],
                 ),
               ),

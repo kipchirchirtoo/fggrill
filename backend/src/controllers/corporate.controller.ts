@@ -4,9 +4,86 @@ import { applyBranchFilter } from '../utils/branchIsolation';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
+// Auto-process corporate bills whose credit term days have matured
+export const autoProcessMaturedCorporateInvoices = async (): Promise<void> => {
+    try {
+        const { data: bills } = await supabase
+            .from('corporate_credit_bills')
+            .select('id, branch_id, corporate_customer_id, amount, created_at')
+            .eq('status', 'UNINVOICED');
+
+        if (!bills || bills.length === 0) return;
+
+        const { data: customers } = await supabase
+            .from('corporate_customers')
+            .select('id, credit_period_days');
+
+        if (!customers || customers.length === 0) return;
+
+        const customerMap = new Map(customers.map(c => [c.id, c.credit_period_days || 30]));
+        const nowMs = Date.now();
+
+        const matureByCustomer: Record<string, { branchId: number; billIds: string[]; totalAmount: number; periodDays: number }> = {};
+
+        for (const b of bills) {
+            const periodDays = customerMap.get(b.corporate_customer_id) ?? 30;
+            const createdAtMs = new Date(b.created_at).getTime();
+            const ageDays = (nowMs - createdAtMs) / (1000 * 60 * 60 * 24);
+
+            if (ageDays >= periodDays) {
+                if (!matureByCustomer[b.corporate_customer_id]) {
+                    matureByCustomer[b.corporate_customer_id] = {
+                        branchId: b.branch_id,
+                        billIds: [],
+                        totalAmount: 0,
+                        periodDays
+                    };
+                }
+                matureByCustomer[b.corporate_customer_id].billIds.push(b.id);
+                matureByCustomer[b.corporate_customer_id].totalAmount += Number(b.amount || 0);
+            }
+        }
+
+        for (const [customerId, data] of Object.entries(matureByCustomer)) {
+            if (data.billIds.length === 0) continue;
+
+            const invNum = `INV-AUTO-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(Math.random() * 10000)}`;
+            const dueDate = new Date(nowMs + data.periodDays * 24 * 60 * 60 * 1000).toISOString();
+
+            const { data: invoice, error: invErr } = await supabase
+                .from('corporate_invoices')
+                .insert({
+                    branch_id: data.branchId,
+                    corporate_customer_id: customerId,
+                    invoice_number: invNum,
+                    amount_due: data.totalAmount,
+                    amount_paid: 0,
+                    status: 'UNPAID',
+                    due_date: dueDate
+                })
+                .select()
+                .single();
+
+            if (!invErr && invoice) {
+                await supabase
+                    .from('corporate_credit_bills')
+                    .update({
+                        status: 'INVOICED',
+                        corporate_invoice_id: invoice.id
+                    })
+                    .in('id', data.billIds);
+                logger.info(`Auto-generated corporate invoice ${invNum} for customer ${customerId} (${data.billIds.length} bills, KES ${data.totalAmount})`);
+            }
+        }
+    } catch (err) {
+        logger.error('Error auto-processing matured corporate invoices:', err);
+    }
+};
+
 // 1. Get Corporate Customers
 export const getCorporateCustomers = async (req: Request, res: Response) => {
     try {
+        await autoProcessMaturedCorporateInvoices();
         let query = supabase.from('corporate_customers').select('*').order('name');
         query = applyBranchFilter(query, req);
         
@@ -152,6 +229,7 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
 // 5. Get Pending Corporate Bills
 export const getPendingCorporateBills = async (req: Request, res: Response) => {
     try {
+        await autoProcessMaturedCorporateInvoices();
         let query = supabase
             .from('corporate_credit_bills')
             .select(`
@@ -261,6 +339,7 @@ export const generateCorporateInvoice = async (req: Request, res: Response) => {
 // 7. Get Invoices
 export const getCorporateInvoices = async (req: Request, res: Response) => {
     try {
+        await autoProcessMaturedCorporateInvoices();
         let query = supabase
             .from('corporate_invoices')
             .select(`

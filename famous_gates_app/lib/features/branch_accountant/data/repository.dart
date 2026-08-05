@@ -720,6 +720,17 @@ class BranchAccountantRepository {
     await _dio.post('/finance/payroll/batches/$id/submit');
   }
 
+  /// Downloads a ZIP of individual payslip PDFs for every staff line in the
+  /// batch (generated natively in Node so figures match the batch exactly).
+  Future<File> downloadBatchPayslipsZip(String id, String periodLabel) async {
+    final res = await _dio.get(
+      '/finance/payroll/batches/$id/payslips-zip',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final safe = periodLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+    return _saveBytes(res.data ?? const <int>[], 'FG_Payslips_$safe.zip');
+  }
+
   Future<File> downloadPayrollBatchPdf(String id, String periodLabel) async {
     final res = await _dio.get(
       '/finance/payroll/batches/$id/pdf',
@@ -2420,6 +2431,21 @@ class BranchAccountantRepository {
 
   Future<Map<String, dynamic>> createCorporateCustomer(Map<String, dynamic> data) async {
     final res = await _dio.post('/corporate/customers', data: data);
+    return _asMap(res);
+  }
+
+  Future<Map<String, dynamic>> chargeCorporateCredit({
+    required String posBillId,
+    required String corporateCustomerId,
+    required double amount,
+    String? shiftId,
+  }) async {
+    final res = await _dio.post('/corporate/charge', data: {
+      'pos_bill_id': posBillId,
+      'corporate_customer_id': corporateCustomerId,
+      'amount': amount,
+      'shift_id': shiftId,
+    });
     return _asMap(res);
   }
 
