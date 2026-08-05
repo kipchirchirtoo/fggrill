@@ -42,14 +42,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "{#MyAppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; ── WebAuthn shim for older Windows ───────────────────────────────────────────
-; The transitive `passkeys` plugin (pulled in by Supabase gotrue) ships
-; passkeys_windows_plugin.dll, which imports WebAuthNCancelCurrentOperation —
-; only present in webauthn.dll on Windows 10 1903+. Bundling the build host's
-; newer webauthn.dll next to the exe makes the loader resolve it from the app
-; folder, so the app launches on machines with an older system webauthn.dll.
-Source: "{sys}\webauthn.dll"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: FileExists(ExpandConstant('{sys}\webauthn.dll'))
+; NOTE: the WebAuthn shim (webauthn.dll — see the release workflow) is staged
+; INTO {#MyAppSource} by the CI Windows build step, so the wildcard above bundles
+; it automatically. It must NOT be listed here with a "{sys}\webauthn.dll" source:
+; Inno resolves [Files] Source paths at COMPILE time and {sys} is a run-time
+; constant, so ISCC failed with 'Source file "{sys}\webauthn.dll" does not exist'.
 
 [Icons]
 Name: "{group}\Famous Gates"; Filename: "{app}\{#MyAppExeName}"
