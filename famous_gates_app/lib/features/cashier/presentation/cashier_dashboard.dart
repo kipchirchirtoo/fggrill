@@ -1979,23 +1979,37 @@ class _StationTabState extends ConsumerState<_StationTab> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        _bill == null || _loading ? null : _processSplitPayment,
-                    icon: const Icon(Icons.call_split, size: 16),
-                    label: const Text('Split Payment'),
+                if (_isCurrentBillCleared) ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: _loading || _bill == null ? null : () => _reprintPaidReceipt(_bill!),
+                      icon: const Icon(Icons.print, size: 16),
+                      label: const Text('Print Receipt'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        _bill == null || _loading ? null : _processPayment,
-                    icon: const Icon(Icons.check_circle, size: 16),
-                    label: const Text('Process'),
+                ] else ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _bill == null || _loading ? null : _processSplitPayment,
+                      icon: const Icon(Icons.call_split, size: 16),
+                      label: const Text('Split Payment'),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          _bill == null || _loading ? null : _processPayment,
+                      icon: const Icon(Icons.check_circle, size: 16),
+                      label: const Text('Process'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -2221,8 +2235,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final loaded = await _lookupBill();
     if (!mounted || loaded == null) return;
     final balance = _balanceFromBill(loaded);
-    if (balance <= 0) {
-      _snack('This bill is already cleared');
+    final status = '${loaded['status'] ?? loaded['payment_status']}'.toLowerCase();
+    if (balance <= 0 || status == 'paid' || status == 'cleared') {
+      _snack('This bill is already cleared. Tap "Print Receipt" to print receipt.');
+      ref.invalidate(cashierUnpaidBillsProvider);
+      setState(() {
+        _bill = loaded;
+        _amountController.clear();
+      });
     } else {
       _snack('Bill loaded for clearance');
     }
@@ -2246,9 +2266,81 @@ class _StationTabState extends ConsumerState<_StationTab> {
     });
   }
 
+  bool get _isCurrentBillCleared {
+    final bill = _bill;
+    if (bill == null) return false;
+    final status = '${bill['status'] ?? bill['payment_status']}'.toLowerCase();
+    final balance = _balanceFromBill(bill);
+    return status == 'paid' || status == 'cleared' || (balance <= 0 && status != 'unpaid');
+  }
+
+  Future<void> _reprintPaidReceipt(Map<String, dynamic> bill) async {
+    setState(() => _loading = true);
+    try {
+      var billData = bill;
+      final lookupRef = _queueLookupReference(bill).isNotEmpty
+          ? _queueLookupReference(bill)
+          : _billLookupReference(bill);
+      if (lookupRef.isNotEmpty && _receiptItemsFromBill(bill, 0).length <= 1) {
+        final fetched = await ref
+            .read(cashierRepositoryProvider)
+            .getBillDetails(lookupRef);
+        final data = _payload(fetched);
+        if (data.isNotEmpty) billData = data;
+      }
+
+      final nav = ref.read(dashboardNavProvider);
+      final total = _num(billData['total_amount'] ?? billData['amount_paid'] ?? billData['total']);
+      final receiptItems = _receiptItemsFromBill(billData, total);
+      final refCode = _text(billData, ['reference', 'order_number', 'short_code', 'id']);
+      final outletId = _text(billData, ['outlet_id', 'outletId']).isNotEmpty
+          ? _text(billData, ['outlet_id', 'outletId'])
+          : nav.user?.outletId;
+
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_receipt',
+        fallbackTitle: 'CUSTOMER RECEIPT',
+        branchId: nav.user?.branchId,
+        outletId: outletId,
+        sale: SaleResult(
+          transactionId: refCode.isEmpty ? DateTime.now().toString() : refCode,
+          createdAt: DateTime.now(),
+          receiptNumber: refCode.isEmpty ? null : refCode,
+          cashierName: nav.user?.name,
+          total: total.toDouble(),
+          paymentMethod: _text(billData, ['payment_method', 'method']).isNotEmpty 
+              ? _text(billData, ['payment_method', 'method']) 
+              : 'Paid',
+        ),
+        items: receiptItems,
+        branchName: nav.branchName,
+        customerName: _customerName(billData),
+        publicCode: _billShortCode(billData).isNotEmpty
+            ? _billShortCode(billData)
+            : lookupRef,
+        duplicateLabel: 'REPRINT',
+      );
+      _snack('Paid receipt printed successfully');
+    } catch (error) {
+      _snack('Print receipt failed: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _processPayment() async {
     final bill = _bill;
     if (bill == null) return;
+
+    if (_isCurrentBillCleared) {
+      _snack('This bill is already cleared. Printing receipt...');
+      ref.invalidate(cashierUnpaidBillsProvider);
+      _tenderedController.clear();
+      await _reprintPaidReceipt(bill);
+      return;
+    }
+
     final amount = num.tryParse(_amountController.text.trim()) ?? 0;
     if (amount <= 0) return _snack('Enter a valid amount');
 
@@ -2368,41 +2460,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 change: isCash ? _changeDue : null,
               );
       final changeGiven = isCash ? _changeDue : 0;
-      if (_method == 'credit_bill' && creditBill != null) {
-        final staff = _selectedStaff;
-        final nav = ref.read(dashboardNavProvider);
-        await printCreditBillDocument(
-          ref,
-          branchName: nav.branchName,
-          branchId: nav.user?.branchId,
-          staffName: staff?.name ?? _text(creditBill, ['staff_name']),
-          employeeId: staff?.employeeId,
-          department: staff?.department,
-          amount: amount,
-          items: _receiptItemsFromBill(bill, amount),
-          creditNumber: _text(
-              _payload(createdCredit), ['bill_number', 'credit_number', 'id']),
-          cashierName: nav.user?.name,
-          sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
-        );
-        _snack('Credit bill issued for ${staff?.name ?? 'staff'}');
-      } else {
-        await _printStationReceipt(
-          bill: bill,
-          amount: amount,
-          method: _method,
-          response: paymentResponse,
-          fallbackReference: createdCredit == null
-              ? _referenceController.text.trim()
-              : _text(_payload(createdCredit),
-                  ['bill_number', 'credit_number', 'id']),
-          changeGiven: changeGiven,
-          amountTendered: isCash ? _tendered : 0,
-        );
-        _snack(changeGiven > 0
-            ? 'Payment recorded · Give change ${_money(changeGiven)}'
-            : 'Payment recorded');
-      }
       _tenderedController.clear();
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
@@ -2410,6 +2467,52 @@ class _StationTabState extends ConsumerState<_StationTab> {
       ref.invalidate(cashierShiftsProvider);
       ref.invalidate(cashierCurrentShiftProvider);
       _applyOptimisticBillSettlement(amount);
+
+      if (_method == 'credit_bill' && creditBill != null) {
+        final staff = _selectedStaff;
+        final nav = ref.read(dashboardNavProvider);
+        try {
+          await printCreditBillDocument(
+            ref,
+            branchName: nav.branchName,
+            branchId: nav.user?.branchId,
+            staffName: staff?.name ?? _text(creditBill, ['staff_name']),
+            employeeId: staff?.employeeId,
+            department: staff?.department,
+            amount: amount,
+            items: _receiptItemsFromBill(bill, amount),
+            creditNumber: _text(
+                _payload(createdCredit), ['bill_number', 'credit_number', 'id']),
+            cashierName: nav.user?.name,
+            sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
+          );
+          _snack('Credit bill issued for ${staff?.name ?? 'staff'}');
+        } catch (printErr) {
+          _snack('Credit bill recorded! (Document print warning: ${apiErrorMessage(printErr)})');
+        }
+      } else {
+        try {
+          await _printStationReceipt(
+            bill: bill,
+            amount: amount,
+            method: _method,
+            response: paymentResponse,
+            fallbackReference: createdCredit == null
+                ? _referenceController.text.trim()
+                : _text(_payload(createdCredit),
+                    ['bill_number', 'credit_number', 'id']),
+            changeGiven: changeGiven,
+            amountTendered: isCash ? _tendered : 0,
+          );
+          _snack(changeGiven > 0
+              ? 'Payment recorded · Give change ${_money(changeGiven)}'
+              : 'Payment recorded');
+        } catch (printErr) {
+          _snack(changeGiven > 0
+              ? 'Payment recorded · Give change ${_money(changeGiven)} (Receipt print warning: ${apiErrorMessage(printErr)})'
+              : 'Payment recorded (Receipt print warning: ${apiErrorMessage(printErr)})');
+        }
+      }
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     } finally {
