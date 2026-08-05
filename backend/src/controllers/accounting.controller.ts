@@ -461,7 +461,8 @@ const getOrCreateAccountingCustomer = async (
   const { data: created, error } = await supabase
     .from('accounting_customers')
     .insert([{
-        customer_name: customerName,
+      name: customerName,
+      customer_name: customerName,
       email,
       phone: source.customer_phone || null,
       is_active: true,
@@ -2373,7 +2374,7 @@ export const createInvoiceFromBookingSource = async (
         total,
         amount_paid: paid,
         balance,
-        status: balance <= 0 ? 'paid' : paid > 0 ? 'partially_paid' : 'unpaid',
+        status: balance <= 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
         reference,
         notes: req.body.notes || `${source.source_label} ${source.reference}`,
         items,
