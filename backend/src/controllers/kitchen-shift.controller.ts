@@ -4575,16 +4575,53 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     );
 
     // Sold POS items with no recipe / inventory / food-control link — grouped
-    // for the accountant to register (recipe / direct / exempt). Never dropped.
+    // for the accountant to register (recipe / direct / exempt). Exclude bar & non-consumables.
+    const isBarOrNonConsumableItem = (name: string, outletType?: string): boolean => {
+        const normName = String(name || '').toLowerCase().trim();
+        const normOutlet = String(outletType || '').toLowerCase().trim();
+
+        if (['main_bar', 'executive_bar', 'sports_bar', 'bar', 'cellar'].includes(normOutlet)) {
+            return true;
+        }
+
+        const nonConsumables = [
+            'pool token', 'token', 'pool', 'trust classic', 'trust', 'condom', 't-shirt',
+            'merchandise', 'cap', 'hat', 'towel', 'ticket', 'corkage', 'service charge',
+            'damage fee', 'penalty', 'entry fee', 'parking'
+        ];
+        if (nonConsumables.some(nc => normName.includes(nc))) {
+            return true;
+        }
+
+        const barKeywords = [
+            'white cap', 'tusker', 'guinness', 'guarana', 'manyatta', 'savanna', 'faxe',
+            'viceroy', 'richot', 'vodka', 'captain morgan', 'black & white', 'kc ', 'kc 750', 'kc 350',
+            'kenya cane', 'gilbeys', 'gordons', 'bond 7', 'chrome', 'tripple ace', 'konyagi',
+            'jameson', 'jack daniel', 'red label', 'black label', 'johnnie walker', 'chivas',
+            'hennessy', 'martell', 'tequila', 'bacardi', 'campari', 'jagermeister', 'baileys',
+            'amarula', 'heineken', 'snapp', 'smirnoff', 'pilsner', 'bavaria', 'cider', 'lager',
+            '750ml', '350ml', '250ml', 'soda 500ml', 'soda 300ml', 'red bull'
+        ];
+        if (barKeywords.some(bk => normName.includes(bk))) {
+            return true;
+        }
+
+        return false;
+    };
+
     const unmatchedByPosId = new Map<string, any>();
     for (const sale of posConsumptionList) {
         if (String((sale as any).match_status || 'matched') !== 'unmatched') continue;
         const posId = String(sale.pos_outlet_item_id || '').trim()
             || String(sale.raw_item_sku || '').trim();
         if (!posId) continue;
+        const itemName = String(sale.raw_item_name || 'Unmapped POS item');
+        const outletType = String((sale as any).outlet_type || (sale as any).outlet_name || '');
+        if (isBarOrNonConsumableItem(itemName, outletType)) continue;
+
         const existing = unmatchedByPosId.get(posId) || {
             pos_outlet_item_id: sale.pos_outlet_item_id || null,
-            item_name: sale.raw_item_name || 'Unmapped POS item',
+            item_name: itemName,
             portions_sold: 0,
         };
         existing.portions_sold += n(sale.portions_sold);

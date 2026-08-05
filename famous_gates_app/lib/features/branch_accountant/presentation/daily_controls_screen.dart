@@ -385,6 +385,34 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
     final list = ((data['unmatched_pos_items'] as List?) ?? const [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
+        .where((u) {
+          final name = (u['item_name'] ?? '').toString().toLowerCase().trim();
+          final isBarOrNonFood = name.contains('white cap') ||
+              name.contains('tusker') ||
+              name.contains('guinness') ||
+              name.contains('guarana') ||
+              name.contains('viceroy') ||
+              name.contains('richot') ||
+              name.contains('savanna') ||
+              name.contains('manyatta') ||
+              name.contains('faxe') ||
+              name.contains('vodka') ||
+              name.contains('captain morgan') ||
+              name.contains('black & white') ||
+              name.contains('kc ') ||
+              name.contains('soda') ||
+              name.contains('water') ||
+              name.contains('juice') ||
+              name.contains('nescafe') ||
+              name.contains('token') ||
+              name.contains('trust') ||
+              name.contains('750ml') ||
+              name.contains('350ml') ||
+              name.contains('250ml') ||
+              name.contains('cider') ||
+              name.contains('lager');
+          return !isBarOrNonFood;
+        })
         .toList();
     if (list.isEmpty) return const SizedBox.shrink();
     return Container(
