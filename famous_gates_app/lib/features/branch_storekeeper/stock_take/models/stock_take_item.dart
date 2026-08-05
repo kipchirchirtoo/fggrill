@@ -6,7 +6,7 @@ class StockTakeItem {
   final int openingStock;
   final int sales;
   final int sdds;
-  final int? physicalCount;
+  final double? physicalCount;
   final String? reason;
   final String? explanation;
   final String? actionTaken;
@@ -33,7 +33,7 @@ class StockTakeItem {
 
   int get closingStock => total - sales;
 
-  int get variance => (physicalCount ?? 0) - closingStock;
+  double get variance => (physicalCount ?? 0) - closingStock;
 
   static const Object _unset = Object();
 
@@ -61,7 +61,7 @@ class StockTakeItem {
       sdds: sdds ?? this.sdds,
       physicalCount: identical(physicalCount, _unset)
           ? this.physicalCount
-          : physicalCount as int?,
+          : physicalCount as double?,
       reason: identical(reason, _unset) ? this.reason : reason as String?,
       explanation: identical(explanation, _unset)
           ? this.explanation

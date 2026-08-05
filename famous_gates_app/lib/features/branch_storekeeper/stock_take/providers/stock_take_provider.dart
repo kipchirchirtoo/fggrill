@@ -293,7 +293,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 sales: sales,
                 sdds: sdds,
                 physicalCount:
-                    isSubmittedRow ? _toInt(r['physical_quantity']) : null,
+                    isSubmittedRow ? (r['physical_quantity'] as num?)?.toDouble() : null,
                 reason: r['notes'] ?? r['reason_for_variance'],
                 explanation:
                     r['explanation'] ?? r['notes'] ?? r['reason_for_variance'],
@@ -321,7 +321,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 if (draftMap.containsKey(item.id)) {
                   final entry = draftMap[item.id] as Map<String, dynamic>;
                   final rawPhysical = entry['physical'];
-                  final physical = rawPhysical != null ? (rawPhysical as num).toInt() : null;
+                  final physical = rawPhysical != null ? (rawPhysical as num).toDouble() : null;
                   final reason = entry['reason'] as String?;
                   return item.copyWith(
                     physicalCount: physical,
@@ -373,7 +373,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
     }
   }
 
-  void updatePhysicalCount(String id, int? count) {
+  void updatePhysicalCount(String id, double? count) {
     if (!mounted) return;
     if (state.isSubmitted) return;
 

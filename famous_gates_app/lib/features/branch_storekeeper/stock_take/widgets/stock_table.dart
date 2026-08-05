@@ -23,7 +23,7 @@ class StockTable extends StatefulWidget {
   final bool isReadOnly;
   final bool isStorekeeper;
   final List<Map<String, dynamic>> staffList;
-  final ValueChanged2<String, int?> onPhysicalCountChanged;
+  final ValueChanged2<String, double?> onPhysicalCountChanged;
   final ValueChanged2<String, String?> onReasonChanged;
   final void Function(String itemId, String explanation)? onExplanationChanged;
   final void Function(String itemId, String action)? onActionTakenChanged;

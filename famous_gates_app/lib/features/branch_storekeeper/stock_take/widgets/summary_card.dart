@@ -7,8 +7,8 @@ class SummaryCard extends StatelessWidget {
   final int totalSales;
   final int totalSdds;
   final int expectedClosing;
-  final int physicalCount;
-  final int totalVariance;
+  final double physicalCount;
+  final double totalVariance;
   final bool isStorekeeper;
   final int? totalItems;
   final int? countedLines;
@@ -67,7 +67,9 @@ class SummaryCard extends StatelessWidget {
                 ),
                 _StorekeeperStatCard(
                   label: 'Entered Total',
-                  value: '$physicalCount',
+                  value: physicalCount == physicalCount.truncateToDouble()
+                      ? physicalCount.toInt().toString()
+                      : physicalCount.toStringAsFixed(2),
                   tone: const Color(0xFFEFF6FF),
                   valueColor: theme.colorScheme.primary,
                 ),
@@ -118,14 +120,18 @@ class SummaryCard extends StatelessWidget {
                 _divider(),
                 _LegacyStat(
                   'Counted',
-                  '$physicalCount',
+                  physicalCount == physicalCount.truncateToDouble()
+                      ? physicalCount.toInt().toString()
+                      : physicalCount.toStringAsFixed(2),
                   const Color(0xFF64748B),
                   theme.colorScheme.primary,
                 ),
                 _divider(),
                 _LegacyStat(
                   'Variance',
-                  totalVariance >= 0 ? '+$totalVariance' : '$totalVariance',
+                  totalVariance >= 0
+                      ? '+${totalVariance == totalVariance.truncateToDouble() ? totalVariance.toInt().toString() : totalVariance.toStringAsFixed(2)}'
+                      : '${totalVariance == totalVariance.truncateToDouble() ? totalVariance.toInt().toString() : totalVariance.toStringAsFixed(2)}',
                   const Color(0xFF64748B),
                   totalVariance == 0
                       ? const Color(0xFF0F172A)

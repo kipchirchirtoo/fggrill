@@ -99,10 +99,11 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
 
       return matchesSearch && matchesCategory;
     }).toList();
+
     final countedLines =
         filteredItems.where((item) => item.physicalCount != null).length;
 
-    // Sort items so beers are on one side (first), then other categories, and then by name
+    // Sort: BEERs first, then alphabetically by category then by name
     final sortedItems = List<StockTakeItem>.from(filteredItems)
       ..sort((a, b) {
         final catA = a.category;
@@ -119,8 +120,8 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
     int totalOpening = 0;
     int totalSales = 0;
     int totalSdds = 0;
-    int physicalCount = 0;
-    int totalVariance = 0;
+    double physicalCount = 0;
+    double totalVariance = 0;
 
     for (final item in filteredItems) {
       totalOpening += item.openingStock;
@@ -131,7 +132,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
         totalVariance += item.variance;
       }
     }
-    int expectedClosing = totalOpening - totalSales - totalSdds;
+    final int expectedClosing = totalOpening - totalSales - totalSdds;
 
     // Show error message as a banner or snackbar if it changes
     if (state.errorMessage != null) {
@@ -257,9 +258,9 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: state.isLoading
-                  ? SizedBox(
+                  ? const SizedBox(
                       height: 320,
-                      child: const Center(child: CircularProgressIndicator()),
+                      child: Center(child: CircularProgressIndicator()),
                     )
                   : StockTable(
                       items: sortedItems,
@@ -311,11 +312,6 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
       ),
     );
   }
-
-  String itemCategoryName(StockTakeItem item) {
-    return item.category;
-  }
-
   void _executeSubmit(BuildContext context, StockTakeNotifier notifier, int varianceCount) async {
     final success = await notifier.submitStockTake();
     if (success && mounted) {

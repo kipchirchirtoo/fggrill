@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class EditableCell extends StatefulWidget {
-  final int? value;
+  final double? value;
   final bool readOnly;
   final FocusNode? focusNode;
   final VoidCallback? onNext;
-  final ValueChanged<int?> onChanged;
+  final ValueChanged<double?> onChanged;
 
   const EditableCell({
     super.key,
@@ -53,7 +53,12 @@ class _EditableCellState extends State<EditableCell> {
     super.dispose();
   }
 
-  String _valueText(int? value) => value == null ? '' : value.toString();
+  /// Display whole numbers without a trailing ".0" for cleanliness.
+  String _valueText(double? value) {
+    if (value == null) return '';
+    if (value == value.truncateToDouble()) return value.toInt().toString();
+    return value.toString();
+  }
 
   void _handleFocusChange() {
     if (widget.focusNode?.hasFocus == true) {
@@ -73,7 +78,7 @@ class _EditableCellState extends State<EditableCell> {
       widget.onChanged(null);
       return;
     }
-    widget.onChanged(int.tryParse(trimmed));
+    widget.onChanged(double.tryParse(trimmed));
   }
 
   void _moveNext() {
@@ -94,7 +99,7 @@ class _EditableCellState extends State<EditableCell> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
         child: Text(
-          widget.value?.toString() ?? '—',
+          widget.value == null ? '—' : _valueText(widget.value),
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -114,11 +119,14 @@ class _EditableCellState extends State<EditableCell> {
         child: TextField(
           controller: _controller,
           focusNode: widget.focusNode,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textInputAction:
               widget.onNext == null ? TextInputAction.done : TextInputAction.next,
           textAlign: TextAlign.center,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          // Allow digits and a single decimal point.
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+          ],
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
