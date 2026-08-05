@@ -2418,6 +2418,50 @@ export const downloadInvoicePdf = async (
     }
 
     const items = Array.isArray(invoice.items) ? invoice.items : [];
+
+    let roomNumber: string | null = null;
+    let bookingRef: string | null = null;
+
+    if (invoice.reference && String(invoice.reference).startsWith('room:')) {
+      const sourceId = String(invoice.reference).replace('room:', '').trim();
+      const { data: resData } = await supabase
+        .from('reservations')
+        .select('booking_number, room_number, room:rooms!room_id(room_number)')
+        .eq('id', sourceId)
+        .maybeSingle();
+
+      if (resData) {
+        roomNumber = (resData as any).room?.room_number || resData.room_number || null;
+        bookingRef = resData.booking_number || null;
+      } else {
+        const { data: bookData } = await supabase
+          .from('bookings')
+          .select('booking_number, room_number, room:rooms!room_id(room_number)')
+          .eq('id', sourceId)
+          .maybeSingle();
+
+        if (bookData) {
+          roomNumber = (bookData as any).room?.room_number || bookData.room_number || null;
+          bookingRef = bookData.booking_number || null;
+        }
+      }
+    }
+
+    if (!roomNumber && items.length > 0) {
+      for (const item of items) {
+        const desc = String(item.description || item.name || '');
+        const match = desc.match(/Room\s+([A-Za-z0-9\s-]+?)(?:\s*\(|$)/i);
+        if (match && match[1]) {
+          roomNumber = match[1].trim();
+          break;
+        }
+      }
+    }
+
+    const cleanReference = bookingRef
+      ? `${bookingRef}${roomNumber ? ` (Room ${roomNumber})` : ''}`
+      : (roomNumber ? `Room ${roomNumber}` : invoice.reference || invoice.invoice_number);
+
     const payload = {
       invoice_number: invoice.invoice_number,
       invoice_date: invoice.invoice_date,
@@ -2426,6 +2470,7 @@ export const downloadInvoicePdf = async (
       customer_name: invoice.customer?.customer_name || invoice.customer_name || 'Customer',
       customer_address: invoice.branch?.name || 'FamousGate Hotels',
       customer_phone: invoice.customer?.phone || invoice.customer_phone || '',
+      room_number: roomNumber || null,
       items: items.map((item: any, index: number) => ({
         description: item.description || item.name || `Item ${index + 1}`,
         quantity: money(item.quantity || item.qty || 1) || 1,
@@ -2435,7 +2480,7 @@ export const downloadInvoicePdf = async (
       tax_rate: invoice.subtotal ? (money(invoice.tax_amount) / money(invoice.subtotal)) * 100 : 0,
       notes: invoice.notes || 'Thank you for your business.',
       terms: 'Payment due by invoice due date.',
-      reference_code: invoice.reference || invoice.invoice_number,
+      reference_code: cleanReference,
     };
 
     const pythonResponse = await axios.post(

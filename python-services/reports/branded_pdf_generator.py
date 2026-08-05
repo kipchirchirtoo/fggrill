@@ -4414,16 +4414,43 @@ class BrandedPDFGenerator:
         # Status color
         status_color = FG_GREEN if status == 'PAID' else FG_RED if status == 'UNPAID' else colors.orange
         
+        room_number = data.get('room_number')
+        clean_ref = str(reference_code or 'N/A')
+        if clean_ref.startswith('room:'):
+            clean_ref = 'Room Booking'
+
         invoice_info_data = [
-            ['Invoice Number:', invoice_number, 'Invoice Date:', invoice_date],
-            ['Reference ID:', reference_code or 'N/A', 'Due Date:', due_date],
-            ['Status:', Paragraph(f"<font color='{status_color}'><b>{status}</b></font>", self.styles['Normal']), '', ''],
+            [
+                Paragraph('<b>Invoice Number:</b>', self.styles['Normal']),
+                Paragraph(str(invoice_number), self.styles['Normal']),
+                Paragraph('<b>Invoice Date:</b>', self.styles['Normal']),
+                Paragraph(str(invoice_date), self.styles['Normal'])
+            ],
+            [
+                Paragraph('<b>Reference ID:</b>', self.styles['Normal']),
+                Paragraph(clean_ref, self.styles['Normal']),
+                Paragraph('<b>Due Date:</b>', self.styles['Normal']),
+                Paragraph(str(due_date), self.styles['Normal'])
+            ],
         ]
+
+        if room_number:
+            invoice_info_data.append([
+                Paragraph('<b>Room Number:</b>', self.styles['Normal']),
+                Paragraph(f"<b>Room {room_number}</b>", self.styles['Normal']),
+                Paragraph('<b>Status:</b>', self.styles['Normal']),
+                Paragraph(f"<font color='{status_color}'><b>{status}</b></font>", self.styles['Normal'])
+            ])
+        else:
+            invoice_info_data.append([
+                Paragraph('<b>Status:</b>', self.styles['Normal']),
+                Paragraph(f"<font color='{status_color}'><b>{status}</b></font>", self.styles['Normal']),
+                '',
+                ''
+            ])
         
         invoice_info_table = Table(invoice_info_data, colWidths=[1.5*inch, 2.25*inch, 1.5*inch, 2.25*inch])
         invoice_info_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
             ('BACKGROUND', (0, 0), (0, -1), ROW_ALT),
             ('BACKGROUND', (2, 0), (2, -1), ROW_ALT),
