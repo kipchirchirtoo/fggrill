@@ -182,11 +182,23 @@ class ReceiptGenerator:
         
         # Items
         c.setFont("Helvetica", 8)
-        items = receipt_data.get('items', [])
+        raw_items = receipt_data.get('items', [])
+        items = []
+        for item in raw_items:
+            raw_qty = float(item.get('quantity') or item.get('qty') or 1)
+            voided_qty = float(item.get('voided_qty') or 0)
+            active_qty = float(item.get('active_qty')) if item.get('active_qty') is not None else (raw_qty - voided_qty)
+            if active_qty <= 0 or item.get('is_fully_voided') is True:
+                continue
+            item_copy = dict(item)
+            item_copy['calc_qty'] = int(active_qty) if active_qty.is_integer() else active_qty
+            items.append(item_copy)
+
         for item in items:
             name = item.get('name', item.get('item_name', 'Item'))
-            qty = item.get('quantity', 1)
-            price = item.get('total', item.get('unit_price', 0) * qty)
+            qty = item.get('calc_qty', 1)
+            unit_price = float(item.get('unit_price') or item.get('price') or 0)
+            price = item.get('active_total') if item.get('active_total') is not None else item.get('total', unit_price * qty)
             
             # Truncate long names
             if len(name) > 25:
@@ -212,8 +224,8 @@ class ReceiptGenerator:
         
         # Get total from items (prices already include VAT)
         items_total = sum(
-            item.get('total', item.get('unit_price', 0) * item.get('quantity', 1)) 
-            for item in receipt_data.get('items', [])
+            float(item.get('active_total') if item.get('active_total') is not None else item.get('total', float(item.get('unit_price') or item.get('price') or 0) * item.get('calc_qty', 1))) 
+            for item in items
         )
         total = receipt_data.get('total_amount', receipt_data.get('total', items_total))
         

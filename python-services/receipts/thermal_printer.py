@@ -260,10 +260,20 @@ class ThermalPrinter:
             p.text("RECALLED ITEMS TO PREPARE:\n" if is_recall else "ITEMS TO PREPARE:\n")
             p.text("-" * 32 + "\n")
             
-            items = receipt_data.get('items', [])
+            raw_items = receipt_data.get('items', [])
+            items = []
+            for item in raw_items:
+                raw_qty = float(item.get('quantity') or item.get('qty') or 1)
+                voided_qty = float(item.get('voided_qty') or 0)
+                active_qty = float(item.get('active_qty')) if item.get('active_qty') is not None else (raw_qty - voided_qty)
+                if active_qty <= 0 or item.get('is_fully_voided') is True:
+                    continue
+                item_copy = dict(item)
+                item_copy['calc_qty'] = int(active_qty) if active_qty.is_integer() else active_qty
+                items.append(item_copy)
             
             for item in items:
-                qty = item.get('quantity', 1)
+                qty = item.get('calc_qty', 1)
                 name = item.get('name', item.get('item_name', 'Item'))
                 notes = item.get('notes', item.get('special_instructions', ''))
                 already_served = item.get('already_served', False)
@@ -293,7 +303,7 @@ class ThermalPrinter:
             # === SUMMARY ===
             p.set(align='left', font='a', bold=True)
             p.text(f"TOTAL ITEMS: {len(items)}\n")
-            total_qty = sum(item.get('quantity', 1) for item in items)
+            total_qty = sum(item.get('calc_qty', 1) for item in items)
             p.text(f"TOTAL QUANTITY: {total_qty}\n")
             
             p.text("\n")
@@ -416,13 +426,24 @@ class ThermalPrinter:
             
             # === ITEMS ===
             p.set(align='left', font='a')
-            items = receipt_data.get('items', [])
+            raw_items = receipt_data.get('items', [])
+            items = []
+            for item in raw_items:
+                raw_qty = float(item.get('quantity') or item.get('qty') or 1)
+                voided_qty = float(item.get('voided_qty') or 0)
+                active_qty = float(item.get('active_qty')) if item.get('active_qty') is not None else (raw_qty - voided_qty)
+                if active_qty <= 0 or item.get('is_fully_voided') is True:
+                    continue
+                item_copy = dict(item)
+                item_copy['calc_qty'] = int(active_qty) if active_qty.is_integer() else active_qty
+                items.append(item_copy)
             
             for item in items:
-                qty = item.get('quantity', 1)
+                qty = item.get('calc_qty', 1)
                 name = item.get('name', item.get('item_name', 'Item'))
                 # Price already includes VAT
-                price = item.get('unit_price', 0) * qty
+                unit_price = float(item.get('unit_price') or item.get('price') or 0)
+                price = unit_price * qty
                 
                 # Truncate long names
                 if len(name) > 20:
@@ -441,8 +462,8 @@ class ThermalPrinter:
             p.text("-" * 32 + "\n")
             
             # === TOTALS ===
-            # Calculate from items - prices already include VAT
-            subtotal = sum(item.get('unit_price', 0) * item.get('quantity', 1) for item in items)
+            # Calculate from active items - prices already include VAT
+            subtotal = sum(float(item.get('unit_price') or item.get('price') or 0) * item.get('calc_qty', 1) for item in items)
             
             # VAT is INCLUDED in prices (16%), so we calculate the breakdown
             # If price is X (VAT inclusive), then:
