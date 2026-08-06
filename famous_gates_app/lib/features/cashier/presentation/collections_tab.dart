@@ -54,9 +54,9 @@ class _CollectionsTabState extends ConsumerState<CollectionsTab> {
       builder: (context) => _ReceivePaymentDialog(
         source: _selectedSource,
         targetId: item['id'],
-        targetLabel: item['invoice_number'] ?? item['company_name'] ?? 'Payment',
+        targetLabel: item['invoice_number'] ?? item['name'] ?? item['company_name'] ?? 'Payment',
         amountDue: item['amount_due'] != null ? double.parse(item['amount_due'].toString()) - (item['amount_paid'] != null ? double.parse(item['amount_paid'].toString()) : 0) : 0,
-        customerName: item['corporate_customer']?['company_name'] ?? '',
+        customerName: item['corporate_customer']?['name'] ?? item['corporate_customer']?['company_name'] ?? '',
       ),
     );
   }
@@ -121,7 +121,7 @@ class _CollectionsTabState extends ConsumerState<CollectionsTab> {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      title: Text('${item['invoice_number'] ?? 'N/A'} - ${item['corporate_customer']?['company_name'] ?? 'Unknown'}'),
+                      title: Text('${item['invoice_number'] ?? 'N/A'} - ${item['corporate_customer']?['name'] ?? item['corporate_customer']?['company_name'] ?? 'Unknown'}'),
                       subtitle: Text('Status: ${item['status']} | Balance: KSh ${balance.toStringAsFixed(2)}'),
                       trailing: ElevatedButton.icon(
                         onPressed: balance > 0 ? () => _receivePayment(item) : null,

@@ -2261,6 +2261,9 @@ class BranchAccountantRepository {
   }
 
   Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Response) {
+      value = value.data;
+    }
     if (value is Map<String, dynamic>) {
       if (value['data'] is Map) {
         final data = Map<String, dynamic>.from(value['data'] as Map);
@@ -2367,6 +2370,9 @@ class BranchAccountantRepository {
   }
 
   List<Map<String, dynamic>> _asList(dynamic value) {
+    if (value is Response) {
+      value = value.data;
+    }
     var data = value is Map
         ? value['data'] ??
             value['items'] ??
@@ -2463,12 +2469,13 @@ class BranchAccountantRepository {
 
   // --- Corporate Accounts ---
   Future<List<Map<String, dynamic>>> getCorporateCustomers() async {
-    return _asList(await _dio.get('/corporate/customers'));
+    final res = await _dio.get('/corporate/customers');
+    return _asList(res.data);
   }
 
   Future<Map<String, dynamic>> createCorporateCustomer(Map<String, dynamic> data) async {
     final res = await _dio.post('/corporate/customers', data: data);
-    return _asMap(res);
+    return _asMap(res.data);
   }
 
   Future<Map<String, dynamic>> chargeCorporateCredit({
@@ -2483,7 +2490,7 @@ class BranchAccountantRepository {
       'amount': amount,
       'shift_id': shiftId,
     });
-    return _asMap(res);
+    return _asMap(res.data);
   }
 
   Future<Map<String, dynamic>> updateCorporateCustomer(String id, Map<String, dynamic> data) async {
@@ -2492,11 +2499,13 @@ class BranchAccountantRepository {
   }
 
   Future<List<Map<String, dynamic>>> getPendingCorporateBills() async {
-    return _asList(await _dio.get('/corporate/bills/pending'));
+    final res = await _dio.get('/corporate/bills/pending');
+    return _asList(res.data);
   }
 
   Future<List<Map<String, dynamic>>> getCorporateInvoices() async {
-    return _asList(await _dio.get('/corporate/invoices'));
+    final res = await _dio.get('/corporate/invoices');
+    return _asList(res.data);
   }
 
   Future<Map<String, dynamic>> generateCorporateInvoice(Map<String, dynamic> data) async {

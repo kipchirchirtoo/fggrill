@@ -6252,17 +6252,140 @@ export const unlinkOrderFromBill = async (req: Request, res: Response, next: Nex
   }
 };
 
+// Externally settle a master-bill member order: mark it fully paid + post stock
+// exactly like a normal clearance, but DO NOT insert a pos_shift_payments row —
+// the cash is held by the collecting cashier's shift, not this outlet's. The
+// outlet keeps its sale + stock; its cashier is never expected to hold this
+// cash ("Collected by another cashier — externally settled"). Works whether the
+// order's own outlet shift is open or closed; the closed shift is never reopened.
+const externallySettleMemberOrder = async (
+  order: Record<string, any>,
+  method: PaymentMethod,
+  collectingCashierId: string,
+  reference: string
+): Promise<void> => {
+  const total = numberValue(order.total_amount);
+  const items = Array.isArray(order.items) ? (order.items as Array<Record<string, any>>) : [];
+  const now = new Date().toISOString();
+  const alreadyPosted = !!order.inventory_posted_at;
+
+  if (!alreadyPosted) {
+    await assertPosStockAvailable(Number(order.branch_id), order.outlet_id, items);
+  }
+  await supabase.from('pos_shift_orders').update({
+    status: 'paid',
+    payment_status: 'paid',
+    amount_paid: total,
+    balance_amount: 0,
+    payment_method: method,
+    sub_bill_status: 'settled',
+    externally_settled: true,
+    externally_settled_by: collectingCashierId,
+    updated_at: now
+  }).eq('id', order.id);
+
+  if (!alreadyPosted) {
+    await postPosInventorySale({
+      branchId: Number(order.branch_id),
+      outletId: order.outlet_id,
+      shiftId: order.shift_id,
+      orderId: order.id,
+      items,
+      actorId: collectingCashierId
+    });
+    await supabase.from('pos_shift_orders')
+      .update({ inventory_posted_at: now, inventory_posted_by: collectingCashierId })
+      .eq('id', order.id);
+  }
+  void reference; // reserved for future per-order settlement audit
+};
+
+// Assign each non-origin outlet share to the cashier shift currently responsible
+// for that outlet (its open pos_outlet_shift) and notify that cashier. If no
+// shift is open for an outlet yet, the share stays unassigned (shift_id null) and
+// is picked up by whoever opens the next shift there — it still surfaces scoped
+// by outlet in the Cross-Outlet Settlements queue.
+const assignAndNotifySettlementShifts = async (
+  masterBillId: string,
+  branchId: number,
+  collectingCashierId: string,
+  collectorName: string | null
+): Promise<void> => {
+  const { data: shares } = await supabase
+    .from('pos_master_bill_settlements')
+    .select('*, master:pos_master_bills(master_bill_number, customer_name)')
+    .eq('master_bill_id', masterBillId)
+    .eq('is_origin', false)
+    .eq('status', 'settled');
+
+  for (const share of (shares || []) as Array<Record<string, any>>) {
+    const { data: openShift } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id, cashier_id')
+      .eq('outlet_id', share.outlet_id)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const responsibleCashierId = openShift ? String((openShift as any).cashier_id || '') : '';
+
+    // Same cashier collected the bill AND mans this outlet's shift — there is no
+    // separate party to acknowledge, so auto-confirm (never self-acknowledge).
+    if (openShift && responsibleCashierId && responsibleCashierId === collectingCashierId) {
+      await supabase.from('pos_master_bill_settlements')
+        .update({
+          shift_id: (openShift as any).id,
+          responsible_cashier_id: responsibleCashierId,
+          status: 'cashier_confirmed',
+          confirmed_by: collectingCashierId,
+          confirmed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', share.id);
+      continue;
+    }
+
+    if (openShift) {
+      // Assign to the shift currently responsible for this outlet.
+      await supabase.from('pos_master_bill_settlements')
+        .update({
+          shift_id: (openShift as any).id,
+          responsible_cashier_id: responsibleCashierId || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', share.id);
+    }
+    // else: no open shift for this outlet — leave the share unassigned; the NEXT
+    // cashier to open that outlet's shift picks it up (see getCrossOutletSettlements).
+
+    const master = Array.isArray(share.master) ? share.master[0] : share.master;
+    const amount = numberValue(share.amount);
+    const meta = {
+      settlement_id: share.id,
+      master_bill_id: masterBillId,
+      outlet_id: share.outlet_id,
+      branch_id: branchId,
+      amount
+    };
+    const title = 'Cross-outlet settlement to confirm';
+    const msg = `${collectorName || 'Another cashier'} collected your ${share.outlet_name || 'outlet'} share of KES ${amount.toLocaleString('en-KE')} on bill ${master?.master_bill_number || ''}. Acknowledge & Print (or dispute) before closing your shift.`;
+    if (responsibleCashierId) {
+      void notificationService.notifyUser(responsibleCashierId, title, msg,
+        { type: 'warning', category: 'pos_settlement', priority: 'high', metadata: meta }).catch(() => {});
+    }
+  }
+};
+
 // POST /pos/bills/:masterBillId/pay — the origin/settlement cashier collects the
-// WHOLE bill in one tender. Each member order is settled against its own outlet
-// shift (so revenue + stock attribute to the correct outlet), the master bill is
-// closed, and each per-outlet sub-bill is marked 'settled' pending that outlet
-// cashier's confirmation (the origin outlet is auto-confirmed — collected
-// locally). body: { payment_method, reference? }.
-// Core settlement for a master (combined) bill — shared by the POS consolidated
-// pay endpoint AND the main cashier station (lookup + pay). Settles every member
-// order against its OWN outlet shift (per-outlet revenue + stock), closes the
-// master bill, and marks each outlet sub-bill settled (origin auto-confirmed).
-// Throws AppError on any gate. Callers do their own role/branch checks first.
+// WHOLE bill in one tender. The collecting cashier keeps the full tender in their
+// OWN cashier shift; each member order is marked externally settled (a sale +
+// stock for its outlet, but no cash posted to that outlet's shift), and each
+// per-outlet sub-bill becomes a settlement task the responsible cashier must
+// Acknowledge & Print (or dispute). body: { payment_method, reference? }.
+// Shared by the POS consolidated pay endpoint AND the main cashier station
+// (lookup + pay). Throws AppError on any gate. Callers do their own role/branch
+// checks first. NEVER reopens closed outlet shifts.
 export const settleMasterBillCore = async (
   master: Record<string, any>,
   opts: { method: string; userId: string; cashierName: string | null }
@@ -6281,40 +6404,21 @@ export const settleMasterBillCore = async (
   const unsettled = members.filter((o) => !['paid', 'credit_bill', 'voided'].includes(String(o.payment_status)));
   if (unsettled.length === 0) throw new AppError('This bill is already settled', 409);
 
-  // Every member's outlet shift must be open to accept payment + post stock.
-  const shiftIds = Array.from(new Set(unsettled.map((o) => String(o.shift_id))));
-  const { data: shiftRows, error: shiftErr } = await supabase
-    .from('pos_outlet_shifts')
-    .select('id, status, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
-    .in('id', shiftIds);
-  if (shiftErr) throw shiftErr;
-  const shiftById = new Map((shiftRows || []).map((s: any) => [String(s.id), s]));
-  for (const o of unsettled) {
-    const shift = shiftById.get(String(o.shift_id));
-    if (!shift) throw new AppError('An outlet shift for this bill could not be found', 404);
-    if (String(shift.status) !== 'open') {
-      const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-      throw new AppError(`The ${outlet?.name || 'outlet'} shift is closed — reopen it or settle that item separately before settling the combined bill.`, 400);
-    }
-  }
-
+  // Shift-based clearance: the collecting cashier keeps the FULL tender in their
+  // own cashier shift (recorded by the caller). Each member order is marked
+  // externally settled — a full sale for its outlet (revenue + stock) but with
+  // NO pos_shift_payments posted to its outlet shift, so that outlet is never
+  // short. Member outlet shifts are therefore NOT required to be open, and a
+  // closed one is never reopened — the original sale stays under its own shift.
   let totalSettled = 0;
+  const settleRef = master.master_bill_number || `BILL-${masterBillId.slice(0, 8)}`;
   for (const order of unsettled) {
-    const shift = shiftById.get(String(order.shift_id));
     const balance = Math.max(0, numberValue(order.balance_amount) || numberValue(order.total_amount) - numberValue(order.amount_paid));
-    await settleOrderBalance({
-      order,
-      shift,
-      method,
-      amount: balance,
-      receivedBy: opts.userId,
-      reference: master.master_bill_number || `BILL-${masterBillId.slice(0, 8)}`
-    });
-    await supabase.from('pos_shift_orders').update({ sub_bill_status: 'settled' }).eq('id', order.id);
+    await externallySettleMemberOrder(order, method, opts.userId, settleRef);
     totalSettled += balance;
   }
 
-  // Close the master bill + stamp the settlement (origin) cashier.
+  // Close the master bill + stamp the settlement (collecting) cashier.
   await recomputeMasterBillTotals(masterBillId);
   const now = new Date().toISOString();
   await supabase.from('pos_master_bills').update({
@@ -6327,14 +6431,18 @@ export const settleMasterBillCore = async (
     updated_at: now
   }).eq('id', masterBillId);
 
-  // Each outlet sub-bill is 'settled' pending that outlet cashier's
-  // confirmation; the origin outlet is auto-confirmed (collected locally).
+  // Each outlet sub-bill is 'settled' pending that outlet cashier's Acknowledge
+  // & Print; the origin outlet is auto-confirmed (collected locally).
   await supabase.from('pos_master_bill_settlements').update({
     status: 'settled', collecting_cashier_id: opts.userId, payment_method: method, updated_at: now
   }).eq('master_bill_id', masterBillId).neq('status', 'cashier_confirmed');
   await supabase.from('pos_master_bill_settlements').update({
     status: 'cashier_confirmed', confirmed_by: opts.userId, confirmed_at: now
   }).eq('master_bill_id', masterBillId).eq('is_origin', true);
+
+  // Assign each non-origin share to the shift currently responsible for that
+  // outlet and notify that cashier under Cross-Outlet Settlements.
+  await assignAndNotifySettlementShifts(masterBillId, Number(master.branch_id), opts.userId, opts.cashierName);
 
   const view = await loadMasterBillView(masterBillId);
   return { totalSettled, view, method };
@@ -6744,13 +6852,15 @@ export const countUnconfirmedCrossOutletSettlements = async (
   outletIds: string[]
 ): Promise<number> => {
   if (!outletIds.length) return 0;
+  // Block close while a share is still pending confirmation ('settled') OR under
+  // dispute ('disputed') — both keep this station's reconciliation open.
   const { count } = await supabase
     .from('pos_master_bill_settlements')
     .select('id', { count: 'exact', head: true })
     .eq('branch_id', branchId)
     .in('outlet_id', outletIds)
     .eq('is_origin', false)
-    .eq('status', 'settled');
+    .in('status', ['settled', 'disputed']);
   return count || 0;
 };
 
@@ -6784,15 +6894,23 @@ export const getCrossOutletSettlements = async (req: Request, res: Response, nex
   try {
     assertUser(req);
     const branchId = branchIdFor(req);
+    const userId = String(req.user.id);
     const outletIds = await resolveCashierOutletIds(req);
-    if (outletIds.length === 0) { res.json({ success: true, data: [] }); return; }
+
+    // Shift-based scoping: a cashier sees the shares ASSIGNED to them (i.e. their
+    // current shift) PLUS any still-unassigned share in the outlets they man now
+    // (picked up by the next responsible shift) — never another cashier's shares.
+    const orParts: string[] = [`responsible_cashier_id.eq.${userId}`];
+    if (outletIds.length) {
+      orParts.push(`and(responsible_cashier_id.is.null,outlet_id.in.(${outletIds.join(',')}))`);
+    }
 
     const statusFilter = String(req.query.status || 'pending').toLowerCase();
     let query = supabase
       .from('pos_master_bill_settlements')
       .select('*, master:pos_master_bills(master_bill_number, customer_name, table_number, origin_outlet_id, origin_outlet_name, settlement_cashier_id, settlement_cashier_name, payment_method)')
-      .in('outlet_id', outletIds)
       .eq('is_origin', false)
+      .or(orParts.join(','))
       .order('created_at', { ascending: false })
       .limit(300);
     if (branchId) query = query.eq('branch_id', branchId);
@@ -6802,11 +6920,17 @@ export const getCrossOutletSettlements = async (req: Request, res: Response, nex
     const { data, error } = await query;
     if (error) throw error;
 
-    const rows = [...(data || [])];
+    // A cashier never acknowledges a share THEY collected — exclude self-collected
+    // from the queue (kept only for the collector's dispute-resolution view below).
+    const rows = (data || []).filter((r: any) => {
+      const m = Array.isArray(r.master) ? r.master[0] : r.master;
+      return String(m?.settlement_cashier_id || '') !== userId;
+    });
+
     // Also surface disputes on bills THIS cashier collected as the origin/
     // settlement cashier, so they can resolve them from the same screen.
     const { data: myMasters } = await supabase
-      .from('pos_master_bills').select('id').eq('settlement_cashier_id', String(req.user.id));
+      .from('pos_master_bills').select('id').eq('settlement_cashier_id', userId);
     const myMasterIds = (myMasters || []).map((m: any) => m.id);
     if (myMasterIds.length) {
       const { data: disputed } = await supabase
@@ -6819,7 +6943,6 @@ export const getCrossOutletSettlements = async (req: Request, res: Response, nex
         if (!seen.has(String((d as any).id))) { rows.push(d); seen.add(String((d as any).id)); }
       }
     }
-    const userId = String(req.user.id);
     const mapped = rows.map((r: any) => {
       const m = mapSettlementRow(r);
       m.viewer_is_collector = String(m.settlement_cashier_id || '') === userId;
@@ -6848,7 +6971,8 @@ export const confirmCrossOutletSettlement = async (req: Request, res: Response, 
     ensureBranchAccess(req, (row as any).branch_id);
 
     const outletIds = await resolveCashierOutletIds(req);
-    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !outletIds.includes(String((row as any).outlet_id))) {
+    const assignedToMe = String((row as any).responsible_cashier_id || '') === String(req.user.id);
+    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !assignedToMe && !outletIds.includes(String((row as any).outlet_id))) {
       throw new AppError('This settlement belongs to another outlet', 403);
     }
     if ((row as any).is_origin) throw new AppError('The origin outlet is confirmed automatically', 400);
@@ -6885,7 +7009,8 @@ export const disputeCrossOutletSettlement = async (req: Request, res: Response, 
     ensureBranchAccess(req, (row as any).branch_id);
 
     const outletIds = await resolveCashierOutletIds(req);
-    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !outletIds.includes(String((row as any).outlet_id))) {
+    const assignedToMe = String((row as any).responsible_cashier_id || '') === String(req.user.id);
+    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !assignedToMe && !outletIds.includes(String((row as any).outlet_id))) {
       throw new AppError('This settlement belongs to another outlet', 403);
     }
     if (String((row as any).status) === 'cashier_confirmed') {
@@ -6898,14 +7023,26 @@ export const disputeCrossOutletSettlement = async (req: Request, res: Response, 
       .eq('id', settlementId).select('*, master:pos_master_bills(settlement_cashier_id, master_bill_number)').single();
     if (updErr) throw updErr;
 
-    // Flag the collecting (origin) cashier so the dispute gets resolved.
+    // Escalate the dispute to the collecting cashier AND the branch manager +
+    // accountant so it is resolved and reconciled.
     const master = Array.isArray((updated as any).master) ? (updated as any).master[0] : (updated as any).master;
+    const disputeBranchId = Number((row as any).branch_id);
+    const disputeMsg = `${(updated as any).outlet_name || 'An outlet'} disputed their KES ${numberValue((updated as any).amount).toLocaleString('en-KE')} share of bill ${master?.master_bill_number || ''}: ${reason}`;
+    const disputeMeta = { settlement_id: settlementId, master_bill_id: String((row as any).master_bill_id || ''), branch_id: disputeBranchId };
     if (master?.settlement_cashier_id) {
       void notificationService.notifyUser(
         String(master.settlement_cashier_id),
         'Cross-outlet settlement disputed',
-        `${(updated as any).outlet_name || 'An outlet'} disputed their KES ${numberValue((updated as any).amount).toLocaleString('en-KE')} share of bill ${master.master_bill_number}: ${reason}`,
-        { type: 'warning', category: 'pos_settlement', priority: 'high', metadata: { settlement_id: settlementId, branch_id: Number((row as any).branch_id) } }
+        disputeMsg,
+        { type: 'warning', category: 'pos_settlement', priority: 'high', metadata: disputeMeta }
+      ).catch(() => {});
+    }
+    for (const escalationRole of ['branch_manager', 'branch_accountant']) {
+      void notificationService.notifyRole(
+        escalationRole,
+        'Cross-outlet settlement disputed',
+        disputeMsg,
+        { type: 'warning', category: 'pos_settlement', priority: 'high', branchId: disputeBranchId, metadata: disputeMeta }
       ).catch(() => {});
     }
     res.json({ success: true, data: mapSettlementRow(updated) });
@@ -7504,7 +7641,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
       Number(shift.branch_id), [String(shift.outlet_id)]
     );
     if (pendingSettlements > 0) {
-      throw new AppError(`Cannot close shift: ${pendingSettlements} cross-outlet settlement(s) for this station still need your confirmation. Confirm them in Cross-Outlet Settlements first.`, 400);
+      throw new AppError(`Cannot close shift: ${pendingSettlements} cross-outlet settlement(s) for this station are still pending or disputed. Acknowledge & Print (or resolve disputes) in Cross-Outlet Settlements first.`, 400);
     }
 
     const requestedClosingCash = req.body.closing_cash_counted ?? req.body.closingCashCounted;

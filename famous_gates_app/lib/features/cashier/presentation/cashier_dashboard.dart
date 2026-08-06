@@ -114,6 +114,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         ref.invalidate(cashierPendingItemVoidsProvider);
         ref.invalidate(cashierPendingExchangesProvider);
         ref.invalidate(cashierAwaitingRefundExchangesProvider);
+        ref.invalidate(cashierPendingSettlementsProvider);
       }, onError: (Object err) {
         debugPrint(
             '❌ Cashier void badge Realtime error: $err — falling back to polling');
@@ -133,7 +134,15 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       ref.invalidate(cashierPendingItemVoidsProvider);
       ref.invalidate(cashierPendingExchangesProvider);
       ref.invalidate(cashierAwaitingRefundExchangesProvider);
+      ref.invalidate(cashierPendingSettlementsProvider);
     });
+  }
+
+  // Jump the cashier straight to the Cross-Outlet Clearances tab (index of the
+  // 'Cross-Outlet Clearances' entry in the tabs list built in build()).
+  void _openCrossOutletClearances() {
+    if (!mounted) return;
+    setState(() => _tab = 7);
   }
 
   @override
@@ -160,6 +169,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
               data: (rows) => rows.length,
               orElse: () => 0,
             );
+    final pendingSettlementsCount =
+        ref.watch(cashierPendingSettlementsProvider).maybeWhen(
+              data: (rows) => rows.length,
+              orElse: () => 0,
+            );
     final tabs = [
       DashboardTab(
         label: 'Station',
@@ -169,6 +183,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           initialBillRef: widget.initialBillRef,
           initialAmount: widget.initialAmount,
           initialMethod: widget.initialMethod,
+          onGoToClearances: _openCrossOutletClearances,
         )),
       ),
       const DashboardTab(
@@ -206,6 +221,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       DashboardTab(
         label: 'Cross-Outlet Clearances',
         icon: Icons.sync_alt,
+        badgeCount: pendingSettlementsCount,
         content: const _RequiresOpenShift(child: CrossOutletClearancesTab()),
       ),
       const DashboardTab(
@@ -494,11 +510,18 @@ class _RequiresOpenShift extends ConsumerWidget {
 
 class _StationTab extends ConsumerStatefulWidget {
   const _StationTab(
-      {this.initialBillRef, this.initialAmount, this.initialMethod});
+      {this.initialBillRef,
+      this.initialAmount,
+      this.initialMethod,
+      this.onGoToClearances});
 
   final String? initialBillRef;
   final String? initialAmount;
   final String? initialMethod;
+
+  /// Jumps the dashboard to the Cross-Outlet Clearances tab (used by the
+  /// pending-settlement pop-up banner).
+  final VoidCallback? onGoToClearances;
 
   @override
   ConsumerState<_StationTab> createState() => _StationTabState();
@@ -898,17 +921,117 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
   }
 
+  // Persistent, tappable warning shown at the top of the Station tab while this
+  // cashier has cross-outlet shares awaiting acknowledgement. Tapping it jumps to
+  // the Cross-Outlet Clearances tab. These shares block shift close.
+  Widget _pendingSettlementsBanner() {
+    final rows = ref.watch(cashierPendingSettlementsProvider).maybeWhen(
+          data: (list) => list,
+          orElse: () => const <CrossOutletSettlement>[],
+        );
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final total = rows.fold<double>(0, (s, r) => s + r.amount);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => widget.onGoToClearances?.call(),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child:
+                      Icon(Icons.sync_problem, color: Colors.orange.shade800),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${rows.length} cross-outlet settlement${rows.length == 1 ? '' : 's'} need your acknowledgement',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Colors.orange.shade900,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'KES ${total.toStringAsFixed(0)} collected on your behalf. '
+                        'You cannot close your shift until these are acknowledged — tap to review.',
+                        style: TextStyle(
+                            color: Colors.orange.shade800, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: () => widget.onGoToClearances?.call(),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('Review'),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Colors.orange.shade800),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentShift = ref.watch(cashierCurrentShiftProvider);
     final currentShiftDetail = ref.watch(cashierCurrentShiftDetailProvider);
     final unpaidBills = ref.watch(
         cashierUnpaidBillsProvider(CashierBillFilters(search: _unpaidSearch)));
+
+    // Realtime pop-up: when a bill is cleared elsewhere and a new cross-outlet
+    // share is assigned to this cashier, surface a snackbar prompting them to
+    // acknowledge (they can't close their shift until they do).
+    ref.listen<AsyncValue<List<CrossOutletSettlement>>>(
+      cashierPendingSettlementsProvider,
+      (prev, next) {
+        final prevCount = prev?.asData?.value.length ?? 0;
+        final nextCount = next.asData?.value.length ?? 0;
+        if (nextCount > prevCount && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text(
+                'A bill was cleared — you have a cross-outlet share to acknowledge before closing your shift.'),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Review',
+              textColor: Colors.white,
+              onPressed: () => widget.onGoToClearances?.call(),
+            ),
+          ));
+        }
+      },
+    );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _pendingSettlementsBanner(),
           currentShift.when(
             data: (raw) {
               final shift = _payload(raw);
@@ -1933,7 +2056,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   items: _corporateCustomers
                       .map((c) => DropdownMenuItem<String>(
                             value: c['id'],
-                            child: Text(c['company_name'] ?? 'Unknown Company'),
+                            child: Text(c['name'] ?? c['company_name'] ?? c['contact_person'] ?? 'Unknown Company'),
                           ))
                       .toList(),
                   onChanged: (val) =>
@@ -9288,7 +9411,6 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   bool _saving = false;
   String? _error;
   String _searchQuery = '';
-  bool _filterCurrentShiftOnly = false;
 
   // Manual entry
   final _descCtrl = TextEditingController();
@@ -9336,13 +9458,11 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
       _error = null;
     });
     try {
-      final shiftId =
-          _filterCurrentShiftOnly ? await _resolveOpenShiftId() : null;
+      // The server scopes expenses to the cashier's active shift, so we always
+      // request "current shift" — no client-side shift/history filtering.
       final repo = ref.read(cashierRepositoryProvider);
       final results = await Future.wait([
-        _filterCurrentShiftOnly && (shiftId == null || shiftId.isEmpty)
-            ? Future.value(<Map<String, dynamic>>[])
-            : repo.getExpenses(shiftId: shiftId),
+        repo.getExpenses(),
         repo.getPendingPOs(),
       ]);
       if (!mounted) return;
@@ -9673,33 +9793,11 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Expense History',
+                  Text('Current Shift Expenses',
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
-                  ChoiceChip(
-                    label: const Text('All History'),
-                    selected: !_filterCurrentShiftOnly,
-                    onSelected: (sel) {
-                      if (sel && _filterCurrentShiftOnly) {
-                        setState(() => _filterCurrentShiftOnly = false);
-                        _load();
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  ChoiceChip(
-                    label: const Text('Current Shift Only'),
-                    selected: _filterCurrentShiftOnly,
-                    onSelected: (sel) {
-                      if (sel && !_filterCurrentShiftOnly) {
-                        setState(() => _filterCurrentShiftOnly = true);
-                        _load();
-                      }
-                    },
-                  ),
                 ],
               ),
               Row(
@@ -9756,9 +9854,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                   child: Text(
                       _searchQuery.isNotEmpty
                           ? 'No expenses match "$_searchQuery".'
-                          : (_filterCurrentShiftOnly
-                              ? 'No expenses recorded yet for this shift.'
-                              : 'No expense history found for this branch.'),
+                          : 'No expenses recorded yet for this shift.',
                       style: const TextStyle(color: AppColors.kTextSecondary))),
             )
           else

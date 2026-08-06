@@ -37,13 +37,16 @@ import {
   exportFloatHistory
 } from '../controllers/kyogong/float-tracking.controller';
 
+// Legacy /kyogong/petty-cash endpoints are now COMPATIBILITY ALIASES over the
+// shared, multi-branch cashier-expenses module (see /cashier/expenses). Kept so
+// un-migrated clients keep working; remove once every client uses the new path.
 import {
-  recordPettyCash,
-  getPettyCashEntries,
-  getPettyCashSummary,
-  getPettyCashCategories,
-  getPendingPOsForCashier
-} from '../controllers/kyogong/petty-cash.controller';
+  recordExpense as recordPettyCash,
+  listExpenses as getPettyCashEntries,
+  getSummary as getPettyCashSummary,
+  getCategories as getPettyCashCategories,
+  getPendingPOs as getPendingPOsForCashier,
+} from '../controllers/cashier-expenses.controller';
 
 import {
   getSalesPoints,

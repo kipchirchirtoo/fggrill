@@ -65,6 +65,7 @@ import staffPerformanceRoutes from './staff-performance.routes';
 import staffAuditRoutes from './staff-audit.routes';
 import storekeepingEnhancedRoutes from './storekeeping';
 import cashierRoutes from './cashier.routes';
+import cashierExpensesRoutes from './cashier-expenses.routes';
 import cashierClearanceRoutes from './cashier-clearance.routes';
 import outletPosRoutes from './outlet-pos.routes';
 import profitLossRoutes from './profit-loss.routes';
@@ -206,6 +207,7 @@ router.use('/storekeeping-enhanced', storekeepingEnhancedRoutes);
 router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/store', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
+router.use('/cashier', cashierExpensesRoutes);
 router.use('/cashier', cashierClearanceRoutes);
 router.use('/cashier-clearance', cashierClearanceRoutes);
 // outlet-pos routes accessible as both /outlet-pos (legacy) and /pos (mobile app expects /pos/outlets)

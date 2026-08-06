@@ -303,6 +303,16 @@ final cashierAwaitingRefundExchangesProvider =
   yield rows.where((r) => !r.refundIssued).toList();
 });
 
+/// Cross-outlet settlement shares still awaiting THIS cashier's Acknowledge &
+/// Print. They BLOCK shift close, so the Station tab surfaces them as a
+/// realtime pop-up that jumps to the Cross-Outlet Clearances tab.
+final cashierPendingSettlementsProvider =
+    FutureProvider.autoDispose<List<CrossOutletSettlement>>((ref) async {
+  return ref
+      .watch(outletPosRepositoryProvider)
+      .getCrossOutletSettlements(status: 'pending');
+});
+
 final cashierInsightsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   // Scope Python insights to the current shift's branch so the analysis

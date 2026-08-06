@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../data/outlet_pos_repository.dart';
 
@@ -76,19 +80,98 @@ class _CrossOutletClearancesTabState
     ));
   }
 
-  Future<void> _confirm(CrossOutletSettlement s) async {
+  // Acknowledge & Print: confirm the share was collected by another cashier, then
+  // print a settlement receipt for the outlet's records.
+  Future<void> _acknowledgeAndPrint(CrossOutletSettlement s) async {
     setState(() => _busy = true);
     try {
       await ref
           .read(outletPosRepositoryProvider)
           .confirmCrossOutletSettlement(s.id);
-      _snack('Confirmed ${_money(s.amount)} for ${s.outletName ?? 'your outlet'}.');
+      _snack('Acknowledged ${_money(s.amount)} for ${s.outletName ?? 'your outlet'}.');
+      await _printSettlementReceipt(s);
       await _load();
     } catch (e) {
-      _snack('Confirm failed: $e', error: true);
+      _snack('Acknowledge failed: $e', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _printSettlementReceipt(CrossOutletSettlement s) async {
+    final doc = pw.Document();
+    final money = NumberFormat('#,##0.00', 'en_KE');
+    final now = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+
+    pw.Widget row(String label, String value, {bool bold = false}) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+              pw.SizedBox(width: 8),
+              pw.Expanded(
+                child: pw.Text(value,
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight:
+                            bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+              ),
+            ],
+          ),
+        );
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat(80 * PdfPageFormat.mm, double.infinity,
+            marginAll: 6 * PdfPageFormat.mm),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Center(
+                child: pw.Text('FamousGate Hotels',
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 12))),
+            pw.Center(
+                child: pw.Text('CROSS-OUTLET SETTLEMENT',
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.SizedBox(height: 4),
+            pw.Divider(height: 6),
+            row('Bill', s.masterBillNumber ?? '-'),
+            row('Customer', s.customerName),
+            if (s.tableNumber != null) row('Table', s.tableNumber!),
+            row('Outlet', s.outletName ?? '-'),
+            pw.SizedBox(height: 4),
+            row('Your share', 'KES ${money.format(s.amount)}', bold: true),
+            row('Collected by',
+                '${s.settlementCashierName ?? 'origin cashier'}${s.originOutletName != null ? ' (${s.originOutletName})' : ''}'),
+            if (s.paymentMethod != null)
+              row('Method', s.paymentMethod!.toUpperCase()),
+            pw.SizedBox(height: 6),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(4),
+              decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
+              child: pw.Text(
+                  'Collected by another cashier - externally settled. This amount is NOT expected in this outlet\'s cash drawer.',
+                  style: const pw.TextStyle(fontSize: 8)),
+            ),
+            pw.SizedBox(height: 8),
+            row('Acknowledged', now),
+            pw.SizedBox(height: 14),
+            pw.Text('Cashier signature: ____________________',
+                style: const pw.TextStyle(fontSize: 8)),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (f) async => doc.save(),
+      name: 'Settlement_${s.masterBillNumber ?? s.id}.pdf',
+    );
   }
 
   Future<void> _dispute(CrossOutletSettlement s) async {
@@ -305,6 +388,21 @@ class _CrossOutletClearancesTabState
                       ?.copyWith(fontWeight: FontWeight.w800)),
             ],
           ),
+          if (s.isPending) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'Collected by another cashier – externally settled '
+                '(not expected in your cash drawer).',
+                style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700),
+              ),
+            ),
+          ],
           if (s.isDisputed && s.disputeReason != null) ...[
             const SizedBox(height: 6),
             Text('Dispute: ${s.disputeReason}',
@@ -353,9 +451,9 @@ class _CrossOutletClearancesTabState
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _busy ? null : () => _confirm(s),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Confirm'),
+                    onPressed: _busy ? null : () => _acknowledgeAndPrint(s),
+                    icon: const Icon(Icons.print, size: 18),
+                    label: const Text('Acknowledge & Print'),
                   ),
                 ),
               ],

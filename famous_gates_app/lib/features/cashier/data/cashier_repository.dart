@@ -571,34 +571,28 @@ class CashierRepository {
   Future<Map<String, dynamic>> getMpesaStatus(String checkoutRequestId) =>
       _getMap('/payments/mpesa/status/$checkoutRequestId');
 
-  /// Load purchase orders the storekeeper has created — cashier uses these
-  /// to issue petty-cash payments against approved/received POs.
+  /// Pending cash POs for the cashier's ACTIVE SHIFT branch. The shared
+  /// /cashier/expenses module derives the branch server-side from the open
+  /// cashier_shift_logs record, so no branch id is sent.
   Future<List<Map<String, dynamic>>> getPendingPOs({int? branchId}) async {
     try {
-      return await _getList('/kyogong/petty-cash/pending-pos', query: {
-        if (branchId != null) 'branch_id': branchId,
-      });
+      return await _getList('/cashier/expenses/pending-pos');
     } catch (_) {
       try {
-        return await _getList('/storekeeping/purchase-orders', query: {
-          if (branchId != null) 'branch_id': branchId,
-          'status': 'approved',
-        });
+        return await _getList('/storekeeping/purchase-orders',
+            query: {'status': 'approved'});
       } catch (_) {
         return [];
       }
     }
   }
 
-  /// Fetch petty-cash expenses already recorded. If [shiftId] is provided, filters
-  /// by shift; otherwise fetches overall branch expense history.
+  /// Current-shift expenses for the signed-in cashier. The server scopes the
+  /// result to the caller's active shift (shift_id + branch derived from
+  /// cashier_shift_logs), so no shift/branch/date filters are sent.
   Future<List<Map<String, dynamic>>> getExpenses({String? shiftId}) async {
     try {
-      final queryParams = <String, dynamic>{'limit': '500'};
-      if (shiftId != null && shiftId.isNotEmpty) {
-        queryParams['shift_id'] = shiftId;
-      }
-      return await _getList('/kyogong/petty-cash', query: queryParams);
+      return await _getList('/cashier/expenses', query: {'limit': '500'});
     } catch (_) {
       return [];
     }
@@ -608,7 +602,9 @@ class CashierRepository {
   Future<List<Map<String, dynamic>>> getShiftExpenses(String shiftId) =>
       getExpenses(shiftId: shiftId);
 
-  /// Record a petty-cash expense for the current shift or branch.
+  /// Record an expense against the cashier's active shift. The server derives
+  /// shift_id + branch_id from the open cashier_shift_logs record, reduces the
+  /// drawer once and writes the PAYOUT — the client only supplies the details.
   Future<Map<String, dynamic>> recordShiftExpense({
     String? shiftId,
     required num amount,
@@ -618,8 +614,7 @@ class CashierRepository {
     String? receiptNumber,
     String? poReference,
   }) {
-    return _postMap('/kyogong/petty-cash', {
-      if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
+    return _postMap('/cashier/expenses', {
       'amount': amount,
       'category': category,
       'description': description,
