@@ -2430,15 +2430,20 @@ class _StationTabState extends ConsumerState<_StationTab> {
           transactionId: refCode.isEmpty ? DateTime.now().toString() : refCode,
           createdAt: DateTime.now(),
           receiptNumber: refCode.isEmpty ? null : refCode,
-          cashierName: nav.user?.name,
+          // Show the WAITER who made the bill, not the reprinting cashier. Fall
+          // back to the cashier only if the bill carries no waiter at all.
+          cashierName: _waiterName(billData).isNotEmpty
+              ? _waiterName(billData)
+              : nav.user?.name,
           total: total.toDouble(),
-          paymentMethod: _text(billData, ['payment_method', 'method']).isNotEmpty 
-              ? _text(billData, ['payment_method', 'method']) 
+          paymentMethod: _text(billData, ['payment_method', 'method']).isNotEmpty
+              ? _text(billData, ['payment_method', 'method'])
               : 'Paid',
         ),
         items: receiptItems,
         branchName: nav.branchName,
         customerName: _customerName(billData),
+        staffLabel: 'Waiter',
         publicCode: _billShortCode(billData).isNotEmpty
             ? _billShortCode(billData)
             : lookupRef,
@@ -3424,9 +3429,13 @@ class _StationTabState extends ConsumerState<_StationTab> {
           transactionId: code.isEmpty ? DateTime.now().toString() : code,
           createdAt: DateTime.now(),
           receiptNumber: code.isEmpty ? null : code,
-          cashierName: _text(bill, ['waiter_name', 'staff_name', 'waiter']).isNotEmpty
-              ? _text(bill, ['waiter_name', 'staff_name', 'waiter'])
-              : nav.user?.name,
+          // The customer bill must credit the WAITER who created it — never the
+          // cashier doing the reprint. Cashier is only a last-resort fallback.
+          cashierName: _waiterName(bill).isNotEmpty
+              ? _waiterName(bill)
+              : _text(bill, ['staff_name', 'waiter']).isNotEmpty
+                  ? _text(bill, ['staff_name', 'waiter'])
+                  : nav.user?.name,
           total: total.toDouble(),
           paymentMethod: 'pending',
         ),
