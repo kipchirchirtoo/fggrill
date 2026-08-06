@@ -1488,7 +1488,19 @@ class OutletShiftOrder {
   /// Those items are hidden from the customer view until the manager decides.
   List<dynamic> get visibleItems => items
       .whereType<Map>()
-      .where((item) => item['void_pending_approval'] != true)
+      .map((raw) {
+        final m = Map<String, dynamic>.from(raw);
+        final qty = _num(m['quantity']);
+        final voidedQty = _num(m['voided_qty']);
+        final activeQty = (m['active_qty'] is num)
+            ? (m['active_qty'] as num).toDouble()
+            : double.tryParse('${m['active_qty']}') ?? (qty - voidedQty);
+        if (activeQty <= 0) return null;
+        m['quantity'] = activeQty;
+        m['line_total'] = _num(m['unit_price']) * activeQty;
+        return m;
+      })
+      .whereType<Map<String, dynamic>>()
       .toList();
 
   factory OutletShiftOrder.fromJson(Map<String, dynamic> json) {

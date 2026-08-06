@@ -2109,7 +2109,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               final unitPrice = (m['unit_price'] is num)
                   ? (m['unit_price'] as num).toDouble()
                   : double.tryParse('${m['unit_price']}') ?? 0;
-              if (m['void_pending_approval'] == true || activeQty <= 0) {
+              if (activeQty <= 0) {
                 return null;
               }
               return CartItem(
@@ -2237,7 +2237,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         final unitPrice = (m['unit_price'] is num)
             ? (m['unit_price'] as num).toDouble()
             : double.tryParse('${m['unit_price']}') ?? 0;
-        if (m['void_pending_approval'] == true || activeQty <= 0) continue;
+        if (activeQty <= 0) continue;
         final outletTag =
             (order.outletName ?? '').isNotEmpty ? '[${order.outletName}] ' : '';
         items.add(CartItem(
