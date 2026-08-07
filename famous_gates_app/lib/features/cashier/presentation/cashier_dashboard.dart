@@ -9267,7 +9267,12 @@ List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {
         final rawQty = _num(item['quantity'] ?? item['qty']);
         final voidedQty = _num(item['voided_qty'] ?? 0);
         final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
-        if (activeQty <= 0) return null;
+        final isVoided = item['is_fully_voided'] == true ||
+            (item['is_recalled_item'] == true && (activeQty <= 0 || item['active_qty'] == 0)) ||
+            (item['recall_note'] != null &&
+                '${item['recall_note']}'.toUpperCase().contains('RECALLED') &&
+                (activeQty <= 0 || item['active_qty'] == 0 || item['voided_qty'] != null));
+        if (activeQty <= 0 || isVoided) return null;
         final unitPrice = _num(item['unit_price'] ?? item['price']);
         final activeTotal = _num(item['active_total'] ?? activeQty * unitPrice);
         final name = _text(

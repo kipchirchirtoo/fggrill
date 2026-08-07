@@ -44,6 +44,13 @@ import {
     markWaiterOrderPaid
 } from '../controllers/cashier.controller';
 import {
+    recordExpense,
+    listExpenses,
+    getSummary,
+    getCategories,
+    getPendingPOs
+} from '../controllers/cashier-expenses.controller';
+import {
     getShiftLogs,
     getShiftLog,
     startShift as startNewShift,
@@ -339,5 +346,14 @@ router.get(
     ] as any),
     getHotelPaymentOrphansReport
 );
+
+// ============================================
+// CASHIER EXPENSES & PETTY CASH ROUTES
+// ============================================
+router.get('/expenses/categories', getCategories);
+router.get('/expenses/summary', getSummary);
+router.get('/expenses/pending-pos', getPendingPOs);
+router.get('/expenses', listExpenses);
+router.post('/expenses', recordExpense);
 
 export default router;

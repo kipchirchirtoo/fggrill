@@ -200,7 +200,25 @@ router.use(protect);
 // Define authorized roles
 const centralRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]; // Central warehouse management
 const branchRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]; // Branch stock viewing
-const allStoreRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]; // All storekeeping roles
+const allStoreRoles = [
+  UserRole.SUPER_ADMIN, 
+  UserRole.GENERAL_MANAGER, 
+  UserRole.CENTRAL_STOREKEEPER, 
+  UserRole.BRANCH_STOREKEEPER, 
+  UserRole.BRANCH_ACCOUNTANT, 
+  UserRole.AUDITOR,
+  UserRole.RECEPTIONIST,
+  UserRole.CASHIER,
+  UserRole.BRANCH_MANAGER,
+  UserRole.KYOGONG_RECEPTION_CASHIER,
+  'restaurant_cashier',
+  'main_bar_cashier',
+  'executive_bar_cashier',
+  'kyogong_spa_cashier',
+  'kyogong_executive_bar_cashier',
+  'kyogong_sports_bar_cashier',
+  'choma_zone_cashier',
+] as any; // All storekeeping roles (including cashiers resolving pending PO expenses)
 const staffRoles = [
   UserRole.SUPER_ADMIN,
   UserRole.GENERAL_MANAGER,

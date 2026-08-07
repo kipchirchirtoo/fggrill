@@ -884,12 +884,25 @@ function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Recor
                 station_name: outlet?.name,
                 station_type: outlet?.outlet_type,
                 status: posOrder.payment_status === 'paid' ? 'cleared' : 'unpaid',
-                items: items.map((item: any) => ({
-                    name: item.name || item.item_name || 'POS item',
-                    quantity: Number(item.quantity || item.qty || 1),
-                    price: Number(item.unit_price || item.price || 0),
-                    total: Number(item.line_total || item.total || 0)
-                }))
+                items: items
+                    .map((item: any) => {
+                        const rawQty = Number(item.quantity || item.qty || 1);
+                        const voidedQty = Number(item.voided_qty || 0);
+                        const activeQty = item.active_qty !== undefined ? Number(item.active_qty) : (rawQty - voidedQty);
+                        if (activeQty <= 0 || item.is_fully_voided === true) return null;
+                        const unitPrice = Number(item.unit_price || item.price || 0);
+                        const activeTotal = item.active_total !== undefined ? Number(item.active_total) : (activeQty * unitPrice);
+                        return {
+                            name: item.name || item.item_name || 'POS item',
+                            quantity: activeQty,
+                            price: unitPrice,
+                            total: activeTotal,
+                            active_qty: activeQty,
+                            voided_qty: voidedQty,
+                            is_fully_voided: false
+                        };
+                    })
+                    .filter(Boolean)
             },
             financials: {
                 total_amount: totalAmount,

@@ -44,10 +44,18 @@ const RECORD_ROLES: UserRole[] = [
 
 router.use(protect);
 
+// /expenses/* paths (when mounted at /cashier)
 router.get('/expenses/categories', authorize(READ_ROLES), getCategories);
 router.get('/expenses/summary', authorize(READ_ROLES), getSummary);
 router.get('/expenses/pending-pos', authorize(READ_ROLES), getPendingPOs);
 router.get('/expenses', authorize(READ_ROLES), listExpenses);
 router.post('/expenses', authorize(RECORD_ROLES), recordExpense);
+
+// Root paths (when mounted at /cashier/expenses or /cashier-expenses)
+router.get('/categories', authorize(READ_ROLES), getCategories);
+router.get('/summary', authorize(READ_ROLES), getSummary);
+router.get('/pending-pos', authorize(READ_ROLES), getPendingPOs);
+router.get('/', authorize(READ_ROLES), listExpenses);
+router.post('/', authorize(RECORD_ROLES), recordExpense);
 
 export default router;

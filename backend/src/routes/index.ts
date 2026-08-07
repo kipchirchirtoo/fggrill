@@ -208,6 +208,8 @@ router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/store', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
 router.use('/cashier', cashierExpensesRoutes);
+router.use('/cashier/expenses', cashierExpensesRoutes);
+router.use('/cashier-expenses', cashierExpensesRoutes);
 router.use('/cashier', cashierClearanceRoutes);
 router.use('/cashier-clearance', cashierClearanceRoutes);
 // outlet-pos routes accessible as both /outlet-pos (legacy) and /pos (mobile app expects /pos/outlets)
