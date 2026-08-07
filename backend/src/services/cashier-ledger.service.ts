@@ -36,7 +36,8 @@ export const calculateCashierShiftLedgerTotals = async (
     branchId: number,
     client: PoolClient
 ): Promise<LedgerTotals> => {
-    // 1. Fetch canonical transactions for this shift
+    // 1. Fetch canonical transactions for this shift (combining Room/Front-Desk transactions from
+    // cashier_transactions AND POS/Restaurant/Bar transactions from cashier_shift_transactions)
     const query = `
         SELECT 
             id, amount, amount_tendered, change_given, 
@@ -45,6 +46,16 @@ export const calculateCashierShiftLedgerTotals = async (
         FROM cashier_transactions
         WHERE cashier_shift_log_id = $1
           AND branch_id = $2
+
+        UNION ALL
+
+        SELECT 
+            id, amount, amount as amount_tendered, 0 as change_given,
+            payment_method, 'POS_SALE' as revenue_type, 'PAYMENT' as transaction_type,
+            CASE WHEN is_voided = true THEN 'voided' ELSE 'completed' END as status,
+            'POS' as source_module, 'POS_ORDER' as source_document_type
+        FROM cashier_shift_transactions
+        WHERE shift_id = $1
     `;
     const { rows } = await client.query(query, [cashierShiftLogId, branchId]);
 
