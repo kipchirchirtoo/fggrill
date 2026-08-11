@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
@@ -22,6 +23,19 @@ String _kdsKenyaTime(DateTime value) {
   final ampm = k.hour < 12 ? 'AM' : 'PM';
   return '$h12:${k.minute.toString().padLeft(2, '0')} $ampm';
 }
+
+// Page-level action buttons (Refresh, Export PDF, Mark All Read, ...) sit
+// directly on MasterDashboardShell's dark background/surface — but
+// MasterDashboardShell never wraps its child in a matching dark Theme, so an
+// unstyled OutlinedButton falls back to the app-wide light theme's default
+// foreground color (colorScheme.primary, a deep navy) and reads as
+// near-invisible navy-on-navy. Buttons that instead sit on one of this
+// screen's plain (intentionally white/paper-styled) Cards — order tickets,
+// the Live Orders instructional card — are unaffected and left alone.
+final ButtonStyle _kdsOutlinedButtonStyle = OutlinedButton.styleFrom(
+  foregroundColor: const Color(0xFFF5F6FA),
+  side: const BorderSide(color: Color(0xFF34345A)),
+);
 
 // Orders older than this with no clearing action (the backend's active-feed
 // already drops anything marked served/completed) are hidden from the live
@@ -52,6 +66,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   String _statusFilter = 'all';
   String? _tableFilter; // null = all tables
   String _historyTimeline = 'shift'; // shift | today | yesterday | 7days | all
+  bool _exportingHistory = false;
 
   // Forces a rebuild every minute purely so the "stale order" cutoff below
   // (orders older than _kStaleOrderMinutes that were never cleared/served)
@@ -433,6 +448,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             label: Text('Clear All Voids ($voided)'),
           ),
         OutlinedButton.icon(
+          style: _kdsOutlinedButtonStyle,
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('Refresh'),
@@ -588,6 +604,30 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
+  Future<void> _exportHistoryPdf(List<KitchenOrder> orders) async {
+    if (_exportingHistory) return;
+    setState(() => _exportingHistory = true);
+    try {
+      final bytes = await _repo.exportHistoryPdf(
+        orders: orders,
+        outletScope: widget.scope,
+        timeline: _historyTimeline,
+      );
+      if (!mounted) return;
+      // layoutPdf opens the OS print/preview dialog (save, print, or share
+      // from there) — bytes came straight from python-services' branded
+      // PDF generator, not a locally-built document.
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export PDF: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingHistory = false);
+    }
+  }
+
   Widget _history(_KitchenModuleSnapshot data) {
     return _Page(
       title: widget.scope.historyTitle,
@@ -595,6 +635,23 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       actions: [
         _scopeSwitcher(),
         OutlinedButton.icon(
+          style: _kdsOutlinedButtonStyle,
+          onPressed:
+              _exportingHistory ? null : () => _exportHistoryPdf(data.history),
+          icon: _exportingHistory
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFF5F6FA),
+                  ),
+                )
+              : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+          label: Text(_exportingHistory ? 'Exporting…' : 'Export PDF'),
+        ),
+        OutlinedButton.icon(
+          style: _kdsOutlinedButtonStyle,
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('Refresh'),
@@ -621,6 +678,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       actions: [
         _scopeSwitcher(),
         OutlinedButton.icon(
+          style: _kdsOutlinedButtonStyle,
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('Refresh'),
@@ -642,6 +700,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       actions: [
         _scopeSwitcher(),
         OutlinedButton.icon(
+          style: _kdsOutlinedButtonStyle,
           onPressed: () => _run(() => _repo.markAllNotificationsRead()),
           icon: const Icon(Icons.done_all, size: 18),
           label: const Text('Mark All Read'),
@@ -864,6 +923,7 @@ class _KdsVoidRequestsSectionState
                     }).toList(),
                   ),
                   OutlinedButton.icon(
+                    style: _kdsOutlinedButtonStyle,
                     onPressed: _refresh,
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Refresh'),
@@ -1180,6 +1240,7 @@ class _KitchenOrderIntelligencePanelState
           subtitle: widget.scope.intelligenceSubtitle,
           actions: [
             OutlinedButton.icon(
+              style: _kdsOutlinedButtonStyle,
               onPressed: _refresh,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Refresh'),
@@ -2031,12 +2092,23 @@ class _OrderList extends StatelessWidget {
     final sortedOrders = List<KitchenOrder>.from(orders)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    // This list lives inside MasterDashboardShell's dark ShellPalette
+    // (background 0xFF1A1A2E / surface 0xFF22223D), but MasterDashboardShell
+    // doesn't wrap its child in a matching Theme override — so a plain Card
+    // here falls back to the app-wide light theme's white cardTheme while
+    // this list's own text styles assume a dark card. That mismatch is what
+    // made rows unreadable (near-white text with no explicit color landing
+    // on a white card, or near-white item text landing on top of it too).
+    // Explicitly darken the card/divider and give every text node in it an
+    // explicit color so it always renders against the dark surface it's
+    // actually painted on.
     return Card(
+      color: const Color(0xFF22223D),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: sortedOrders.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF34345A)),
         itemBuilder: (context, index) {
           final order = sortedOrders[index];
           final isStopTicket = order.hasPendingVoidRequest || order.isVoided;
@@ -2063,6 +2135,7 @@ class _OrderList extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
+                        color: const Color(0xFFF5F6FA),
                         decoration: isStopTicket ? TextDecoration.lineThrough : null,
                         decorationColor: AppColors.kError,
                         decorationThickness: 2.5,
@@ -2086,15 +2159,38 @@ class _OrderList extends StatelessWidget {
               children: [
                 Text(
                   (order.waiterName ?? '').isEmpty ? 'Waiter not assigned' : 'Waiter: ${order.waiterName}',
-                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Color(0xFFAAAFC4)),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  order.items.map((item) => '${item.quantity}x ${item.name}').join(', '),
-                  style: const TextStyle(fontSize: 13, color: Color(0xFFF5F6FA)),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                // One item per line instead of a single comma-joined string —
+                // a long order (e.g. 5+ items) used to collapse into an
+                // unreadable, ellipsis-truncated run-on sentence.
+                ...(() {
+                  const maxVisible = 6;
+                  final visibleItems = order.items.take(maxVisible);
+                  final overflowCount = order.items.length - maxVisible;
+                  return [
+                    for (final item in visibleItems)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 1),
+                        child: Text(
+                          '${item.quantity}x ${item.name}',
+                          style: const TextStyle(fontSize: 13, color: Color(0xFFF5F6FA)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (overflowCount > 0)
+                      Text(
+                        '+$overflowCount more item${overflowCount == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFFAAAFC4),
+                        ),
+                      ),
+                  ];
+                })(),
                 const SizedBox(height: 4),
                 Row(
                   children: [

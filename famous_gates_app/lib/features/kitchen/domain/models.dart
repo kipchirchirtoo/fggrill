@@ -188,6 +188,25 @@ class KitchenOrder {
     if (value is num) return value.toDouble();
     return double.tryParse('$value') ?? 0;
   }
+
+  /// Shape consumed by python-services' branded PDF generator
+  /// (`_generate_kitchen_order_history_report`) — used to export the KDS
+  /// History tab exactly as displayed, not re-fetched/re-filtered server-side.
+  Map<String, dynamic> toExportJson() => {
+        'order_number': orderNumber,
+        'order_type': orderType,
+        'location_label': locationLabel,
+        'waiter_name': waiterName,
+        'total': total,
+        'status': status,
+        'is_voided': isVoided,
+        'has_pending_void_request': hasPendingVoidRequest,
+        'has_recalled_items': hasRecalledItems,
+        'created_at': createdAt.toIso8601String(),
+        'items': items
+            .map((item) => {'quantity': item.quantity, 'name': item.name})
+            .toList(),
+      };
 }
 
 class KitchenOrderItem {

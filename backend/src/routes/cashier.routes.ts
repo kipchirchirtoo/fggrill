@@ -15,6 +15,8 @@ import {
     createCreditBill,
     confirmCreditBill,
     recordCreditPayment,
+    rejectCreditBillCashier,
+    editCreditBillCashier,
     recordStaffPaidBill,
     getStaffPaidBills,
     approvePaidBill,
@@ -257,6 +259,18 @@ router.route('/credit-bills/:id/confirm')
 
 router.route('/credit-bills/:id/payment')
     .post(recordCreditPayment);
+
+router.route('/credit-bills/:id/reject')
+    .patch(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        rejectCreditBillCashier
+    );
+
+router.route('/credit-bills/:id')
+    .put(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        editCreditBillCashier
+    );
 
 // Paid bills: cashier records staff settling money toward their credit during
 // the shift (search staff, amount, method). Flows to the branch accountant at

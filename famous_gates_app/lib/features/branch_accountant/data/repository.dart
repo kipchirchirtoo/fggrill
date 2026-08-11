@@ -1586,12 +1586,16 @@ class BranchAccountantRepository {
   Future<List<Map<String, dynamic>>> getPayrollCreditBills({
     String status = 'all',
     String? staffId,
+    String? fromDate,
+    String? toDate,
   }) async {
     final branchId = await getBranchId();
     return _getList('/payroll/credit-bills', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != 'all') 'status': status,
       if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
     });
   }
 
@@ -1644,13 +1648,53 @@ class BranchAccountantRepository {
     await _dio.put('/payroll/credit-bills/$id', data: data);
   }
 
+  // ── Cashier-station credit bills ────────────────────────────────────────
+  // GET /payroll/credit-bills merges rows from two tables — staff_credit_bills
+  // (source_table 'staff_credit_bills') and the cashier station's own
+  // credit_bills (source_table 'credit_bills', created when a cashier bills a
+  // staff member's tab at the till). The action endpoints above only ever
+  // operate on staff_credit_bills, so calling them against a 'credit_bills'
+  // row 404s ("Credit bill not found") — these hit the matching endpoints
+  // for that table instead.
+  Future<void> approveCashierCreditBill(String id) async {
+    await _dio.patch('/cashier/credit-bills/$id/confirm');
+  }
+
+  Future<void> recordCashierCreditBillPayment(
+    String id, {
+    required num amount,
+    String paymentMethod = 'cash',
+  }) async {
+    await _dio.post('/cashier/credit-bills/$id/payment', data: {
+      'payment_amount': amount,
+      'payment_method': paymentMethod,
+    });
+  }
+
+  Future<void> rejectCashierCreditBill(String id, String reason) async {
+    await _dio.patch('/cashier/credit-bills/$id/reject', data: {
+      'rejection_reason': reason,
+    });
+  }
+
+  Future<void> editCashierCreditBill(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.put('/cashier/credit-bills/$id', data: data);
+  }
+
   Future<List<Map<String, dynamic>>> getCashierPaidCreditEntries({
     String status = 'pending',
+    String? fromDate,
+    String? toDate,
   }) async {
     final branchId = await getBranchId();
     return _getList('/payroll/credit-bills/cashier-paid-credits', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != 'all') 'status': status,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
     });
   }
 
@@ -1677,12 +1721,16 @@ class BranchAccountantRepository {
   Future<List<Map<String, dynamic>>> getPayrollAdvances({
     String status = 'all',
     String? staffId,
+    String? fromDate,
+    String? toDate,
   }) async {
     final branchId = await getBranchId();
     return _getList('/payroll/advances', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != 'all') 'status': status,
       if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
     });
   }
 
@@ -1707,12 +1755,16 @@ class BranchAccountantRepository {
   Future<List<Map<String, dynamic>>> getPayrollLoans({
     String status = 'all',
     String? staffId,
+    String? fromDate,
+    String? toDate,
   }) async {
     final branchId = await getBranchId();
     return _getList('/payroll/loans', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != 'all') 'status': status,
       if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
     });
   }
 

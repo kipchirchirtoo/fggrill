@@ -6094,10 +6094,13 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
             throw new AppError('Credit bill not found', 404);
         }
 
-        // Calculate new paid amount
+        // Calculate new paid amount. createCreditBill (above) inserts using
+        // amount_paid/balance_due — this used to read/write paid_amount/
+        // balance_amount instead, columns that don't actually exist on this
+        // table, which made every cashier-side credit bill payment fail.
         const new_paid_amount = Math.min(
             Number(credit.total_amount || 0),
-            Number(credit.paid_amount || 0) + paymentAmount
+            Number(credit.amount_paid || 0) + paymentAmount
         );
         const new_balance = Math.max(0, Number(credit.total_amount || 0) - new_paid_amount);
 
@@ -6105,8 +6108,8 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
         const { data: updatedCredit, error: updateError } = await supabase
             .from('credit_bills')
             .update({
-                paid_amount: new_paid_amount,
-                balance_amount: new_balance,
+                amount_paid: new_paid_amount,
+                balance_due: new_balance,
                 status: new_balance <= 0 ? 'paid' : credit.status
             })
             .eq('id', id)
@@ -6214,6 +6217,124 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
             success: true,
             message: 'Credit payment recorded successfully',
             data: updatedCredit
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Reject/void a cashier-station credit bill (the `credit_bills` table).
+ * This table has its own row per bill in addition to the linked
+ * `staff_credit_bills` row `createCreditBill` writes alongside it — the
+ * Branch Accountant's Staff Accounts screen only ever called the
+ * staff_credit_bills-only `/payroll/credit-bills/:id/reject` endpoint, which
+ * 404s for any row whose id actually belongs to this table. Mirrors
+ * credit-bills.controller.ts's rejectCreditBill.
+ */
+export const rejectCreditBillCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { rejection_reason } = req.body;
+
+        if (!rejection_reason || !String(rejection_reason).trim()) {
+            throw new AppError('Rejection reason is required', 400);
+        }
+
+        const actorId = normalizeUuidOrNull(req.user?.id);
+        const voidedAt = new Date().toISOString();
+
+        const { data: bill, error: fetchError } = await supabase
+            .from('credit_bills')
+            .select('id, status')
+            .eq('id', id)
+            .single();
+        if (fetchError || !bill) throw new AppError('Credit bill not found', 404);
+        if (['paid', 'cancelled'].includes(String(bill.status))) {
+            throw new AppError('This credit bill is already settled or cancelled', 400);
+        }
+
+        const { data: updatedBill, error: updateError } = await supabase
+            .from('credit_bills')
+            .update({
+                status: 'cancelled',
+                balance_due: 0
+            })
+            .eq('id', id)
+            .select()
+            .single();
+        if (updateError) throw updateError;
+
+        try {
+            await supabase
+                .from('staff_credit_bills')
+                .update({
+                    status: 'cancelled',
+                    balance: 0,
+                    rejection_reason: String(rejection_reason).trim(),
+                    rejected_at: voidedAt,
+                    rejected_by: actorId
+                })
+                .eq('source_cashier_credit_bill_id', id);
+        } catch (propagateError) {
+            logger.warn('Could not propagate cashier credit bill rejection to staff_credit_bills:', propagateError);
+        }
+
+        res.json({
+            success: true,
+            message: 'Credit bill rejected successfully',
+            data: updatedBill
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Edit a cashier-station credit bill's amount/description. Counterpart to
+ * credit-bills.controller.ts's editCreditBill, for `credit_bills` rows.
+ */
+export const editCreditBillCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { amount, description } = req.body;
+
+        const updateData: any = {};
+        if (amount !== undefined) {
+            const parsedAmt = Number(amount);
+            if (!Number.isFinite(parsedAmt) || parsedAmt <= 0) throw new AppError('Amount must be positive', 400);
+            updateData.total_amount = parsedAmt;
+            updateData.balance_due = parsedAmt;
+            updateData.amount_paid = 0;
+        }
+        if (description !== undefined) updateData.remarks = String(description).trim();
+
+        const { data: updatedBill, error } = await supabase
+            .from('credit_bills')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+
+        try {
+            const staffUpdate: any = {};
+            if (amount !== undefined) staffUpdate.amount = updateData.total_amount;
+            if (description !== undefined) staffUpdate.description = updateData.remarks;
+            if (Object.keys(staffUpdate).length > 0) {
+                await supabase
+                    .from('staff_credit_bills')
+                    .update(staffUpdate)
+                    .eq('source_cashier_credit_bill_id', id);
+            }
+        } catch (propagateError) {
+            logger.warn('Could not propagate cashier credit bill edit to staff_credit_bills:', propagateError);
+        }
+
+        res.json({
+            success: true,
+            message: 'Credit bill updated successfully',
+            data: updatedBill
         });
     } catch (error) {
         next(error);

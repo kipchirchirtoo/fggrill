@@ -69,6 +69,9 @@ const kitchenCacheBranchId = (req: express.Request): number =>
 const kitchenCacheLimit = (req: express.Request): number =>
   Math.min(parseInt(req.query.limit as string) || 100, 250);
 
+const kitchenCacheTimeline = (req: express.Request): string =>
+  String(req.query.timeline || 'shift').toLowerCase();
+
 const normalizeKitchenStatus = (value: any): string => {
   const status = String(value || 'pending').toLowerCase();
   return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
@@ -692,6 +695,7 @@ router.get('/kitchen/orders/history',
       kitchenCacheBranchId(req),
       resolveKitchenScope(req),
       kitchenCacheLimit(req),
+      kitchenCacheTimeline(req),
     ),
     CACHE_TTL.KDS_ACTIVE,
   ),

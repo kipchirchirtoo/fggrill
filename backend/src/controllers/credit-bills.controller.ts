@@ -81,13 +81,27 @@ async function syncLinkedCashierCreditBill(
 
 export const getCreditBills = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, status } = req.query;
+        const { staff_id, status, from_date, to_date } = req.query;
+
+        // Optional date-range scoping. Callers that need an accurate
+        // all-time total (e.g. the branch dashboard's "Total Outstanding
+        // Credit" figure, which must include bills older than any UI
+        // window) never pass from_date/to_date, so they keep getting every
+        // row exactly as before. The Staff Accounts screen, whose From/To
+        // filter used to only filter client-side *after* fetching every
+        // credit bill the branch has ever had (1000+ rows on every load —
+        // the actual cause of it hanging/crashing), now passes its date
+        // range through so the server does the filtering instead.
+        const fromStr = from_date ? new Date(String(from_date)).toISOString().slice(0, 10) : null;
+        const toStr = to_date ? new Date(String(to_date)).toISOString().slice(0, 10) : null;
 
         // ===== QUERY STAFF_CREDIT_BILLS (payroll system credits) =====
         let staffQuery = supabase
             .from('staff_credit_bills')
             .select('*')
             .order('bill_date', { ascending: false });
+        if (fromStr) staffQuery = staffQuery.gte('bill_date', fromStr);
+        if (toStr) staffQuery = staffQuery.lte('bill_date', toStr);
 
         staffQuery = applyBranchFilter(staffQuery, req);
 
@@ -103,12 +117,17 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         // ===== QUERY CREDIT_BILLS (cashier station credits) =====
         // Wrapped in try-catch so a schema mismatch (missing bill_date/staff_id)
         // doesn't crash the whole endpoint — we still return staff_credit_bills.
+        // Scoped on created_at (not credit_date) — createCreditBill never sets
+        // credit_date, so filtering on it would silently drop every
+        // cashier-created bill.
         let cashierCreditBills: any[] = [];
         try {
             let cashierQuery = supabase
                 .from('credit_bills')
                 .select('*')
                 .order('created_at', { ascending: false });
+            if (fromStr) cashierQuery = cashierQuery.gte('created_at', `${fromStr}T00:00:00.000Z`);
+            if (toStr) cashierQuery = cashierQuery.lte('created_at', `${toStr}T23:59:59.999Z`);
 
             cashierQuery = applyBranchFilter(cashierQuery, req);
 
@@ -493,6 +512,15 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
 export const getCashierPaidCreditEntries = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const status = String(req.query.status || 'pending').toLowerCase();
+        // Optional — like getCreditBills, only scope by date when the caller
+        // asks for it (the dashboard's outstanding total needs every
+        // still-unapplied entry regardless of shift age). Without this every
+        // load scanned paid_bills_details across every shift the branch has
+        // ever run, unbounded.
+        const fromStr = req.query.from_date ? new Date(String(req.query.from_date)).toISOString() : null;
+        const toStr = req.query.to_date
+            ? new Date(`${String(req.query.to_date)}T23:59:59.999Z`).toISOString()
+            : null;
 
         const collect = (shift: any, sourceTable: string) => {
             const entries = Array.isArray(shift.paid_bills_details)
@@ -546,6 +574,8 @@ export const getCashierPaidCreditEntries = async (req: Request, res: Response, n
             .from('cashier_shift_logs')
             .select('id, shift_number, branch_id, cashier_id, cashier_name, shift_start, shift_end, status, paid_bills_details')
             .order('shift_start', { ascending: false });
+        if (fromStr) logQuery = logQuery.gte('shift_start', fromStr);
+        if (toStr) logQuery = logQuery.lte('shift_start', toStr);
         logQuery = applyBranchFilter(logQuery, req);
         const { data: logShifts, error: logError } = await logQuery;
         if (logError) throw logError;
@@ -554,6 +584,8 @@ export const getCashierPaidCreditEntries = async (req: Request, res: Response, n
             .from('cashier_shifts')
             .select('id, shift_number, branch_id, cashier_id, cashier_name, shift_start, shift_end, status, paid_bills_details')
             .order('shift_start', { ascending: false });
+        if (fromStr) legacyQuery = legacyQuery.gte('shift_start', fromStr);
+        if (toStr) legacyQuery = legacyQuery.lte('shift_start', toStr);
         legacyQuery = applyBranchFilter(legacyQuery, req);
         const { data: legacyShifts, error: legacyError } = await legacyQuery;
         if (legacyError && !['42P01', '42703', 'PGRST205', 'PGRST204'].includes(legacyError.code)) {

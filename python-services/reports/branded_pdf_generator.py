@@ -307,6 +307,7 @@ class BrandedPDFGenerator:
             'dispatch_note': self._generate_dispatch_note,
             'kitchen_ledger': self._generate_kitchen_ledger_report,
             'kitchen_item_ledger': self._generate_kitchen_item_ledger_report,
+            'kitchen_order_history': self._generate_kitchen_order_history_report,
             'vat_report': self._generate_vat_report,
             'procurement_intelligence': self._generate_procurement_intelligence_report,
             'supplier_statement': self._generate_supplier_statement_report,
@@ -343,6 +344,8 @@ class BrandedPDFGenerator:
             'attendance_report': 'employee_attendance',
             'dispatch_note_report': 'dispatch_note',
             'employee_payslip': 'payslip',
+            'kds_history': 'kitchen_order_history',
+            'kitchen_history': 'kitchen_order_history',
             # Auditor specific aliases
             'exception_summary': 'exception_logs',
             'compliance_audit': 'compliance',
@@ -4219,8 +4222,141 @@ class BrandedPDFGenerator:
         ]))
         
         elements.append(trans_table)
-        
+
         return self._create_pdf(elements)
+
+    def _kitchen_order_display_status(self, o: Dict[str, Any]) -> tuple:
+        """Resolve a single display status for a history row plus the hex
+        color to render it in. Raw order status alone (served/delivered/
+        paid/...) hides that the order was voided or recalled mid-flow,
+        which is exactly what the KDS History screen itself flags — so this
+        mirrors that same precedence (void > void-requested > recalled >
+        raw status) instead of just echoing the DB status column."""
+        raw_status = str(o.get('status') or '').strip().lower()
+        if o.get('is_voided') or raw_status in ('cancelled', 'voided', 'void_cashier_declined'):
+            return 'VOIDED', '#DC2626'
+        if o.get('has_pending_void_request') or raw_status == 'void_requested':
+            return 'VOID REQUESTED', '#DC2626'
+        if o.get('has_recalled_items'):
+            return 'RECALLED', '#EA580C'
+        if raw_status:
+            return raw_status.replace('_', ' ').upper(), '#16A34A'
+        return '-', '#444444'
+
+    def _generate_kitchen_order_history_report(self, data: Dict[str, Any], filters: Dict[str, Any]) -> str:
+        """Generate Kitchen Display System (KDS) Order History report — the
+        served/delivered/paid/completed order feed shown on the KDS History
+        tab, exported as-is (respecting whatever Timeline Filter was active
+        when the export was requested)."""
+        elements = []
+
+        outlet_scope = (filters.get('outlet_scope') or 'restaurant').replace('_', ' ').title()
+        timeline_labels = {
+            'shift': 'Current Shift',
+            'today': 'Today',
+            'yesterday': 'Yesterday',
+            '7days': 'Last 7 Days',
+            'all': 'All (30 Days)',
+        }
+        timeline = timeline_labels.get(str(filters.get('timeline') or 'shift').lower(), 'Current Shift')
+        date_range = f"{timeline} • {outlet_scope}"
+
+        # Landscape — a 7-column order+items table (with a real Items column)
+        # doesn't fit an 7.5" portrait page; it was overflowing off the right
+        # edge and the Order # column was wrapping mid-word as a result.
+        elements.extend(self._create_landscape_header(
+            "KITCHEN ORDER HISTORY",
+            date_range,
+            filters.get('branch_name'),
+        ))
+
+        orders = data.get('orders') or data.get('data') or []
+
+        # Summary
+        total_orders = len(orders)
+        total_revenue = sum(float(o.get('total') or 0) for o in orders)
+        statuses = [self._kitchen_order_display_status(o)[0] for o in orders]
+        served_count = sum(1 for s in statuses if s not in ('VOIDED', 'VOID REQUESTED', 'RECALLED'))
+        recalled_count = sum(1 for s in statuses if s == 'RECALLED')
+        voided_count = sum(1 for s in statuses if s in ('VOIDED', 'VOID REQUESTED'))
+
+        summary_data = [
+            ['ORDER HISTORY SUMMARY', '', '', '', '', ''],
+            ['Total Orders:', self._format_number(total_orders),
+             'Total Revenue:', self._format_currency(total_revenue),
+             'Recalled:', self._format_number(recalled_count)],
+            ['Served/Completed:', self._format_number(served_count),
+             'Voided:', self._format_number(voided_count),
+             '', ''],
+        ]
+        summary_table = Table(summary_data, colWidths=[1.5*inch]*6)
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('SPAN', (4, 2), (5, 2)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (4, 1), (4, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+
+        # Orders table
+        elements.append(Paragraph("<b>ORDERS</b>", self.styles['SectionHeader']))
+
+        headers = ['Order #', 'Type', 'Waiter', 'Items', 'Total', 'Status', 'Time']
+        order_data = [headers]
+
+        if not orders:
+            order_data.append(['No orders found for this period', '-', '-', '-', '-', '-', '-'])
+        else:
+            for o in orders:
+                items = o.get('items') or []
+                items_str = ', '.join(
+                    f"{it.get('quantity', 1)}x {it.get('name', '')}" for it in items
+                ) or '-'
+                status_label, status_color = self._kitchen_order_display_status(o)
+                created_at = str(o.get('created_at') or o.get('time') or '')
+                try:
+                    time_display = datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%d %b, %H:%M')
+                except (ValueError, TypeError):
+                    time_display = created_at[:16].replace('T', ' ')
+                order_data.append([
+                    Paragraph(str(o.get('order_number') or o.get('id') or ''), self.styles['TableText']),
+                    str(o.get('order_type') or o.get('location_label') or '-').replace('_', ' ').title(),
+                    Paragraph(str(o.get('waiter_name') or 'Not assigned'), self.styles['TableText']),
+                    Paragraph(items_str, self.styles['TableText']),
+                    self._format_currency(o.get('total') or 0),
+                    Paragraph(
+                        f"<font color='{status_color}'><b>{status_label}</b></font>",
+                        self.styles['TableText'],
+                    ),
+                    Paragraph(time_display, self.styles['TableText']),
+                ])
+
+        # Sums to 10.2" — matches _create_landscape_header's width (usable
+        # area on A4 landscape with 0.5" margins each side is ~10.7").
+        col_widths = [1.5*inch, 0.8*inch, 1.3*inch, 3.3*inch, 0.9*inch, 1.1*inch, 1.3*inch]
+        order_table = Table(order_data, colWidths=col_widths, repeatRows=1)
+        order_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(order_table)
+
+        return self._create_pdf(elements, landscape_mode=True)
 
     def _generate_vat_report(self, data: Dict, filters: Dict) -> str:
         """KRA Format VAT Input Report"""

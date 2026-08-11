@@ -59,6 +59,10 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   List<Map<String, dynamic>> _advances = [];
   List<Map<String, dynamic>> _loans = [];
   List<Map<String, dynamic>> _staffList = [];
+  // Cashier-recorded "staff paid bill" entries (staff settling cash/mpesa
+  // toward their credit during a shift) waiting for the branch accountant to
+  // apply them against an actual credit bill and shrink its balance.
+  List<Map<String, dynamic>> _paidCreditEntries = [];
 
   BranchAccountantRepository get _repo =>
       ref.read(branchAccountantRepositoryProvider);
@@ -73,11 +77,20 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     if (mounted) setState(() => _loading = true);
     try {
       final repo = _repo;
+      // The From/To filter chips used to be purely cosmetic — they filtered
+      // the list client-side *after* every credit bill/advance/loan/paid-bill
+      // entry the branch has ever had was already fetched in full (1000+
+      // rows, unbounded, on every load). That's what made this screen hang
+      // or crash. Now the same range actually scopes the server query.
+      final fromStr = DateFormat('yyyy-MM-dd').format(_from);
+      final toStr = DateFormat('yyyy-MM-dd').format(_to);
       final res = await Future.wait([
-        repo.getPayrollCreditBills(),
-        repo.getPayrollAdvances(),
-        repo.getPayrollLoans(),
+        repo.getPayrollCreditBills(fromDate: fromStr, toDate: toStr),
+        repo.getPayrollAdvances(fromDate: fromStr, toDate: toStr),
+        repo.getPayrollLoans(fromDate: fromStr, toDate: toStr),
         repo.getBranchStaff(),
+        repo.getCashierPaidCreditEntries(
+            status: 'pending', fromDate: fromStr, toDate: toStr),
       ]);
       if (!mounted) return;
       setState(() {
@@ -85,6 +98,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _advances = List<Map<String, dynamic>>.from(res[1]);
         _loans = List<Map<String, dynamic>>.from(res[2]);
         _staffList = List<Map<String, dynamic>>.from(res[3]);
+        _paidCreditEntries = List<Map<String, dynamic>>.from(res[4]);
         _loading = false;
       });
     } catch (error) {
@@ -234,8 +248,24 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   bool _isOpenCredit(Map m) {
     final s = _t(m, ['status']).toLowerCase();
-    return s != 'paid' && s != 'cancelled' && s != 'rejected';
+    // Real terminal statuses the backend actually sets: staff_credit_bills
+    // uses paid_cash/deducted/cancelled; the cashier-station credit_bills
+    // table uses paid/cancelled. 'paid' and 'rejected' alone never matched
+    // any of those, so already-settled bills kept showing Edit/Reject/Pay.
+    return s != 'paid' &&
+        s != 'paid_cash' &&
+        s != 'deducted' &&
+        s != 'cancelled' &&
+        s != 'rejected';
   }
+
+  /// GET /payroll/credit-bills merges rows from staff_credit_bills and the
+  /// cashier station's own credit_bills table (tagged by the backend as
+  /// `source_table`). The two tables have different action endpoints —
+  /// calling the staff_credit_bills-only endpoints against a credit_bills
+  /// row 404s ("Credit bill not found"), which is what made Approve/Reject/
+  /// Edit/Record Payment silently fail for cashier-billed rows.
+  bool _isCashierSourced(Map m) => '${m['source_table']}' == 'credit_bills';
 
   bool _isOpenAdvance(Map m) {
     final s = _t(m, ['status']).toLowerCase();
@@ -450,10 +480,16 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           ),
           const SizedBox(width: 14),
           _fieldLabel('From'),
-          _dateChip(_from, (d) => setState(() => _from = d)),
+          _dateChip(_from, (d) {
+            setState(() => _from = d);
+            _load();
+          }),
           const SizedBox(width: 8),
           _fieldLabel('To'),
-          _dateChip(_to, (d) => setState(() => _to = d)),
+          _dateChip(_to, (d) {
+            setState(() => _to = d);
+            _load();
+          }),
           const Spacer(),
           _toolbarBtn(Icons.refresh, 'Refresh', _muted,
               onTap: _busy ? null : _load),
@@ -611,6 +647,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         children: [
           _tab2('overview', 'Overview', Icons.grid_view),
           _tab2('credit', 'Credit Bills', Icons.credit_card),
+          _tab2('paidbills', 'Paid Bills', Icons.point_of_sale,
+              badge: _paidCreditEntries.length),
           _tab2('advances', 'Advances', Icons.payments),
           _tab2('loans', 'Loans', Icons.account_balance),
           _tab2('salaries', 'Salaries', Icons.badge),
@@ -620,7 +658,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     );
   }
 
-  Widget _tab2(String id, String label, IconData icon) {
+  Widget _tab2(String id, String label, IconData icon, {int badge = 0}) {
     final selected = _tab == id;
     return InkWell(
       onTap: () => setState(() => _tab = id),
@@ -645,6 +683,22 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                     fontSize: 12.5,
                     fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                     color: selected ? _accent : _muted)),
+            if (badge > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _warning,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('$badge',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white)),
+              ),
+            ],
           ],
         ),
       ),
@@ -655,6 +709,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     switch (_tab) {
       case 'credit':
         return _creditGrid();
+      case 'paidbills':
+        return _paidBillsGrid();
       case 'advances':
         return _advancesGrid();
       case 'loans':
@@ -792,7 +848,10 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           if (status.toLowerCase().contains('pending') ||
               status.toLowerCase() == 'accountant_confirmed')
             _act(Icons.check_circle, 'Approve', _success,
-                () => _run(() => _repo.approvePayrollCreditBill('${m['id']}'),
+                () => _run(
+                    () => _isCashierSourced(m)
+                        ? _repo.approveCashierCreditBill('${m['id']}')
+                        : _repo.approvePayrollCreditBill('${m['id']}'),
                     ok: 'Approved')),
           if (bal > 0 && _isOpenCredit(m))
             _act(Icons.payments, 'Record payment', _accent,
@@ -818,6 +877,68 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       ],
       rows,
       emptyLabel: 'No credit bills.',
+    );
+  }
+
+  /// Cashier station "paid bills" — a cashier recorded a staff member
+  /// settling cash/mpesa toward their credit during their shift. These sit
+  /// here until the branch accountant applies each one against the actual
+  /// credit bill it's meant to reduce (there was previously no screen for
+  /// this at all, so cashier-collected payments never made it onto the
+  /// staff's outstanding balance).
+  Widget _paidBillsGrid() {
+    final rows = <List<Widget>>[];
+    for (final e in _paidCreditEntries) {
+      final remaining = _n(e, ['remaining_amount']);
+      final applied = _n(e, ['applied_amount']);
+      rows.add([
+        _c(_date(_t(e, ['recorded_at']))),
+        _c(_t(e, ['cashier_name']).ifEmpty('—'), color: _muted),
+        _c(_t(e, ['staff_name']).ifEmpty('—'), bold: true),
+        _c(_money(_n(e, ['amount']))),
+        _c(_money(applied), color: applied > 0 ? _success : _muted),
+        _c(_money(remaining),
+            bold: true, color: remaining > 0 ? _warning : _success),
+        _chip(_t(e, ['review_status']).ifEmpty('pending')),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          if (remaining > 0)
+            _act(Icons.playlist_add_check, 'Apply to credit bill', _success,
+                () => _applyPaidEntryDialog(e)),
+        ]),
+      ]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
+          child: Text(
+            'Money cashiers collected from staff during their shift toward an '
+            'outstanding credit bill. Apply each entry to reduce that staff '
+            "member's actual credit bill balance — their credit bill must "
+            'already be approved (not still Pending) before you can apply a '
+            'payment to it.',
+            style: TextStyle(
+                fontSize: 11.5, color: _muted, fontStyle: FontStyle.italic),
+          ),
+        ),
+        Expanded(
+          child: _grid(
+            const [
+              'Recorded',
+              'Cashier',
+              'Staff',
+              'Amount',
+              'Applied',
+              'Remaining',
+              'Status',
+              'Actions',
+            ],
+            rows,
+            emptyLabel: 'No cashier-recorded paid bills awaiting review.',
+          ),
+        ),
+      ],
     );
   }
 
@@ -1154,13 +1275,15 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   Widget _bottomToolbar() {
     final count = _tab == 'credit'
         ? _fCredit.length
-        : _tab == 'advances'
-            ? _fAdvances.length
-            : _tab == 'loans'
-                ? _fLoans.length
-                : _tab == 'salaries'
-                    ? _fStaffList.length
-                    : _overviewData().length;
+        : _tab == 'paidbills'
+            ? _paidCreditEntries.length
+            : _tab == 'advances'
+                ? _fAdvances.length
+                : _tab == 'loans'
+                    ? _fLoans.length
+                    : _tab == 'salaries'
+                        ? _fStaffList.length
+                        : _overviewData().length;
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFE2E8F0),
@@ -1209,18 +1332,22 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     }
     final label = _tab == 'credit'
         ? 'New Credit Bill'
-        : _tab == 'advances'
-            ? 'New Advance'
-            : 'New Loan';
+        : _tab == 'paidbills'
+            ? 'Record Paid Bill'
+            : _tab == 'advances'
+                ? 'New Advance'
+                : 'New Loan';
     return _toolbarBtn(Icons.add, label, _accent,
         filled: true,
         onTap: _busy
             ? null
             : _tab == 'credit'
                 ? _newCreditDialog
-                : _tab == 'advances'
-                    ? _newAdvanceDialog
-                    : _newLoanDialog);
+                : _tab == 'paidbills'
+                    ? _recordPaidBillDialog
+                    : _tab == 'advances'
+                        ? _newAdvanceDialog
+                        : _newLoanDialog);
   }
 
   Widget _toolbarBtn(IconData icon, String label, Color color,
@@ -1661,11 +1788,14 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     amount.dispose();
     desc.dispose();
     if (ok != true) return;
+    final data = {
+      'amount': num.tryParse(amount.text.trim()) ?? 0,
+      'description': desc.text.trim(),
+    };
     await _run(
-        () => _repo.editPayrollCreditBill('${m['id']}', {
-              'amount': num.tryParse(amount.text.trim()) ?? 0,
-              'description': desc.text.trim(),
-            }),
+        () => _isCashierSourced(m)
+            ? _repo.editCashierCreditBill('${m['id']}', data)
+            : _repo.editPayrollCreditBill('${m['id']}', data),
         ok: 'Credit bill updated');
   }
 
@@ -1693,6 +1823,9 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     await _run(() async {
       if (kind == 'loan') {
         await _repo.recordPayrollLoanPayment('${m['id']}', {'amount': value});
+      } else if (_isCashierSourced(m)) {
+        await _repo.recordCashierCreditBillPayment('${m['id']}',
+            amount: value);
       } else {
         await _repo
             .recordPayrollCreditBillPayment('${m['id']}', {'amount': value});
@@ -1702,18 +1835,250 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   Future<void> _rejectDialog(String kind, Map m) async {
     final reason = TextEditingController();
+    // The backend requires a rejection reason (400s without one) — this used
+    // to be marked optional in the UI, and even when filled in the request
+    // sent the wrong field name ('reason' instead of 'rejection_reason'), so
+    // every reject attempt failed regardless of what was typed.
     final ok = await _formDialog(
       title: 'Reject Credit Bill',
-      builder: (setD) => [_textField(reason, 'Reason (optional)')],
-      onValidate: () => true,
+      builder: (setD) => [_textField(reason, 'Reason *')],
+      onValidate: () => reason.text.trim().isNotEmpty,
     );
     final text = reason.text.trim();
     reason.dispose();
     if (ok != true) return;
     await _run(
-        () => _repo.rejectPayrollCreditBill('${m['id']}',
-            {if (text.isNotEmpty) 'reason': text}),
+        () => _isCashierSourced(m)
+            ? _repo.rejectCashierCreditBill('${m['id']}', text)
+            : _repo.rejectPayrollCreditBill(
+                '${m['id']}', {'rejection_reason': text}),
         ok: 'Credit bill rejected');
+  }
+
+  /// Apply a cashier-recorded "paid bill" entry against one of that staff
+  /// member's actual credit bills, shrinking its balance by the amount the
+  /// cashier collected. Only staff_credit_bills rows qualify — that's what
+  /// POST /payroll/credit-bills/cashier-paid-credits/:id/apply operates on
+  /// — and the backend requires the bill to already be approved (not
+  /// Pending) before a payment can land on it.
+  Future<void> _applyPaidEntryDialog(Map entry) async {
+    final staffId = '${entry['staff_id'] ?? ''}';
+    final candidates = _credit.where((c) {
+      if (_isCashierSourced(c)) return false;
+      if (!_isOpenCredit(c)) return false;
+      if ('${c['status']}'.toLowerCase() == 'pending') return false;
+      if (staffId.isEmpty) return true;
+      return '${c['staff_id'] ?? ''}' == staffId;
+    }).toList();
+    final remaining = _n(entry, ['remaining_amount']);
+    Map<String, dynamic>? selected =
+        candidates.length == 1 ? candidates.first : null;
+    final amount = TextEditingController(text: remaining.toStringAsFixed(0));
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Apply Paid Bill to Credit Bill'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_t(entry, [
+                        'staff_name'
+                      ]).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
+                  style:
+                      const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (candidates.isEmpty)
+                  const Text(
+                    'No approved, open credit bill found for this staff '
+                    'member. Approve their credit bill first, then apply '
+                    'this paid entry to it.',
+                    style: TextStyle(color: _danger, fontSize: 12),
+                  )
+                else
+                  DropdownButtonFormField<Map<String, dynamic>>(
+                    value: selected,
+                    decoration: _dec('Credit bill to clear *'),
+                    items: candidates
+                        .map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(
+                                '${_t(c, [
+                                      'description',
+                                      'reason'
+                                    ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (v) => setD(() => selected = v),
+                  ),
+                const SizedBox(height: 10),
+                _numField(amount, 'Amount to apply (KES) *'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: candidates.isEmpty
+                  ? null
+                  : () {
+                      final v = num.tryParse(amount.text.trim()) ?? 0;
+                      if (selected == null || v <= 0) {
+                        _snack('Select a credit bill and a valid amount');
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final value = num.tryParse(amount.text.trim()) ?? 0;
+    amount.dispose();
+    if (ok != true || selected == null) return;
+    await _run(
+        () => _repo.applyCashierPaidCreditEntry('${entry['id']}', {
+              'staff_credit_bill_id': '${selected!['id']}',
+              'amount': value,
+            }),
+        ok: 'Payment applied to credit bill');
+  }
+
+  /// Directly record a staff member settling money toward their credit bill
+  /// — for when the branch accountant collects/hears about the payment
+  /// themselves rather than reviewing one a cashier already logged in a
+  /// shift. Picks the staff, then their open credit bill, then applies the
+  /// same record-payment endpoint the Credit Bills tab's "Record payment"
+  /// action uses (source-table aware, so it works whether the bill was
+  /// raised by payroll or the cashier station).
+  Future<void> _recordPaidBillDialog() async {
+    String staffId = '';
+    Map<String, dynamic>? selectedBill;
+    String paymentMethod = 'cash';
+    final amount = TextEditingController();
+
+    // Matches the Credit Bills tab's own single-row "Record payment" action
+    // (_isOpenCredit only) — a still-Pending bill can already take a direct
+    // payment there, so this dialog shouldn't be stricter about it. The
+    // 'must already be approved' rule only applies to the separate flow of
+    // applying an existing cashier-shift paid-bill entry (see
+    // _applyPaidEntryDialog), not to recording a payment directly.
+    List<Map<String, dynamic>> candidatesFor(String id) => _credit
+        .where((c) => _isOpenCredit(c) && '${c['staff_id'] ?? ''}' == id)
+        .toList();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          final candidates = staffId.isEmpty ? <Map<String, dynamic>>[] : candidatesFor(staffId);
+          return AlertDialog(
+            title: const Text('Record Paid Bill'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _staffField(staffId, (v) => setD(() {
+                          staffId = v;
+                          selectedBill = null;
+                        })),
+                    const SizedBox(height: 10),
+                    if (staffId.isNotEmpty && candidates.isEmpty)
+                      const Text(
+                        'This staff member has no open credit bill to '
+                        'record a payment against.',
+                        style: TextStyle(color: _danger, fontSize: 12),
+                      ),
+                    if (candidates.isNotEmpty)
+                      DropdownButtonFormField<Map<String, dynamic>>(
+                        value: selectedBill,
+                        decoration: _dec('Credit bill to pay *'),
+                        items: candidates
+                            .map((c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(
+                                    '${_t(c, [
+                                          'description',
+                                          'reason'
+                                        ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setD(() => selectedBill = v),
+                      ),
+                    const SizedBox(height: 10),
+                    _numField(amount, 'Amount paid (KES) *'),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: paymentMethod,
+                      decoration: _dec('Payment method'),
+                      items: const [
+                        DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                        DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                        DropdownMenuItem(value: 'card', child: Text('Card')),
+                        DropdownMenuItem(value: 'bank', child: Text('Bank')),
+                      ],
+                      onChanged: (v) => setD(() => paymentMethod = v ?? 'cash'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  final v = num.tryParse(amount.text.trim()) ?? 0;
+                  if (selectedBill == null) {
+                    _snack('Select the credit bill this payment clears');
+                    return;
+                  }
+                  final maxAmount = _creditBalance(selectedBill!);
+                  if (v <= 0 || v > maxAmount + 0.01) {
+                    _snack('Enter an amount up to the bill balance '
+                        '(${_money(maxAmount)})');
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Record Payment'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    final value = num.tryParse(amount.text.trim()) ?? 0;
+    amount.dispose();
+    if (ok != true || selectedBill == null) return;
+    final bill = selectedBill!;
+    await _run(
+        () => _isCashierSourced(bill)
+            ? _repo.recordCashierCreditBillPayment('${bill['id']}',
+                amount: value, paymentMethod: paymentMethod)
+            : _repo.recordPayrollCreditBillPayment('${bill['id']}', {
+                'amount': value,
+                'payment_method': paymentMethod,
+              }),
+        ok: 'Paid bill recorded and applied to credit bill');
   }
 
   Future<void> _viewContents(Map m) async {

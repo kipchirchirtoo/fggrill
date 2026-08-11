@@ -9,13 +9,15 @@ import '../domain/models.dart';
 import '../domain/session_models.dart';
 
 final kitchenRepositoryProvider = Provider<KitchenRepository>((ref) {
-  return KitchenRepository(ref.read(dioProvider), ref);
+  return KitchenRepository(
+      ref.read(dioProvider), ref.read(pythonDioProvider), ref);
 });
 
 class KitchenRepository {
-  KitchenRepository(this._dio, this._ref);
+  KitchenRepository(this._dio, this._pythonDio, this._ref);
 
   final Dio _dio;
+  final Dio _pythonDio;
   final Ref _ref;
 
   Future<int?> get _branchId async {
@@ -89,6 +91,41 @@ class KitchenRepository {
       debugPrint('StackTrace: $stackTrace');
       throw Exception('Unable to load kitchen history: ${_errorMessage(e)}');
     }
+  }
+
+  /// Renders the given (already-fetched, already-filtered) history orders
+  /// into a branded PDF via python-services' BrandedPDFGenerator and returns
+  /// the raw PDF bytes. Sends the orders directly (`useRealData: false`)
+  /// instead of asking python-services to re-query and re-filter — the
+  /// export must match exactly what the History tab's active Timeline
+  /// Filter is currently showing.
+  Future<Uint8List> exportHistoryPdf({
+    required List<KitchenOrder> orders,
+    required KitchenDisplayScope outletScope,
+    required String timeline,
+  }) async {
+    final storage = _ref.read(secureStorageProvider);
+    final branchName = await storage.read(key: AuthRepository.branchNameKey);
+    final response = await _pythonDio.post<List<int>>(
+      '/api/reports/generate/branded-pdf',
+      data: {
+        'reportType': 'kitchen_order_history',
+        'useRealData': false,
+        'data': {'orders': orders.map((o) => o.toExportJson()).toList()},
+        'filters': {
+          'outlet_scope': outletScope.apiValue,
+          'timeline': timeline,
+          if (branchName != null && branchName.isNotEmpty)
+            'branch_name': branchName,
+        },
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = response.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw Exception('Kitchen history PDF export returned no data');
+    }
+    return Uint8List.fromList(bytes);
   }
 
   Future<void> markItemReady(String orderId, String itemId) async {

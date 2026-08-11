@@ -39,12 +39,16 @@ export const createLoan = async (req: Request, res: Response, next: NextFunction
 
 export const getLoans = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, status } = req.query;
+        const { staff_id, status, from_date, to_date } = req.query;
 
         let query = supabase
             .from('staff_loans')
             .select('*')
             .order('created_at', { ascending: false });
+        // Optional — omitted by callers (e.g. the branch dashboard's
+        // outstanding totals) that need every row regardless of age.
+        if (from_date) query = query.gte('created_at', `${new Date(String(from_date)).toISOString().slice(0, 10)}T00:00:00.000Z`);
+        if (to_date) query = query.lte('created_at', `${new Date(String(to_date)).toISOString().slice(0, 10)}T23:59:59.999Z`);
 
         query = applyBranchFilter(query, req);
 
