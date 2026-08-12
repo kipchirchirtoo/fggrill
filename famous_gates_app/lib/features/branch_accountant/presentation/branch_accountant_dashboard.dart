@@ -7800,6 +7800,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           final lines = _list(detail['lines']);
           final voidLines = _list(detail['void_lines']);
           final creditBills = _list(detail['credit_bills']);
+          final expenses = _list(detail['expense_details']);
           final transactionHistory = _list(detail['transaction_history']);
           final clearedTransactions =
               transactionHistory.isEmpty ? lines : transactionHistory;
@@ -8232,9 +8233,10 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                     'credit_payments_received':
                         _num(reconciliation['credit_payments_received']),
                     'cash_drops': _num(reconciliation['cash_drops']),
-                    'payouts': _num(reconciliation['payouts']),
-                    if (_num(reconciliation['expense_total']) != 0)
-                      'expenses': _num(reconciliation['expense_total']),
+                    // Expenses (petty-cash payouts) are always shown — they are
+                    // subtracted from expected cash (opening float + cash sales
+                    // + credit received − expenses).
+                    'expenses': _num(reconciliation['expense_total']),
                     'expected_closing':
                         _num(reconciliation['expected_closing']),
                     'actual_closing': _num(reconciliation['actual_closing']),
@@ -8319,6 +8321,79 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                     }).toList(),
                   ),
                 ),
+              _SectionCard(
+                title:
+                    'Expenses / Petty Cash (${_money(_num(reconciliation['expense_total']))})',
+                child: expenses.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('No expenses recorded this shift',
+                            style: TextStyle(color: AppColors.kTextSecondary)),
+                      )
+                    : Column(
+                        children: [
+                          for (final e in expenses)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 5),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.receipt_long_outlined,
+                                      size: 16,
+                                      color: AppColors.kTextSecondary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _text(e, ['description', 'category'])
+                                                  .isEmpty
+                                              ? 'Expense'
+                                              : _text(
+                                                  e, ['description', 'category']),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                        if (_text(e, ['category']).isNotEmpty ||
+                                            _text(e, ['paid_to_name'])
+                                                .isNotEmpty)
+                                          Text(
+                                            [
+                                              _text(e, ['category']),
+                                              if (_text(e, ['paid_to_name'])
+                                                  .isNotEmpty)
+                                                'to ${_text(e, ['paid_to_name'])}',
+                                            ]
+                                                .where((v) => v.isNotEmpty)
+                                                .join(' · '),
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color:
+                                                    AppColors.kTextSecondary),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (_text(e, ['receipt_number'])
+                                      .isNotEmpty) ...[
+                                    Text('#${_text(e, ['receipt_number'])}',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.kTextSecondary)),
+                                    const SizedBox(width: 10),
+                                  ],
+                                  Text(_money(_num(e['amount'])),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.kError)),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
               Builder(builder: (context) {
                 final total = creditBills.isNotEmpty
                     ? (_num(detail['credit_bills_total']) > 0

@@ -4,8 +4,20 @@ import { applyBranchFilter } from '../utils/branchIsolation';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
-// Auto-process corporate bills whose credit term days have matured
+// Auto-process corporate bills whose credit term days have matured.
+// Single-flight + throttle: this is a heavy WRITE batch (it inserts invoices)
+// that must never block a corporate GET request. It used to be awaited on every
+// page load, which hung the request under DB-pool pressure ("connection closed
+// before full header"). Callers now fire it and forget; it self-limits here.
+let _corpAutoRunning = false;
+let _corpAutoLastRun = 0;
+const CORP_AUTO_MIN_INTERVAL_MS = 2 * 60 * 1000; // at most once every 2 minutes
+
 export const autoProcessMaturedCorporateInvoices = async (): Promise<void> => {
+    const nowGuard = Date.now();
+    if (_corpAutoRunning || nowGuard - _corpAutoLastRun < CORP_AUTO_MIN_INTERVAL_MS) return;
+    _corpAutoRunning = true;
+    _corpAutoLastRun = nowGuard;
     try {
         const { data: bills } = await supabase
             .from('corporate_credit_bills')
@@ -77,13 +89,15 @@ export const autoProcessMaturedCorporateInvoices = async (): Promise<void> => {
         }
     } catch (err) {
         logger.error('Error auto-processing matured corporate invoices:', err);
+    } finally {
+        _corpAutoRunning = false;
     }
 };
 
 // 1. Get Corporate Customers
 export const getCorporateCustomers = async (req: Request, res: Response) => {
     try {
-        await autoProcessMaturedCorporateInvoices();
+        void autoProcessMaturedCorporateInvoices();
         let query = supabase.from('corporate_customers').select('*').order('name');
         query = applyBranchFilter(query, req);
         
@@ -229,14 +243,14 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
 // 5. Get Pending Corporate Bills
 export const getPendingCorporateBills = async (req: Request, res: Response) => {
     try {
-        await autoProcessMaturedCorporateInvoices();
+        // Fire-and-forget: never block this read on the heavy invoice batch.
+        void autoProcessMaturedCorporateInvoices();
+        // Single clean query — the previous pos_master_bills embed referenced a
+        // non-existent column (bill_number vs master_bill_number) and an
+        // unregistered relationship, so it always failed into the fallback.
         let query = supabase
             .from('corporate_credit_bills')
-            .select(`
-                *,
-                corporate_customers(name),
-                pos_master_bills:pos_bill_id(bill_number)
-            `)
+            .select('*, corporate_customers(name)')
             .eq('status', 'UNINVOICED')
             .order('created_at', { ascending: false });
             
@@ -339,7 +353,7 @@ export const generateCorporateInvoice = async (req: Request, res: Response) => {
 // 7. Get Invoices
 export const getCorporateInvoices = async (req: Request, res: Response) => {
     try {
-        await autoProcessMaturedCorporateInvoices();
+        void autoProcessMaturedCorporateInvoices();
         let query = supabase
             .from('corporate_invoices')
             .select(`

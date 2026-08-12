@@ -8785,14 +8785,36 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     );
     const reconciliationRow = (method: 'cash' | 'mpesa' | 'card') => {
         const row = actualCollectionByMethod.get(method) || {};
-        const sysExpected = method === 'cash'
-            ? expectedCash
-            : (paymentBreakdownByMethod.get(method) || logbookNumber(row.system_amount));
-        const cashierLogged = method === 'cash'
-            ? (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_cash_counted ?? closingFloat))
-            : method === 'mpesa'
-                ? (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_mpesa_logged ?? logbook.total_mpesa ?? sysExpected))
-                : (row.actual_amount !== undefined && row.actual_amount !== null ? logbookNumber(row.actual_amount) : logbookNumber(shift?.actual_card_logged ?? logbook.total_swipe ?? sysExpected));
+        // System side = the SALES recorded for this method, so the grid matches
+        // the "Sales by Payment Method" breakdown for EVERY method. For cash we
+        // deliberately use cash SALES here (not the expected drawer, which also
+        // includes the opening float and credit-payments) — the float is netted
+        // out of the cashier side below, so the variance still equals the true
+        // drawer shortage/surplus. The drawer-with-float reconciliation lives in
+        // the separate "Cash Reconciliation" card.
+        const salesForMethod = method === 'cash'
+            ? totalCash
+            : (paymentBreakdownByMethod.get(method) ?? logbookNumber(row.system_amount));
+        const sysExpected = salesForMethod;
+
+        let cashierLogged: number;
+        if (method === 'cash') {
+            const countedDrawer = (row.actual_amount !== undefined && row.actual_amount !== null)
+                ? logbookNumber(row.actual_amount)
+                : logbookNumber(shift?.actual_cash_counted ?? closingFloat);
+            // Cash SALES the cashier holds = counted drawer − opening float
+            // + cash payouts − credit payments received in cash. This keeps
+            // (cashier − system) === (counted drawer − expected drawer).
+            cashierLogged = countedDrawer - openingFloat + payouts - creditPaymentsReceived;
+        } else if (method === 'mpesa') {
+            cashierLogged = (row.actual_amount !== undefined && row.actual_amount !== null)
+                ? logbookNumber(row.actual_amount)
+                : logbookNumber(shift?.actual_mpesa_logged ?? logbook.total_mpesa ?? sysExpected);
+        } else {
+            cashierLogged = (row.actual_amount !== undefined && row.actual_amount !== null)
+                ? logbookNumber(row.actual_amount)
+                : logbookNumber(shift?.actual_card_logged ?? logbook.total_swipe ?? sysExpected);
+        }
 
         const calcVariance = cashierLogged - sysExpected;
 
