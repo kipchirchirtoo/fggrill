@@ -2144,11 +2144,13 @@ const normalizeDateWindow = (startDate?: any, endDate?: any) => {
   return { startRaw, endRaw, startIso, endIso };
 };
 
-const outletGroupFor = (source: string, category?: string, orderType?: string) => {
+const outletGroupFor = (source: string, category?: string, orderType?: string, roomNumber?: string | null) => {
+  if (roomNumber && String(roomNumber).trim() !== '') return 'rooms';
   const normalized = `${source} ${category || ''} ${orderType || ''}`.toLowerCase();
-  if (normalized.includes('room')) return 'rooms';
   if (normalized.includes('non_consumable') || normalized.includes('non-consumable')) return 'non_consumables';
   if (normalized.includes('bar')) return 'bar';
+  if (source.includes('restaurant') || normalized.includes('restaurant')) return 'restaurant';
+  if (normalized.includes('room')) return 'rooms';
   return 'restaurant';
 };
 
@@ -2812,7 +2814,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       receiptNumber?: string;
       kdsMinutes?: number | null;
     }) => {
-      const key = `${payload.branchId}_${payload.source}_${payload.itemId || payload.name}`;
+      const targetGroup = payload.outletGroup || outletGroupFor(payload.source, payload.category);
+      const key = `${payload.branchId}_${targetGroup}_${payload.itemId || payload.name}`;
       if (!soldItemsMap[key]) {
         soldItemsMap[key] = {
           branch_id: payload.branchId,
@@ -2825,7 +2828,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           cost_of_goods_sold: 0,
           category: payload.category,
           source: payload.source,
-          outlet_group: payload.outletGroup || outletGroupFor(payload.source, payload.category),
+          outlet_group: targetGroup,
           by_shift: {},
           transaction_ids: new Set<string>(),
           references: new Set<string>(),
@@ -2966,7 +2969,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         const kdsMinutes = Number.isFinite(readyAt) && Number.isFinite(createdAt)
           ? Math.max(0, (readyAt - createdAt) / 60000)
           : null;
-        const outletGroup = outletGroupFor(String(outlet.outlet_type || item.outlet_type || ''), item.category, order.order_type);
+        const outletGroup = outletGroupFor(String(outlet.outlet_type || item.outlet_type || ''), item.category, order.order_type, order.room_number);
         addSoldItem({
           branchId: branchKey,
           itemId,
