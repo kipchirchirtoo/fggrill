@@ -14,7 +14,11 @@ export class InventoryGovernanceService {
       severity?: 'low' | 'medium' | 'high' | 'critical';
     },
   ) {
+    // Run inside a SAVEPOINT: a failed query (e.g. missing table) aborts the
+    // whole enclosing posting transaction, so we roll back to the savepoint on
+    // any error to keep that transaction usable (this write is best-effort).
     try {
+      await client.query('SAVEPOINT inv_gov_exception');
       const result = await client.query<{ id: string }>(
         `
           INSERT INTO inventory_governance_exceptions (
@@ -40,8 +44,11 @@ export class InventoryGovernanceService {
           input.actorId ?? null,
         ],
       );
+      await client.query('RELEASE SAVEPOINT inv_gov_exception');
       return result.rows[0]?.id || null;
     } catch (err: any) {
+      // Un-poison the enclosing transaction before deciding how to proceed.
+      await client.query('ROLLBACK TO SAVEPOINT inv_gov_exception').catch(() => {});
       if (err?.code === '42P01') {
         logger.warn(`inventory_governance_exceptions table missing: ${err.message}`);
         return null;
@@ -59,8 +66,15 @@ export class InventoryGovernanceService {
     },
   ) {
     if (input.branchId == null) return;
+
+    // Runs immediately after BEGIN in the posting transaction. Wrap the lookup
+    // in a SAVEPOINT so a missing inventory_period_locks table (42P01) does not
+    // abort the whole transaction — otherwise every later posting query fails
+    // with "current transaction is aborted" and the dispatch/issue silently dies.
+    let result;
     try {
-      const result = await client.query(
+      await client.query('SAVEPOINT inv_gov_period');
+      result = await client.query(
         `
           SELECT id, lock_scope
           FROM inventory_period_locks
@@ -75,25 +89,29 @@ export class InventoryGovernanceService {
         `,
         [input.branchId, input.businessDate ?? null, input.shiftCode ?? null],
       );
-
-      if (!result.rowCount) return;
-      const scope = String(result.rows[0].lock_scope || '');
-      if (scope === 'shift') {
-        const error: any = new Error('Inventory posting is blocked because the shift is closed');
-        error.statusCode = 409;
-        error.code = 'SHIFT_CLOSED';
-        throw error;
-      }
-      const error: any = new Error('Inventory posting is blocked because the period is closed');
-      error.statusCode = 409;
-      error.code = 'PERIOD_CLOSED';
-      throw error;
+      await client.query('RELEASE SAVEPOINT inv_gov_period');
     } catch (err: any) {
+      await client.query('ROLLBACK TO SAVEPOINT inv_gov_period').catch(() => {});
       if (err?.code === '42P01') {
         logger.warn(`inventory_period_locks table missing: ${err.message}`);
         return;
       }
       throw err;
     }
+
+    // A real period/shift lock is a genuine block — throw it OUTSIDE the savepoint
+    // guard so it propagates as a 409 rather than being treated as best-effort.
+    if (!result.rowCount) return;
+    const scope = String(result.rows[0].lock_scope || '');
+    if (scope === 'shift') {
+      const error: any = new Error('Inventory posting is blocked because the shift is closed');
+      error.statusCode = 409;
+      error.code = 'SHIFT_CLOSED';
+      throw error;
+    }
+    const error: any = new Error('Inventory posting is blocked because the period is closed');
+    error.statusCode = 409;
+    error.code = 'PERIOD_CLOSED';
+    throw error;
   }
 }
