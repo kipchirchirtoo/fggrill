@@ -37,6 +37,7 @@ import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
+import 'invoice_generator_section.dart';
 import 'staff_accounts_screen.dart';
 import 'waiter_audit_screen.dart';
 import 'daily_controls_screen.dart';
@@ -74,6 +75,7 @@ enum BranchAccountantSection {
   exchangeHistory,
   banking,
   payments,
+  invoiceGenerator,
   outboundPayments,
   creditBills,
   staffAccounts,
@@ -266,6 +268,8 @@ class _BranchAccountantDashboardState
         return const _BankingSection();
       case BranchAccountantSection.payments:
         return const _PaymentsInvoicesSection();
+      case BranchAccountantSection.invoiceGenerator:
+        return const InvoiceGeneratorSection();
       case BranchAccountantSection.outboundPayments:
         return _OutboundPaymentsSection(
           preload: _outboundPreload,
@@ -366,6 +370,8 @@ final _navItems = [
       Icons.receipt_long),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
+  _NavItem(BranchAccountantSection.invoiceGenerator, 'Invoice Generator',
+      Icons.description),
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
       Icons.request_quote),
   _NavItem(
