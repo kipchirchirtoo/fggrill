@@ -8565,7 +8565,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     // (restaurant/bar) are NOT included here so the same sale isn't counted
     // twice (once as the order, once as its clearance).
     const clearedPaymentTotals: Record<string, number> = {};
-    const clearedPaymentLines = nonVoidLines;
+    const clearedPaymentLines = nonVoidLines.filter((line) => line.section !== 'petty_cash_expenses');
     clearedPaymentLines.forEach((line) => {
         if (logbookNumber(line.amount) > 0) addAmount(clearedPaymentTotals, line.payment_method, line.amount);
     });
@@ -8586,7 +8586,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
 
     const allLinePaymentTotals: Record<string, number> = {};
-    const saleSections = ['restaurant_sale', 'bar_sale', 'outlet_order'];
+    const saleSections = ['restaurant_sale', 'bar_sale', 'outlet_order', 'petty_cash_expenses'];
     nonVoidLines.forEach((line) => {
         if (!saleSections.includes(line.section) && logbookNumber(line.amount) > 0) {
             addAmount(allLinePaymentTotals, line.payment_method, line.amount);
@@ -8804,7 +8804,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     if (rawPool > 0) revenueBreakdown.push({ label: 'Swimming Pool', amount: rawPool });
     if (creditPaymentsReceived > 0) revenueBreakdown.push({ label: 'Credit Bill Settlements', amount: creditPaymentsReceived });
     if (revenueBreakdown.length === 0 && rawOther > 0) {
-        revenueBreakdown.push({ label: `${cashierName || 'POS'} Sales`, amount: rawOther });
+        revenueBreakdown.push({ label: `${shift?.cashier_name || cashier?.first_name || 'POS'} Sales`, amount: rawOther });
     }
 
     const paymentBreakdown = Object.entries(payments)
