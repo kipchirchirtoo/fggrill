@@ -193,9 +193,14 @@ class NotificationService {
         query = query.eq('priority', filters.priority);
       }
 
-      // Order by priority and created date
-      query = query.order('priority', { ascending: false })
-        .order('created_at', { ascending: false })
+      // Newest first. This used to sort by priority text first
+      // ('urgent'/'high'/'medium'/'low' ordered alphabetically descending,
+      // not by actual severity) with created_at only breaking ties within
+      // the same priority string — so a days-old 'medium' notification
+      // ranked above a 'high' one from moments ago ('medium' > 'high'
+      // alphabetically), burying genuinely new notifications under old
+      // ones instead of showing them newest-first.
+      query = query.order('created_at', { ascending: false })
         .limit(100);
 
       const { data, error } = await query;

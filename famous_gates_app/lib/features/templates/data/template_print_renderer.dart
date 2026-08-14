@@ -54,10 +54,9 @@ class TemplateLineItem {
 }
 
 class TemplatePrintRenderer {
-  static const double _paperWidthMm = 80;
+  static const double _paperWidthMm = 76;
   static const double _safeMarginMm = 2;
-  static const double _barcodeWidthMm = 60;
-  static const double _priceColumnMm = 29;
+  static const double _barcodeWidthMm = 56;
 
   final _money = NumberFormat('#,##0.00', 'en_KE');
 
@@ -124,9 +123,18 @@ class TemplatePrintRenderer {
           final w = _renderSection(s, data, logo);
           if (w != null) widgets.add(w);
         }
+        final hasHirallSection = sections.any((s) =>
+            s.visible != false &&
+            (s.content ?? '').toLowerCase().contains('hirall'));
+        if (!hasHirallSection) {
+          widgets.add(_renderBrandingFooter());
+        }
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: widgets,
+          children: [
+            ...widgets,
+            pw.SizedBox(height: 18),
+          ],
         );
       },
     ));
@@ -382,6 +390,9 @@ class TemplatePrintRenderer {
         if (s.id == 'till_compliance') {
           return _renderTillCompliance(data);
         }
+        if ((s.content ?? '').toLowerCase().contains('hirall')) {
+          return _renderBrandingFooter();
+        }
         final text = _subst(s.content, v);
         if (text.isEmpty) return null;
         return pad(pw.Container(
@@ -405,16 +416,15 @@ class TemplatePrintRenderer {
         if (code.isEmpty) return null;
         return pad(pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-          decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
           child: pw.Column(children: [
             pw.Text(s.label ?? 'BILL VERIFICATION CODE',
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
-            pw.SizedBox(height: 2),
+            pw.SizedBox(height: 1),
             pw.Text(code.toUpperCase(),
                 style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18)),
+                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
           ]),
         ));
 
@@ -557,9 +567,12 @@ class TemplatePrintRenderer {
         if (text.isEmpty) return null;
         return pad(pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-          decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
-          child: pw.Text(text, style: const pw.TextStyle(fontSize: 8)),
+          padding: const pw.EdgeInsets.symmetric(vertical: 3),
+          child: pw.Text(
+            text,
+            textAlign: pw.TextAlign.center,
+            style: const pw.TextStyle(fontSize: 8),
+          ),
         ));
 
       case 'duplicate_badge':
@@ -567,16 +580,12 @@ class TemplatePrintRenderer {
         if (text.isEmpty) return null;
         return pad(pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(width: 1),
-            color: PdfColors.grey300,
-          ),
+          padding: const pw.EdgeInsets.symmetric(vertical: 3),
           child: pw.Text(
-            text.toUpperCase(),
+            '*** ${text.toUpperCase()} ***',
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: pw.FontWeight.bold,
             ),
           ),
@@ -627,13 +636,7 @@ class TemplatePrintRenderer {
       padding: const pw.EdgeInsets.only(top: 2, bottom: 4),
       child: pw.Container(
         width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(vertical: 4),
-        decoration: const pw.BoxDecoration(
-          border: pw.Border(
-            top: pw.BorderSide(width: 0.7),
-            bottom: pw.BorderSide(width: 0.7),
-          ),
-        ),
+        padding: const pw.EdgeInsets.symmetric(vertical: 2),
         child: pw.Column(children: [
           pw.Text('TILL NUMBER',
               textAlign: pw.TextAlign.center,
@@ -642,8 +645,24 @@ class TemplatePrintRenderer {
           pw.Text(till.toUpperCase(),
               textAlign: pw.TextAlign.center,
               style:
-                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
         ]),
+      ),
+    );
+  }
+
+  pw.Widget _renderBrandingFooter() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 6, bottom: 2),
+      child: pw.Column(
+        children: [
+          pw.Text('System made and maintained by Hirall',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+          pw.Text('+254 710 944 249 | www.hirall.com',
+              textAlign: pw.TextAlign.center,
+              style: const pw.TextStyle(fontSize: 6)),
+        ],
       ),
     );
   }

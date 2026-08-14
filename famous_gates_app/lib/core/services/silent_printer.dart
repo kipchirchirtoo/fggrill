@@ -53,14 +53,21 @@ class SilentPrinter {
       _cachedPrinter = saved;
       return saved;
     }
-    final printers = await Printing.listPrinters();
-    if (printers.isEmpty) return null; // don't cache: retry when one appears
-    final resolved = printers.firstWhere(
-      (p) => p.isDefault,
-      orElse: () => printers.first,
-    );
-    _cachedPrinter = resolved;
-    return resolved;
+    try {
+      final printers = await Printing.listPrinters().timeout(
+        const Duration(milliseconds: 1200),
+        onTimeout: () => <Printer>[],
+      );
+      if (printers.isEmpty) return null;
+      final resolved = printers.firstWhere(
+        (p) => p.isDefault,
+        orElse: () => printers.first,
+      );
+      _cachedPrinter = resolved;
+      return resolved;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Drop-in replacement for `Printing.layoutPdf` that prints straight to a

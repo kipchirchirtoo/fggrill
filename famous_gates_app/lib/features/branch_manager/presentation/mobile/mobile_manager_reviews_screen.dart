@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_notifier.dart';
+import '../../data/repository.dart';
 
 class ManagerReview {
   final String id;
@@ -31,6 +32,39 @@ class ManagerReview {
     required this.sentimentConfidence,
     required this.issues,
   });
+
+  /// Maps GET /reviews/manager/list's row shape (backend/src/controllers/
+  /// reviews.controller.ts) onto this UI model.
+  factory ManagerReview.fromJson(Map<String, dynamic> json) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    String formattedDate = '${json['created_at'] ?? ''}';
+    final parsed = DateTime.tryParse('${json['created_at'] ?? ''}');
+    if (parsed != null) {
+      formattedDate =
+          '${months[parsed.month - 1]} ${parsed.day.toString().padLeft(2, '0')}, ${parsed.year}';
+    }
+    final issuesRaw = json['issues_mentioned'];
+    return ManagerReview(
+      id: '${json['id'] ?? ''}',
+      location: '${json['branch_label'] ?? 'Unknown branch'}',
+      reviewText: '${json['content'] ?? ''}',
+      rating: int.tryParse('${json['rating'] ?? 0}') ?? 0,
+      date: formattedDate,
+      reviewer: '${json['reviewer_name'] ?? 'Guest'}',
+      reviewerEmail: json['reviewer_email'] as String?,
+      responded: json['responded'] == true,
+      responseText: json['response_text'] as String?,
+      sentiment: '${json['sentiment'] ?? 'Neutral'}',
+      sentimentConfidence:
+          double.tryParse('${json['sentiment_confidence'] ?? 0}') ?? 0,
+      issues: issuesRaw is List
+          ? issuesRaw.map((e) => '$e').toList()
+          : const [],
+    );
+  }
 }
 
 class MobileManagerReviewsScreen extends ConsumerStatefulWidget {
@@ -43,107 +77,43 @@ class MobileManagerReviewsScreen extends ConsumerStatefulWidget {
 
 class _MobileManagerReviewsScreenState
     extends ConsumerState<MobileManagerReviewsScreen> {
-  // Mock Data mimicking the image and incorporating requirements
-  final List<ManagerReview> _reviews = [
-    ManagerReview(
-      id: 'rev-1',
-      location: 'FamousGate Cafe, Kericho',
-      reviewText:
-          'Great coffee, lovely staff, and good karma in each cup! ☕ Thank you x',
-      rating: 5,
-      date: 'June 10, 2026',
-      reviewer: 'Andrea Howard',
-      responded: false,
-      sentiment: 'Positive',
-      sentimentConfidence: 98.4,
-      issues: ['Friendly staff', 'Clean rooms', 'Fast service'],
-    ),
-    ManagerReview(
-      id: 'rev-2',
-      location: 'FamousGate Hotel, Bomet',
-      reviewText:
-          'Great coffee, friendly service. We enjoyed our family brunch immensely.',
-      rating: 5,
-      date: 'June 14, 2026',
-      reviewer: 'Carl Conder',
-      responded: true,
-      responseText:
-          'Thank you Carl! We appreciate your wonderful feedback about our coffee and team.',
-      sentiment: 'Positive',
-      sentimentConfidence: 97.2,
-      issues: ['Friendly staff', 'Good food'],
-    ),
-    ManagerReview(
-      id: 'rev-3',
-      location: 'FamousGate Cafe, Kericho',
-      reviewText:
-          'These guys know what they are doing. Awesome coffee served with genuine friendliness. Will definitely be back.',
-      rating: 5,
-      date: 'May 04, 2026',
-      reviewer: 'Liz Leys',
-      responded: true,
-      responseText:
-          'Dear Liz, thank you so much for your support! We look forward to welcoming you back.',
-      sentiment: 'Positive',
-      sentimentConfidence: 99.1,
-      issues: ['Friendly staff', 'Fast service'],
-    ),
-    ManagerReview(
-      id: 'rev-4',
-      location: 'FamousGate Hotel, Kericho',
-      reviewText:
-          'The coffee selection was really well down. The staff were very friendly and helped us out through the experience. Would do it again',
-      rating: 5,
-      date: 'November 17, 2025',
-      reviewer: 'Griffin Davis (s5157369)',
-      responded: false,
-      sentiment: 'Positive',
-      sentimentConfidence: 95.8,
-      issues: ['Friendly staff', 'Comfortable beds'],
-    ),
-    ManagerReview(
-      id: 'rev-5',
-      location: 'FamousGate Cafe, Bomet',
-      reviewText:
-          'THE best coffee, I have EVER had! And of course an AMAZING atmosphere!',
-      rating: 5,
-      date: 'June 05, 2025',
-      reviewer: 'Hailey Grey',
-      responded: true,
-      responseText: 'Thank you Hailey! We are thrilled to be your top choice!',
-      sentiment: 'Positive',
-      sentimentConfidence: 99.5,
-      issues: ['Quiet environment', 'Nice Wi-Fi'],
-    ),
-    ManagerReview(
-      id: 'rev-6',
-      location: 'FamousGate Hotel, Bomet',
-      reviewText:
-          'The room was average, but checkout took too long and the food was delayed by over 40 minutes. Breakfast was good though.',
-      rating: 3,
-      date: 'June 16, 2025',
-      reviewer: 'Hazel Mwetwa',
-      responded: true,
-      responseText:
-          'Dear Hazel, we apologize for the check-out and kitchen delay. We are actively working to speed up these flows.',
-      sentiment: 'Neutral',
-      sentimentConfidence: 86.4,
-      issues: ['Delayed food', 'Slow check-in'],
-    ),
-    ManagerReview(
-      id: 'rev-7',
-      location: 'FamousGate Hotel, Kericho',
-      reviewText:
-          'Cold water in the shower, and room had a strong paint smell. Wi-Fi was also completely down in my wing.',
-      rating: 1,
-      date: 'May 20, 2025',
-      reviewer: 'Peter Mwangi',
-      responded: false,
-      sentiment: 'Negative',
-      sentimentConfidence: 94.2,
-      issues: ['Cold shower', 'Delayed food', 'Slow service'],
-    ),
-  ];
+  List<ManagerReview> _reviews = [];
+  bool _loading = true;
+  String? _error;
+
+  BranchManagerRepository get _repo =>
+      ref.read(branchManagerRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final rows = await _repo.getReviews();
+      if (!mounted) return;
+      setState(() {
+        _reviews = rows.map(ManagerReview.fromJson).toList();
+        _loading = false;
+        // The Listing dropdown's items are derived from _reviews (see
+        // _listingOptions) — reset its selection so it can't end up
+        // pointing at a value that no longer exists in the new list.
+        _selectedListing = 'All';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load reviews: $e';
+        _loading = false;
+      });
+    }
+  }
 
   // Filters State
   String _selectedAccount = 'All';
@@ -154,6 +124,11 @@ class _MobileManagerReviewsScreenState
 
   // Controllers
   final _searchController = TextEditingController();
+
+  List<String> get _listingOptions {
+    final labels = _reviews.map((r) => r.location).toSet().toList()..sort();
+    return ['All', ...labels];
+  }
 
   List<ManagerReview> get _filteredReviews {
     return _reviews.where((rev) {
@@ -178,12 +153,9 @@ class _MobileManagerReviewsScreenState
         }
       }
 
-      // Listing filter (Location-based)
-      if (_selectedListing == 'Kericho Only' &&
-          !rev.location.contains('Kericho')) {
-        return false;
-      }
-      if (_selectedListing == 'Bomet Only' && !rev.location.contains('Bomet')) {
+      // Listing filter — options are the actual branch labels present in
+      // the loaded reviews (see _listingOptions), not a hardcoded guess.
+      if (_selectedListing != 'All' && rev.location != _selectedListing) {
         return false;
       }
 
@@ -197,22 +169,58 @@ class _MobileManagerReviewsScreenState
 
     return Container(
       color: const Color(0xFFF9FAFC),
-      child: SingleChildScrollView(
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Title Header mimicking the uploaded UI
-            const Text(
-              'Review Management',
-              style: TextStyle(
-                fontSize: 32,
-                fontFamily: 'SF Pro Display',
-                fontWeight: FontWeight.w300,
-                color: Color(0xFF2C3E50),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Review Management',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontFamily: 'SF Pro Display',
+                    fontWeight: FontWeight.w300,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                ),
+              ],
             ),
             const SizedBox(height: 24),
+
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFDECEA),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFF5C6CB)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Color(0xFFB91C1C)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(_error!,
+                          style: const TextStyle(color: Color(0xFFB91C1C))),
+                    ),
+                    TextButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                ),
+              ),
 
             // Google UI-style filters row
             _buildFiltersCard(),
@@ -223,8 +231,15 @@ class _MobileManagerReviewsScreenState
             const SizedBox(height: 16),
 
             // Review list / Datatable container
-            _buildReviewsTableCard(displayed),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 64),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              _buildReviewsTableCard(displayed),
           ],
+        ),
         ),
       ),
     );
@@ -254,7 +269,7 @@ class _MobileManagerReviewsScreenState
             _buildDropdownFilter(
               label: 'Listing',
               value: _selectedListing,
-              items: ['All', 'Kericho Only', 'Bomet Only'],
+              items: _listingOptions,
               onChanged: (v) => setState(() => _selectedListing = v!),
             ),
             _buildDropdownFilter(
@@ -857,27 +872,33 @@ class _MobileManagerReviewsScreenState
               ElevatedButton(
                 onPressed: isSubmitting
                     ? null
-                    : () {
+                    : () async {
                         setDialogState(() => isSubmitting = true);
                         final responseText = responseController.text.trim();
-                        Future.delayed(const Duration(milliseconds: 600), () {
+                        try {
+                          await _repo.respondToReview(review.id, responseText);
                           if (!mounted) return;
                           setState(() {
                             review.responded = responseText.isNotEmpty;
                             review.responseText =
                                 responseText.isEmpty ? null : responseText;
                           });
-                          if (!mounted || !dialogContext.mounted) return;
+                          if (!dialogContext.mounted) return;
                           Navigator.pop(dialogContext);
-                        });
-                        Future.delayed(const Duration(milliseconds: 700), () {
-                          if (!mounted || !screenContext.mounted) return;
+                          if (!screenContext.mounted) return;
                           ScaffoldMessenger.of(screenContext).showSnackBar(
                             const SnackBar(
                                 content:
                                     Text('Response published successfully!')),
                           );
-                        });
+                        } catch (e) {
+                          setDialogState(() => isSubmitting = false);
+                          if (!dialogContext.mounted) return;
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            SnackBar(
+                                content: Text('Failed to publish response: $e')),
+                          );
+                        }
                       },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.kPrimary,

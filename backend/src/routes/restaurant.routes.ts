@@ -284,6 +284,37 @@ const notifyWaiterCaptainOrderReady = async (order: any): Promise<void> => {
   );
 };
 
+// Dine-in counterpart to notifyWaiterCaptainOrderReady above — for orders
+// that live in restaurant_orders/restaurant_order_items rather than
+// pos_shift_orders (see the /kitchen/orders/:orderId/items/:itemId/ready
+// handler's non-"pos:" branch).
+const notifyDineInOrderReady = async (orderId: string): Promise<void> => {
+  const { data: order } = await supabase
+    .from('restaurant_orders')
+    .select('id, order_number, created_by, branch_id, table_number')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (!order?.created_by) return;
+
+  await notificationService.notifyUser(
+    String(order.created_by),
+    'Order ready',
+    `${order.order_number || 'Order'}${order.table_number ? ` (Table ${order.table_number})` : ''} is ready to serve.`,
+    {
+      type: 'success',
+      category: 'kds_ready',
+      priority: 'high',
+      actionUrl: '/dashboard/pos-kitchen?view=active-orders',
+      metadata: {
+        target: 'active_orders',
+        source: 'restaurant_order',
+        order_id: order.id,
+        branch_id: order.branch_id ?? null
+      }
+    }
+  );
+};
+
 const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: string) => {
   const orderId = rawOrderId.replace(/^pos:/, '');
   const patch: Record<string, any> = {
@@ -708,11 +739,15 @@ router.get('/kitchen/orders/history',
       const timeline = String(req.query.timeline || 'shift').toLowerCase();
 
       let historySince: string;
+      let historyUntil: string | null = null;
       if (timeline === 'today') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         historySince = today.toISOString();
       } else if (timeline === 'yesterday') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        historyUntil = today.toISOString();
         const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
         yesterday.setHours(0, 0, 0, 0);
         historySince = yesterday.toISOString();
@@ -735,6 +770,10 @@ router.get('/kitchen/orders/history',
           .gte('created_at', historySince)
           .order('created_at', { ascending: false })
           .limit(limit);
+
+        if (historyUntil) {
+          ordersQuery = ordersQuery.lt('created_at', historyUntil);
+        }
 
         if (branchId) {
           ordersQuery = ordersQuery.eq('branch_id', branchId);
@@ -786,13 +825,18 @@ router.get('/kitchen/orders/history',
 
       let posHistory: any[] = [];
       try {
-        const stopSignalSince = new Date(Date.now() - KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+        const shiftLookbackSince = new Date(
+          Math.min(
+            new Date(historySince).getTime(),
+            Date.now() - KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS * 60 * 60 * 1000,
+          )
+        ).toISOString();
         let shiftQuery = supabase
           .from('pos_outlet_shifts')
           .select('id, branch_id, outlet_id, status, opened_at, outlet:pos_outlets(name, outlet_type)')
-          .or(`status.eq.open,opened_at.gte.${stopSignalSince}`)
+          .or(`status.eq.open,opened_at.gte.${shiftLookbackSince}`)
           .order('opened_at', { ascending: false })
-          .limit(250);
+          .limit(1000);
 
         if (branchId) {
           shiftQuery = shiftQuery.eq('branch_id', branchId);
@@ -810,14 +854,20 @@ router.get('/kitchen/orders/history',
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
         if (restaurantShiftIds.length) {
-          const { data: posOrders, error: posOrdersError } = await supabase
+          let posQuery = supabase
             .from('pos_shift_orders')
             .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, updated_at, total_amount, captain_printed_at, items')
             .in('shift_id', restaurantShiftIds)
-            .or(`created_at.gte.${historySince},updated_at.gte.${historySince}`)
+            .gte('created_at', historySince)
             .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')
-            .order('updated_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(limit);
+
+          if (historyUntil) {
+            posQuery = posQuery.lt('created_at', historyUntil);
+          }
+
+          const { data: posOrders, error: posOrdersError } = await posQuery;
 
           if (posOrdersError) throw posOrdersError;
 
@@ -1013,12 +1063,15 @@ router.put('/kitchen/orders/:orderId/items/:itemId/ready',
         });
       }
 
+      // kitchen_status/kitchen_ready_at/kitchen_ready_by (used by the POS
+      // captain-order branch above) don't exist as columns on this table —
+      // restaurant_order_items only has is_ready/status. This previously
+      // threw a "column does not exist" error on every call.
       const { data, error } = await supabase
         .from('restaurant_order_items')
         .update({
-          kitchen_status: 'ready',
-          kitchen_ready_at: new Date().toISOString(),
-          kitchen_ready_by: req.user?.id || null
+          is_ready: true,
+          status: 'ready'
         })
         .eq('order_id', orderId)
         .eq('id', itemId)
@@ -1026,6 +1079,25 @@ router.put('/kitchen/orders/:orderId/items/:itemId/ready',
         .single();
 
       if (error) throw error;
+
+      // Notify the waiter once every item on the order is ready — mirrors
+      // notifyWaiterCaptainOrderReady's "all ready" gate for POS captain
+      // orders above, so dine-in table orders (routed through
+      // restaurant_orders/restaurant_order_items, not pos_shift_orders)
+      // get the same "order ready" alert instead of none at all.
+      const { data: siblingItems } = await supabase
+        .from('restaurant_order_items')
+        .select('is_ready')
+        .eq('order_id', orderId);
+      const allReady = Array.isArray(siblingItems) &&
+        siblingItems.length > 0 &&
+        siblingItems.every((item: any) => item.is_ready === true);
+
+      if (allReady) {
+        notifyDineInOrderReady(orderId).catch((notifyError) => {
+          console.warn('[KDS] Failed to notify waiter for ready dine-in order', notifyError);
+        });
+      }
 
       res.json({
         success: true,

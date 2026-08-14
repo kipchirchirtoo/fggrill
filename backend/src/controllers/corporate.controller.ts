@@ -163,6 +163,49 @@ export const updateCorporateCustomer = async (req: Request, res: Response) => {
     }
 };
 
+// 3b. Delete Corporate Customer
+export const deleteCorporateCustomer = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Check if there are associated bills
+        const { data: bills } = await supabase
+            .from('corporate_credit_bills')
+            .select('id')
+            .eq('corporate_customer_id', id)
+            .limit(1);
+
+        if (bills && bills.length > 0) {
+            // Has transaction history - deactivate instead of hard delete
+            let updateQuery = supabase
+                .from('corporate_customers')
+                .update({ is_active: false })
+                .eq('id', id);
+            updateQuery = applyBranchFilter(updateQuery, req);
+            const { error: updateErr } = await updateQuery;
+            if (updateErr) throw new AppError(updateErr.message, 400);
+
+            res.json({
+                success: true,
+                message: 'Corporate account has transaction history and has been deactivated.',
+                softDeleted: true
+            });
+            return;
+        }
+
+        let deleteQuery = supabase.from('corporate_customers').delete().eq('id', id);
+        deleteQuery = applyBranchFilter(deleteQuery, req);
+
+        const { error } = await deleteQuery;
+        if (error) throw new AppError(error.message, 400);
+
+        res.json({ success: true, message: 'Corporate customer deleted successfully' });
+    } catch (error: any) {
+        logger.error('Failed to delete corporate customer:', error);
+        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+};
+
 // 4. Charge Corporate Credit (Cashier action)
 export const chargeCorporateCredit = async (req: Request, res: Response) => {
     try {
@@ -240,7 +283,226 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
     }
 };
 
-// 5. Get Pending Corporate Bills
+// Helper to enrich corporate credit bills with full POS items breakdown (no duplicates)
+async function enrichCorporateBillsWithItems(bills: any[]): Promise<any[]> {
+    if (!bills || bills.length === 0) return bills;
+
+    const posBillIds = bills.map(b => b.pos_bill_id).filter(Boolean);
+    if (posBillIds.length === 0) {
+        return bills.map(bill => ({
+            ...bill,
+            bill_number: bill.pos_master_bills?.bill_number || `BILL-${bill.id.slice(0, 8)}`,
+            items: [{
+                name: `Corporate Bill Settlement`,
+                quantity: 1,
+                unit_price: Number(bill.amount || 0),
+                total_price: Number(bill.amount || 0)
+            }]
+        }));
+    }
+
+    try {
+        // 1. Fetch matching pos_shift_orders
+        let shiftOrders: any[] = [];
+        try {
+            const { data } = await supabase
+                .from('pos_shift_orders')
+                .select('id, master_bill_id, order_number, short_code, table_number, room_number, waiter_name, items, total_amount, created_at')
+                .in('id', posBillIds);
+            shiftOrders = data || [];
+        } catch (_) {}
+
+        // Also check by master_bill_id
+        if (shiftOrders.length < posBillIds.length) {
+            try {
+                const { data } = await supabase
+                    .from('pos_shift_orders')
+                    .select('id, master_bill_id, order_number, short_code, table_number, room_number, waiter_name, items, total_amount, created_at')
+                    .in('master_bill_id', posBillIds);
+                if (data && data.length > 0) {
+                    shiftOrders = [...shiftOrders, ...data];
+                }
+            } catch (_) {}
+        }
+
+        // 2. Fetch matching pos_master_bills
+        let masterBills: any[] = [];
+        try {
+            const { data } = await supabase
+                .from('pos_master_bills')
+                .select('id, bill_number, items, total_amount, created_at')
+                .in('id', posBillIds);
+            masterBills = data || [];
+        } catch (_) {}
+
+        // 3. Fetch pos_order_items table
+        const allOrderIds = Array.from(new Set([
+            ...posBillIds,
+            ...shiftOrders.map(o => o.id)
+        ]));
+
+        let dbOrderItems: any[] = [];
+        if (allOrderIds.length > 0) {
+            try {
+                const { data } = await supabase
+                    .from('pos_order_items')
+                    .select('order_id, item_name, quantity, unit_price, total_price, subtotal')
+                    .in('order_id', allOrderIds);
+                dbOrderItems = data || [];
+            } catch (_) {}
+        }
+
+        const shiftOrderMap = new Map<string, any>();
+        shiftOrders.forEach(o => {
+            shiftOrderMap.set(o.id, o);
+            if (o.master_bill_id) shiftOrderMap.set(o.master_bill_id, o);
+        });
+
+        const masterBillMap = new Map<string, any>();
+        masterBills.forEach(m => {
+            masterBillMap.set(m.id, m);
+        });
+
+        const dbItemsMap = new Map<string, any[]>();
+        dbOrderItems.forEach(item => {
+            if (!dbItemsMap.has(item.order_id)) dbItemsMap.set(item.order_id, []);
+            dbItemsMap.get(item.order_id)!.push(item);
+        });
+
+        return bills.map(bill => {
+            const pId = bill.pos_bill_id;
+            const sOrder = pId ? shiftOrderMap.get(pId) : null;
+            const mBill = pId ? masterBillMap.get(pId) : null;
+
+            const billNumber = mBill?.bill_number ||
+                sOrder?.order_number ||
+                sOrder?.short_code ||
+                bill.pos_master_bills?.bill_number ||
+                `BILL-${bill.id.slice(0, 8)}`;
+
+            const waiterName = sOrder?.waiter_name || bill.auth_users?.full_name || null;
+            const tableNumber = sOrder?.table_number || null;
+            const roomNumber = sOrder?.room_number || null;
+
+            const rawItems: any[] = [];
+
+            if (pId && dbItemsMap.has(pId)) {
+                rawItems.push(...dbItemsMap.get(pId)!);
+            }
+            if (sOrder && dbItemsMap.has(sOrder.id)) {
+                rawItems.push(...dbItemsMap.get(sOrder.id)!);
+            }
+            if (rawItems.length === 0 && sOrder?.items && Array.isArray(sOrder.items)) {
+                rawItems.push(...sOrder.items);
+            }
+            if (rawItems.length === 0 && mBill?.items && Array.isArray(mBill.items)) {
+                rawItems.push(...mBill.items);
+            }
+
+            const itemMap = new Map<string, { name: string; quantity: number; unit_price: number; total_price: number }>();
+
+            for (const raw of rawItems) {
+                const name = raw.item_name || raw.name || raw.title || raw.description || 'Item';
+                if (raw.is_void || raw.voided || raw.status === 'voided') continue;
+                const qty = Number(raw.quantity || raw.qty || 1);
+                const unitPrice = Number(raw.unit_price || raw.price || (qty > 0 ? (Number(raw.total_price || raw.total || raw.subtotal || bill.amount) / qty) : 0));
+                const total = Number(raw.total_price || raw.total || raw.subtotal || (qty * unitPrice));
+
+                const key = `${name.toLowerCase().trim()}_${unitPrice}`;
+                if (itemMap.has(key)) {
+                    const existing = itemMap.get(key)!;
+                    existing.quantity += qty;
+                    existing.total_price += total;
+                } else {
+                    itemMap.set(key, {
+                        name,
+                        quantity: qty,
+                        unit_price: unitPrice,
+                        total_price: total
+                    });
+                }
+            }
+
+            let cleanItems = Array.from(itemMap.values());
+
+            if (cleanItems.length === 0) {
+                cleanItems = [{
+                    name: `POS Settlement (${billNumber})`,
+                    quantity: 1,
+                    unit_price: Number(bill.amount || 0),
+                    total_price: Number(bill.amount || 0)
+                }];
+            }
+
+            return {
+                ...bill,
+                bill_number: billNumber,
+                waiter_name: waiterName,
+                table_number: tableNumber,
+                room_number: roomNumber,
+                items: cleanItems
+            };
+        });
+    } catch (err) {
+        logger.warn('Failed enriching corporate bills with items:', err);
+        return bills.map(bill => ({
+            ...bill,
+            bill_number: bill.pos_master_bills?.bill_number || `BILL-${bill.id.slice(0, 8)}`,
+            items: [{
+                name: `Corporate Bill Settlement`,
+                quantity: 1,
+                unit_price: Number(bill.amount || 0),
+                total_price: Number(bill.amount || 0)
+            }]
+        }));
+    }
+}
+
+// 5a. Get All Corporate Bills (Folio View)
+export const getAllCorporateBills = async (req: Request, res: Response) => {
+    try {
+        await autoProcessMaturedCorporateInvoices();
+        const { customer_id } = req.query;
+
+        let query = supabase
+            .from('corporate_credit_bills')
+            .select(`
+                *,
+                corporate_customers(id, name, phone, email, credit_limit, credit_period_days),
+                pos_master_bills:pos_bill_id(bill_number)
+            `)
+            .order('created_at', { ascending: false });
+
+        if (customer_id && typeof customer_id === 'string') {
+            query = query.eq('corporate_customer_id', customer_id);
+        }
+
+        query = applyBranchFilter(query, req);
+        let { data, error } = await query;
+
+        if (error) {
+            logger.warn('Embedded query failed for all corporate_credit_bills, trying plain select:', error.message);
+            let fallbackQuery = supabase
+                .from('corporate_credit_bills')
+                .select('*, corporate_customers(id, name, phone, email)')
+                .order('created_at', { ascending: false });
+            if (customer_id && typeof customer_id === 'string') {
+                fallbackQuery = fallbackQuery.eq('corporate_customer_id', customer_id);
+            }
+            fallbackQuery = applyBranchFilter(fallbackQuery, req);
+            const fallbackRes = await fallbackQuery;
+            data = fallbackRes.data || [];
+        }
+
+        const enriched = await enrichCorporateBillsWithItems(data || []);
+        res.json({ success: true, data: enriched });
+    } catch (error: any) {
+        logger.error('Failed to get corporate bills:', error);
+        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+};
+
+// 5b. Get Pending Corporate Bills
 export const getPendingCorporateBills = async (req: Request, res: Response) => {
     try {
         // Fire-and-forget: never block this read on the heavy invoice batch.
@@ -250,7 +512,12 @@ export const getPendingCorporateBills = async (req: Request, res: Response) => {
         // unregistered relationship, so it always failed into the fallback.
         let query = supabase
             .from('corporate_credit_bills')
-            .select('*, corporate_customers(name)')
+            .select(`
+                *,
+                corporate_customers(id, name, phone, email),
+                pos_master_bills:pos_bill_id(bill_number)
+            `)
+
             .eq('status', 'UNINVOICED')
             .order('created_at', { ascending: false });
             
@@ -260,7 +527,7 @@ export const getPendingCorporateBills = async (req: Request, res: Response) => {
             logger.warn('Embedded query failed for corporate_credit_bills, trying plain select:', error.message);
             let fallbackQuery = supabase
                 .from('corporate_credit_bills')
-                .select('*, corporate_customers(name)')
+                .select('*, corporate_customers(id, name, phone, email)')
                 .eq('status', 'UNINVOICED')
                 .order('created_at', { ascending: false });
             fallbackQuery = applyBranchFilter(fallbackQuery, req);
@@ -273,7 +540,8 @@ export const getPendingCorporateBills = async (req: Request, res: Response) => {
             data = fallbackRes.data || [];
         }
 
-        res.json({ success: true, data: data || [] });
+        const enriched = await enrichCorporateBillsWithItems(data || []);
+        res.json({ success: true, data: enriched });
     } catch (error: any) {
         logger.error('Failed to get pending corporate bills:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -312,7 +580,7 @@ export const generateCorporateInvoice = async (req: Request, res: Response) => {
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + days);
 
-        // Generate Invoice Number (Simple format INV-YYYYMMDD-XXXX)
+        // Generate Invoice Number (Format INV-YYYYMMDD-XXXX)
         const invNum = `INV-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(Math.random() * 10000)}`;
 
         const { data: invoice, error: invErr } = await supabase
@@ -350,7 +618,7 @@ export const generateCorporateInvoice = async (req: Request, res: Response) => {
     }
 };
 
-// 7. Get Invoices
+// 7. Get Invoices (with associated bills and POS items formatted for Guest Invoice PDF)
 export const getCorporateInvoices = async (req: Request, res: Response) => {
     try {
         void autoProcessMaturedCorporateInvoices();
@@ -358,7 +626,8 @@ export const getCorporateInvoices = async (req: Request, res: Response) => {
             .from('corporate_invoices')
             .select(`
                 *,
-                corporate_customers(name, phone, email)
+                corporate_customers(id, name, phone, email),
+                branches(name, address, phone)
             `)
             .order('created_at', { ascending: false });
             
@@ -368,21 +637,125 @@ export const getCorporateInvoices = async (req: Request, res: Response) => {
             logger.warn('Embedded query failed for corporate_invoices, trying plain select:', error.message);
             let fallbackQuery = supabase
                 .from('corporate_invoices')
-                .select('*')
+                .select('*, corporate_customers(id, name, phone, email)')
                 .order('created_at', { ascending: false });
             fallbackQuery = applyBranchFilter(fallbackQuery, req);
             const fallbackRes = await fallbackQuery;
-            if (fallbackRes.error) {
-                logger.warn('Fallback query also failed for corporate_invoices:', fallbackRes.error.message);
-                res.json({ success: true, data: [] });
-                return;
-            }
             data = fallbackRes.data || [];
         }
 
-        res.json({ success: true, data: data || [] });
+        const invoices = data || [];
+        if (invoices.length > 0) {
+            const invoiceIds = invoices.map(i => i.id);
+            const { data: invBills } = await supabase
+                .from('corporate_credit_bills')
+                .select('*')
+                .in('corporate_invoice_id', invoiceIds);
+
+            const enrichedBills = await enrichCorporateBillsWithItems(invBills || []);
+            const billsByInvoice = new Map<string, any[]>();
+            for (const b of enrichedBills) {
+                if (!billsByInvoice.has(b.corporate_invoice_id)) billsByInvoice.set(b.corporate_invoice_id, []);
+                billsByInvoice.get(b.corporate_invoice_id)!.push(b);
+            }
+
+            for (const inv of invoices) {
+                inv.bills = billsByInvoice.get(inv.id) || [];
+                // Format items array for guest invoice PDF template
+                inv.items = inv.bills.flatMap((b: any) =>
+                    (b.items || []).map((it: any) => ({
+                        bill_number: b.bill_number,
+                        description: `${b.bill_number} · ${it.name}`,
+                        item_name: it.name,
+                        qty: it.quantity,
+                        unitPrice: it.unit_price,
+                        totalAmount: it.total_price
+                    }))
+                );
+
+                if (inv.items.length === 0) {
+                    inv.items = [{
+                        bill_number: inv.invoice_number,
+                        description: `Corporate Credit Settlement (${inv.invoice_number})`,
+                        qty: 1,
+                        unitPrice: Number(inv.amount_due || 0),
+                        totalAmount: Number(inv.amount_due || 0)
+                    }];
+                }
+            }
+        }
+
+        res.json({ success: true, data: invoices });
     } catch (error: any) {
         logger.error('Failed to get corporate invoices:', error);
+        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+};
+
+// 7b. Get Corporate Customer Folio (Complete history of bills & invoices)
+export const getCorporateCustomerFolio = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Customer details
+        const { data: customer, error: custErr } = await supabase
+            .from('corporate_customers')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (custErr || !customer) throw new AppError('Corporate customer not found', 404);
+
+        // Fetch all bills for this customer
+        let billsQuery = supabase
+            .from('corporate_credit_bills')
+            .select(`
+                *,
+                pos_master_bills:pos_bill_id(bill_number)
+            `)
+            .eq('corporate_customer_id', id)
+            .order('created_at', { ascending: false });
+
+        billsQuery = applyBranchFilter(billsQuery, req);
+        const { data: rawBills } = await billsQuery;
+        const enrichedBills = await enrichCorporateBillsWithItems(rawBills || []);
+
+        // Fetch all invoices for this customer
+        let invQuery = supabase
+            .from('corporate_invoices')
+            .select('*')
+            .eq('corporate_customer_id', id)
+            .order('created_at', { ascending: false });
+
+        invQuery = applyBranchFilter(invQuery, req);
+        const { data: invoices } = await invQuery;
+
+        // Totals
+        const totalBilled = enrichedBills.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+        const uninvoicedAmount = enrichedBills.filter(b => b.status === 'UNINVOICED').reduce((sum, b) => sum + Number(b.amount || 0), 0);
+        const totalInvoiced = (invoices || []).reduce((sum, i) => sum + Number(i.amount_due || 0), 0);
+        const totalPaid = (invoices || []).reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+        const currentBalance = totalBilled - totalPaid;
+
+        res.json({
+            success: true,
+            data: {
+                customer,
+                summary: {
+                    total_billed: totalBilled,
+                    uninvoiced_amount: uninvoicedAmount,
+                    total_invoiced: totalInvoiced,
+                    total_paid: totalPaid,
+                    current_balance: currentBalance,
+                    credit_limit: Number(customer.credit_limit || 0),
+                    available_credit: Math.max(0, Number(customer.credit_limit || 0) - currentBalance)
+                },
+                bills: enrichedBills,
+                invoices: invoices || []
+            }
+        });
+    } catch (error: any) {
+        logger.error('Failed to get corporate customer folio:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -391,7 +764,7 @@ export const getCorporateInvoices = async (req: Request, res: Response) => {
 export const payCorporateInvoice = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { amount } = req.body; // Amount being paid right now
+        const { amount } = req.body;
         
         let query = supabase.from('corporate_invoices').select('*').eq('id', id);
         query = applyBranchFilter(query, req);

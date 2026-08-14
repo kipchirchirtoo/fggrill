@@ -207,11 +207,13 @@ class BrandedPDFGenerator:
         
         # Footer text
         footer_text = f"FamousGate Hotels | Confidential | Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        canvas.drawCentredString(A4[0]/2, 0.4*inch, footer_text)
+        canvas.drawCentredString(A4[0]/2, 0.45*inch, footer_text)
+        canvas.setFont('Helvetica-Bold', 6)
+        canvas.drawCentredString(A4[0]/2, 0.28*inch, "System made and maintained by Hirall | +254 710 944 249 | www.hirall.com")
         
         # Page number
         page_num = f"Page {doc.page}"
-        canvas.drawRightString(A4[0] - 0.5*inch, 0.4*inch, page_num)
+        canvas.drawRightString(A4[0] - 0.5*inch, 0.45*inch, page_num)
         
         canvas.restoreState()
 
@@ -2976,10 +2978,10 @@ class BrandedPDFGenerator:
         y -= 7 * mm
 
         c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        c.drawCentredString(center_x, y, "System made and maintained by Hirall")
         y -= 3.5 * mm
         c.setFont("Helvetica", 6)
-        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
+        c.drawCentredString(center_x, y, "+254 710 944 249 | www.hirall.com")
 
         c.save()
         return filename
@@ -3187,10 +3189,10 @@ class BrandedPDFGenerator:
         y -= 7 * mm
 
         c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        c.drawCentredString(center_x, y, "System made and maintained by Hirall")
         y -= 3.5 * mm
         c.setFont("Helvetica", 6)
-        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
+        c.drawCentredString(center_x, y, "+254 710 944 249 | www.hirall.com")
 
         c.save()
         return filename

@@ -3,10 +3,13 @@ import {
     getCorporateCustomers,
     createCorporateCustomer,
     updateCorporateCustomer,
+    deleteCorporateCustomer,
     chargeCorporateCredit,
+    getAllCorporateBills,
     getPendingCorporateBills,
     generateCorporateInvoice,
     getCorporateInvoices,
+    getCorporateCustomerFolio,
     payCorporateInvoice
 } from '../controllers/corporate.controller';
 import { protect, authorize } from '../middleware/auth';
@@ -54,7 +57,9 @@ router.get('/customers', authorize([
 ] as any), getCorporateCustomers);
 
 router.post('/customers', authorize(corporateAccountants as any), createCorporateCustomer);
+router.get('/customers/:id/folio', authorize(corporateAccountants as any), getCorporateCustomerFolio);
 router.put('/customers/:id', authorize(corporateAccountants as any), updateCorporateCustomer);
+router.delete('/customers/:id', authorize(corporateAccountants as any), deleteCorporateCustomer);
 
 // Cashier & Receptionist route to charge a bill to corporate credit
 router.post('/charge', authorize([
@@ -65,7 +70,8 @@ router.post('/charge', authorize([
     UserRole.FRONT_DESK_SUPERVISOR
 ] as any), chargeCorporateCredit);
 
-// Accountant routes for Invoicing
+// Accountant routes for Invoicing & Folio
+router.get('/bills', authorize(corporateAccountants as any), getAllCorporateBills);
 router.get('/bills/pending', authorize(corporateAccountants as any), getPendingCorporateBills);
 router.post('/invoices/generate', authorize(corporateAccountants as any), generateCorporateInvoice);
 router.get('/invoices', authorize(corporateAccountants as any), getCorporateInvoices);

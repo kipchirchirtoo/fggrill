@@ -731,9 +731,38 @@ export const getShiftLogs = async (
             // For closed/reconciled shifts that already have totals stored, use them as-is
             if (shift.status !== 'open' && shift.status !== 'pending_open') {
                 const voidAudit = await buildVoidAudit();
+                let actualExpenseTotal = toNumber(shift.expense_total);
+                if (!actualExpenseTotal || actualExpenseTotal === 0) {
+                    const { data: expRows } = await supabase
+                        .from('shift_reconciliation_expenses')
+                        .select('amount')
+                        .or(`shift_id.eq.${shift.id},shift_id.eq.${shift.shift_id || shift.id}`);
+                    if (expRows && expRows.length > 0) {
+                        actualExpenseTotal = expRows.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+                    }
+                }
+
+                let actualConferenceRevenue = toNumber(shift.conference_revenue);
+                if (!actualConferenceRevenue || actualConferenceRevenue === 0) {
+                    if (shift.shift_start && shift.branch_id) {
+                        const shiftEnd = shift.shift_end || new Date().toISOString();
+                        const { data: confBookings } = await supabase
+                            .from('conference_hall_bookings')
+                            .select('amount_paid, deposit_amount')
+                            .eq('branch_id', shift.branch_id)
+                            .gte('created_at', shift.shift_start)
+                            .lte('created_at', shiftEnd);
+                        if (confBookings && confBookings.length > 0) {
+                            actualConferenceRevenue = confBookings.reduce((sum: number, b: any) => sum + toNumber(b.amount_paid || b.deposit_amount), 0);
+                        }
+                    }
+                }
+
                 return {
                     ...shift,
                     cashier_name: cashierName,
+                    expense_total: actualExpenseTotal,
+                    conference_revenue: actualConferenceRevenue,
                     void_summary: voidAudit?.summary || undefined,
                     net_sales: toNumber(shift.total_sales),
                     gross_sales: toNumber(shift.total_sales) + toNumber(voidAudit?.summary?.total_void_amount)
@@ -753,25 +782,34 @@ export const getShiftLogs = async (
                 // RPC summary doesn't break out — so we bucket them here.
                 const { data: shiftTxns } = await supabase
                     .from('cashier_shift_transactions')
-                    .select('payment_method, amount, is_voided, status')
+                    .select('payment_method, amount, transaction_ref, source_table, notes, is_voided, status')
                     .eq('shift_id', shift.id)
                     .or('is_voided.is.null,is_voided.eq.false');
 
                 if (shiftTxns && shiftTxns.length > 0) {
                     let txnCash = 0, txnMpesa = 0, txnCard = 0, txnCredit = 0, txnTotal = 0;
+                    let txnConference = 0, txnRooms = 0;
+
                     for (const t of shiftTxns) {
                         const m = String(t.payment_method || '').toLowerCase();
                         const amt = Number(t.amount || 0);
+                        const ref = String(t.transaction_ref || '').toUpperCase();
+                        const tbl = String(t.source_table || '').toLowerCase();
+                        const nts = String(t.notes || '').toLowerCase();
+
                         txnTotal += amt;
                         if (m.includes('credit')) txnCredit += amt;
                         else if (m.includes('mpesa') || m.includes('m-pesa')) txnMpesa += amt;
                         else if (m.includes('card') || m.includes('swipe')) txnCard += amt;
                         else txnCash += amt;
+
+                        if (ref.startsWith('CNF') || ref.includes('CONF') || tbl.includes('conf') || nts.includes('conf')) {
+                            txnConference += amt;
+                        } else if (ref.startsWith('RM') || ref.startsWith('RSV') || tbl.includes('room') || nts.includes('room')) {
+                            txnRooms += amt;
+                        }
                     }
-                    // Include cash paid-credits already recorded during the shift
-                    // (staff settling credit bills with cash) — these physically
-                    // land in the drawer and must be in the expected reconciliation.
-                    // Expenses can't be known yet (entered at close), so they're excluded.
+
                     const paidBillsList = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
                     const cashPaidCreditsLive = paidBillsList
                         .filter((b: any) => !String(b.payment_method || 'cash').toLowerCase().match(/mpesa|card/))
@@ -786,6 +824,8 @@ export const getShiftLogs = async (
                         total_mpesa_sales: txnMpesa,
                         total_card_sales: txnCard,
                         credit_bills_taken: txnCredit,
+                        conference_revenue: txnConference > 0 ? txnConference : Number(shift.conference_revenue || 0),
+                        room_booking_revenue: txnRooms > 0 ? txnRooms : Number(shift.room_booking_revenue || 0),
                         credit_bills_count: shiftTxns.filter((t: any) =>
                             String(t.payment_method || '').toLowerCase().includes('credit')).length,
                         transaction_count: shiftTxns.length,

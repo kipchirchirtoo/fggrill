@@ -69,6 +69,11 @@ dist/
 # Rust/Tauri build artifacts
 famous-gates-desktop/apps/desktop/src-tauri/target/
 
+# Database Backups
+backend/database/backups/
+*.sql.bak
+
 # Local configuration and temp directories
 .mcp.json
 supabase/
+

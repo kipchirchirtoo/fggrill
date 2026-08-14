@@ -3,6 +3,8 @@ import Head from 'next/head';
 import { useState, useEffect } from 'react';
 import { Header, Footer } from '@/components/layout';
 import toast, { Toaster } from 'react-hot-toast';
+import { fetchReviews, submitReview as apiSubmitReview, markReviewHelpful as apiMarkHelpful, GuestReview } from '@/services/reviews.service';
+import { fetchBranches, formatBranchDisplayName } from '@/services/hotels.service';
 
 interface RatingBreakdown {
   cleanliness: number;
@@ -20,7 +22,7 @@ interface Review {
   avatar: string;
   isVerified: boolean;
   location: string; // e.g. "Nairobi, Kenya"
-  branch: 'Kericho' | 'Bomet' | 'All';
+  branch: string; // real branch label, e.g. "Kyogong", "Bomet Town" — see backend/database/migrations/20260813_create_guest_reviews.sql
   type: 'hotel' | 'restaurant';
   stayType: 'Business' | 'Family' | 'Couple' | 'Solo' | 'Vacation';
   rating: number;
@@ -42,146 +44,76 @@ interface Review {
   };
 }
 
-const INITIAL_REVIEWS: Review[] = [
-  {
-    id: 'rev-1',
-    name: 'Andrea Howard',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
-    isVerified: true,
-    location: 'London, UK',
-    branch: 'Kericho',
-    type: 'hotel',
-    stayType: 'Couple',
-    rating: 5,
-    ratings: { cleanliness: 5, service: 5, comfort: 5, wifi: 4, location: 5, value: 5, food: 5 },
-    content: 'An absolutely stunning hotel in Kericho! The gardens are beautifully manicured and the room cleanliness was impeccable. Our bed was incredibly comfortable and the service from the staff was warm and genuine. We especially loved the restaurant breakfast and the tea-farm tour they organized. Highly recommended!',
-    date: '2026-05-15',
-    stayedOn: 'May 2026',
-    helpfulCount: 34,
-    likesCount: 18,
-    sentiment: 'Positive',
-    sentimentConfidence: 98,
-    issuesMentioned: ['Clean rooms', 'Friendly staff', 'Comfortable beds', 'Good food'],
-    managerResponse: {
-      responder: 'General Manager, FamousGate Kericho',
-      content: 'Dear Andrea, thank you so much for your kind words! We are absolutely delighted that you enjoyed your stay, our tea-farm tour, and our hospitality. Looking forward to welcoming you back soon.',
-      date: '2026-05-16'
-    }
-  },
-  {
-    id: 'rev-2',
-    name: 'Carl Conder',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-    isVerified: true,
-    location: 'Nairobi, Kenya',
-    branch: 'Bomet',
-    type: 'restaurant',
-    stayType: 'Family',
-    rating: 5,
-    ratings: { cleanliness: 5, service: 5, comfort: 4, wifi: 3, location: 4, value: 5, food: 5 },
-    content: 'We visited the FamousGate restaurant in Bomet for Sunday family lunch. The food quality and taste were absolutely incredible—best grill and local cuts we have had in a long time! The wait staff was highly attentive and the cleanliness of the dining area was superior. Will definitely return.',
-    date: '2026-05-10',
-    stayedOn: 'May 2026',
-    helpfulCount: 22,
-    likesCount: 12,
-    sentiment: 'Positive',
-    sentimentConfidence: 96,
-    issuesMentioned: ['Good food', 'Friendly staff', 'Fast service'],
-    managerResponse: {
-      responder: 'Restaurant Manager, FamousGate Bomet',
-      content: 'Thank you Carl! We appreciate your wonderful review of our grill and our team. We look forward to serving your family again next Sunday.',
-      date: '2026-05-11'
-    }
-  },
-  {
-    id: 'rev-3',
-    name: 'Liz Leys',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80',
-    isVerified: true,
-    location: 'Munich, Germany',
-    branch: 'Kericho',
-    type: 'hotel',
-    stayType: 'Business',
-    rating: 3,
-    ratings: { cleanliness: 4, service: 3, comfort: 4, wifi: 2, location: 5, value: 3, food: 4 },
-    content: 'The room was quite comfortable and clean, and the location is exceptionally convenient for business meetings. However, the check-in took over 30 minutes, which was highly frustrating after a long journey. The room Wi-Fi was also unstable and kept dropping out. Food at the lounge was good, but service overall needs to be faster.',
-    date: '2026-05-04',
-    stayedOn: 'April 2026',
-    helpfulCount: 45,
-    likesCount: 5,
-    sentiment: 'Neutral',
-    sentimentConfidence: 87,
-    issuesMentioned: ['Comfortable beds', 'Slow check-in', 'Nice Wi-Fi'],
-    managerResponse: {
-      responder: 'Front Office Director, FamousGate Kericho',
-      content: 'Dear Liz, thank you for your candid feedback. We sincerely apologize for the delayed check-in and unstable Wi-Fi. We are currently implementing a new digital check-in system and upgrading our high-speed fibre network to resolve these precise bottlenecks.',
-      date: '2026-05-05'
-    }
-  },
-  {
-    id: 'rev-4',
-    name: 'Griffin Davis',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
-    isVerified: true,
-    location: 'Seattle, USA',
-    branch: 'Bomet',
-    type: 'hotel',
-    stayType: 'Solo',
-    rating: 4,
-    ratings: { cleanliness: 5, service: 4, comfort: 5, wifi: 5, location: 4, value: 4, food: 3 },
-    content: 'Staid here for a solo weekend vacation. Super clean property, fast Wi-Fi, and highly respectful employees. My room was very quiet, allowing for great sleep. The only downside was that the dinner delivery took over 45 minutes, and by the time it arrived, it was lukewarm. Everything else was exceptional.',
-    date: '2026-04-28',
-    stayedOn: 'April 2026',
-    helpfulCount: 15,
-    likesCount: 9,
-    sentiment: 'Positive',
-    sentimentConfidence: 91,
-    issuesMentioned: ['Clean rooms', 'Nice Wi-Fi', 'Quiet environment', 'Delayed food'],
-    managerResponse: {
-      responder: 'Guest Relations, FamousGate Bomet',
-      content: 'Hello Griffin! We glad you enjoyed our clean rooms and peaceful environment. We are addressing the room-service delivery delays with our kitchen team to ensure dinner is served hot and prompt. Hope to host you again!',
-      date: '2026-04-29'
-    }
-  },
-  {
-    id: 'rev-5',
-    name: 'Hailey Grey',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150&q=80',
-    isVerified: true,
-    location: 'Nakuru, Kenya',
-    branch: 'Kericho',
-    type: 'restaurant',
-    stayType: 'Couple',
-    rating: 2,
-    ratings: { cleanliness: 3, service: 2, comfort: 2, wifi: 3, location: 4, value: 2, food: 3 },
-    content: 'We came specifically for our anniversary dinner because of the FamousGate brand. Unfortunately, it was highly disappointing. We sat for 20 minutes before our order was taken, and the steak we ordered medium-rare came back completely well-done and cold. The live music in the background was also way too loud, we could barely converse.',
-    date: '2026-04-12',
-    stayedOn: 'April 2026',
-    helpfulCount: 52,
-    likesCount: 2,
-    sentiment: 'Negative',
-    sentimentConfidence: 94,
-    issuesMentioned: ['Delayed food', 'Slow service', 'Noisy rooms'],
-    managerResponse: {
-      responder: 'Food & Beverage Director, FamousGate Kericho',
-      content: 'Dear Hailey, please accept our sincere apologies for spoiling your anniversary dinner. This is completely below our standard. We would love to make this up to you with a complimentary dinner voucher and a reserved premium booth. Please contact us directly at fb@famousgatehotels.com.',
-      date: '2026-04-13'
-    }
-  }
-];
+// Neutral silhouette placeholder — real reviewer photos don't exist (no
+// guest accounts/uploads), so every review uses the same generic avatar
+// rather than pretending to have per-person photos.
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23E2E8F0"/><circle cx="50" cy="38" r="18" fill="%2394A3B8"/><path d="M50 62c-22 0-36 12-36 30v8h72v-8c0-18-14-30-36-30z" fill="%2394A3B8"/></svg>`
+  );
+
+/** Maps GET /api/reviews' row shape (backend/src/controllers/reviews.controller.ts) onto this page's UI model. */
+function mapGuestReview(gr: GuestReview): Review {
+  const stayedOnDate = new Date(gr.created_at);
+  const stayedOn = isNaN(stayedOnDate.getTime())
+    ? ''
+    : stayedOnDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  return {
+    id: gr.id,
+    name: gr.reviewer_name,
+    avatar: DEFAULT_AVATAR,
+    isVerified: gr.is_verified,
+    location: gr.reviewer_location || 'Kenya',
+    branch: gr.branch_label,
+    type: gr.service_type === 'restaurant' ? 'restaurant' : 'hotel',
+    stayType: (gr.stay_type as Review['stayType']) || 'Couple',
+    rating: gr.rating,
+    ratings: {
+      cleanliness: gr.rating_cleanliness ?? gr.rating,
+      service: gr.rating_service ?? gr.rating,
+      comfort: gr.rating_comfort ?? gr.rating,
+      wifi: gr.rating_wifi ?? gr.rating,
+      location: gr.rating_location ?? gr.rating,
+      value: gr.rating_value ?? gr.rating,
+      food: gr.rating_food ?? gr.rating,
+    },
+    content: gr.content,
+    date: gr.created_at ? gr.created_at.split('T')[0] : '',
+    stayedOn,
+    helpfulCount: gr.helpful_count,
+    likesCount: gr.likes_count,
+    sentiment: gr.sentiment || 'Positive',
+    sentimentConfidence: gr.sentiment_confidence ?? 90,
+    issuesMentioned: gr.issues_mentioned || [],
+    managerResponse:
+      gr.responded && gr.response_text
+        ? {
+            responder: gr.response_by || 'Management',
+            content: gr.response_text,
+            date: gr.responded_at ? gr.responded_at.split('T')[0] : '',
+          }
+        : undefined,
+  };
+}
 
 export default function ReviewsPage() {
   const [heroLoaded, setHeroLoaded] = useState(false);
-  const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
-  const [activeBranch, setActiveBranch] = useState<'All' | 'Kericho' | 'Bomet'>('All');
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [branchOptions, setBranchOptions] = useState<string[]>([]);
+  const [officialBranches, setOfficialBranches] = useState<{ id: string; name: string }[]>([]);
+  const [activeBranch, setActiveBranch] = useState<string>('All');
   const [activeFilter, setActiveFilter] = useState<'all' | 'hotel' | 'restaurant' | 'verified' | 'photos'>('all');
   const [activeSort, setActiveSort] = useState<'recent' | 'highest' | 'lowest' | 'helpful'>('recent');
 
   // --- New Review Form States ---
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formName, setFormName] = useState('');
   const [formLocation, setFormLocation] = useState('');
-  const [formBranch, setFormBranch] = useState<'Kericho' | 'Bomet'>('Kericho');
+  const [formBranch, setFormBranch] = useState('');
   const [formType, setFormType] = useState<'hotel' | 'restaurant'>('hotel');
   const [formStayType, setFormStayType] = useState<'Business' | 'Family' | 'Couple' | 'Solo' | 'Vacation'>('Couple');
   const [formRating, setFormRating] = useState(5);
@@ -196,13 +128,32 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     setHeroLoaded(true);
+
+    (async () => {
+      setLoadingReviews(true);
+      const data = await fetchReviews();
+      const mapped = data.map(mapGuestReview);
+      setReviews(mapped);
+      setBranchOptions(Array.from(new Set(mapped.map((r) => r.branch))).sort());
+      setLoadingReviews(false);
+    })();
+
+    (async () => {
+      const branches = await fetchBranches();
+      const options = branches
+        .map((b: any) => ({ id: String(b.id), name: formatBranchDisplayName(String(b.name || '')) }))
+        .filter((b) => b.name);
+      setOfficialBranches(options);
+      if (options.length > 0) setFormBranch((prev) => prev || options[0].name);
+    })();
+
   }, []);
 
   // --- Calculations for Analytics Summary ---
   const filteredForStats = reviews.filter(r => activeBranch === 'All' || r.branch === activeBranch);
   const averageRating = (filteredForStats.reduce((sum, r) => sum + r.rating, 0) / (filteredForStats.length || 1)).toFixed(1);
   const totalCount = filteredForStats.length;
-  
+
   const ratingDistribution = [5, 4, 3, 2, 1].map(stars => {
     const count = filteredForStats.filter(r => r.rating === stars).length;
     const percentage = Math.round((count / (totalCount || 1)) * 100);
@@ -243,23 +194,30 @@ export default function ReviewsPage() {
   });
 
   // --- Handle Helpful Action ---
-  const handleHelpful = (id: string) => {
+  // Backend only supports incrementing (no guest accounts to track a
+  // per-visitor toggle server-side), so once marked helpful in this
+  // session it stays marked — unlike "Like" below, this count is real and
+  // persisted.
+  const handleHelpful = async (id: string) => {
+    const target = reviews.find(r => r.id === id);
+    if (!target || target.isHelpfulByUser) return;
     setReviews(prev =>
-      prev.map(r => {
-        if (r.id === id) {
-          const toggled = !r.isHelpfulByUser;
-          return {
-            ...r,
-            isHelpfulByUser: toggled,
-            helpfulCount: r.helpfulCount + (toggled ? 1 : -1)
-          };
-        }
-        return r;
-      })
+      prev.map(r => r.id === id ? { ...r, isHelpfulByUser: true, helpfulCount: r.helpfulCount + 1 } : r)
     );
-    toast.success('Thank you for your feedback!');
+    try {
+      await apiMarkHelpful(id);
+      toast.success('Thank you for your feedback!');
+    } catch {
+      // Revert on failure
+      setReviews(prev =>
+        prev.map(r => r.id === id ? { ...r, isHelpfulByUser: false, helpfulCount: r.helpfulCount - 1 } : r)
+      );
+      toast.error('Could not record that — please try again.');
+    }
   };
 
+  // "Like" has no backend counterpart (purely a lightweight, non-persisted
+  // reaction) — local-only, resets on reload.
   const handleLike = (id: string) => {
     setReviews(prev =>
       prev.map(r => {
@@ -277,86 +235,66 @@ export default function ReviewsPage() {
   };
 
   // --- Form Submission ---
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formContent.trim()) {
       toast.error('Please fill out your name and review text.');
       return;
     }
-
-    // Auto-sentiment analysis (mock client side AI)
-    let sentiment: 'Positive' | 'Neutral' | 'Negative' = 'Positive';
-    let issues: string[] = ['Clean rooms', 'Friendly staff'];
-    const contentLower = formContent.toLowerCase();
-
-    if (formRating <= 2 || contentLower.includes('delayed') || contentLower.includes('slow') || contentLower.includes('bad') || contentLower.includes('disappoint')) {
-      sentiment = 'Negative';
-      issues = [];
-      if (contentLower.includes('slow') || contentLower.includes('check-in')) issues.push('Slow check-in');
-      if (contentLower.includes('food') || contentLower.includes('cold') || contentLower.includes('delivery')) issues.push('Delayed food');
-      if (contentLower.includes('noisy') || contentLower.includes('loud')) issues.push('Noisy rooms');
-    } else if (formRating === 3) {
-      sentiment = 'Neutral';
-      issues = ['Comfortable beds'];
-    } else {
-      issues = [];
-      if (contentLower.includes('clean') || contentLower.includes('spotless')) issues.push('Clean rooms');
-      if (contentLower.includes('friendly') || contentLower.includes('polite') || contentLower.includes('staff')) issues.push('Friendly staff');
-      if (contentLower.includes('bed') || contentLower.includes('sleep') || contentLower.includes('comfort')) issues.push('Comfortable beds');
-      if (contentLower.includes('food') || contentLower.includes('delicious') || contentLower.includes('breakfast')) issues.push('Good food');
+    if (!formBranch) {
+      toast.error('Please select a branch.');
+      return;
     }
 
-    const newRev: Review = {
-      id: `rev-${Date.now()}`,
-      name: formName,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
-      isVerified: true,
-      location: formLocation || 'Kenya',
-      branch: formBranch,
-      type: formType,
-      stayType: formStayType,
-      rating: formRating,
-      ratings: {
-        cleanliness: formCleanliness,
-        service: formService,
-        comfort: formComfort,
-        wifi: formWifi,
-        location: formLocationRating,
-        value: formValue,
-        food: formFood
-      },
-      content: formContent,
-      date: new Date().toISOString().split('T')[0],
-      stayedOn: 'May 2026',
-      helpfulCount: 0,
-      likesCount: 0,
-      sentiment,
-      sentimentConfidence: Math.floor(Math.random() * 15) + 84, // 84-98%
-      issuesMentioned: issues
-    };
+    setSubmitting(true);
+    try {
+      const created = await apiSubmitReview({
+        reviewer_name: formName.trim(),
+        reviewer_location: formLocation.trim() || undefined,
+        branch_label: formBranch,
+        service_type: formType,
+        stay_type: formStayType,
+        rating: formRating,
+        rating_cleanliness: formCleanliness,
+        rating_service: formService,
+        rating_comfort: formComfort,
+        rating_wifi: formWifi,
+        rating_location: formLocationRating,
+        rating_value: formValue,
+        rating_food: formFood,
+        content: formContent.trim(),
+      });
 
-    setReviews([newRev, ...reviews]);
-    toast.success('Review submitted successfully! Undergoing automated sentiment tagging...');
-    setShowForm(false);
-    
-    // Reset Form
-    setFormName('');
-    setFormLocation('');
-    setFormContent('');
+      const mapped = mapGuestReview(created);
+      setReviews(prev => [mapped, ...prev]);
+      setBranchOptions(prev => Array.from(new Set([...prev, mapped.branch])).sort());
+      toast.success('Review submitted successfully! Thank you for your feedback.');
+      setShowForm(false);
+
+      // Reset Form
+      setFormName('');
+      setFormLocation('');
+      setFormContent('');
+      setFormRating(5);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to submit review. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <>
       <SEO
         title="Guest Reviews & Sentiment Insights — FamousGate Hotels"
-        description="Read verified guest reviews, rating breakdowns, and automated sentiment analysis from FamousGate Hotel Kericho and Bomet."
+        description="Read verified guest reviews, rating breakdowns, and automated sentiment analysis from FamousGate Hotel branches."
         url="https://famousgatehotels.com/reviews"
         breadcrumbs={[
           { name: "Reviews", item: "/reviews" }
         ]}
       />
       <Head>
-        <meta name="keywords" content="famousgate hotels reviews, client feedback, hotel rating, kericho hotel review, bomet hotel rating" />
+        <meta name="keywords" content="famousgate hotels reviews, client feedback, hotel rating, guest reviews" />
       </Head>
 
       <Header />
@@ -386,7 +324,7 @@ export default function ReviewsPage() {
 
         {/* ===== MAIN REVIEWS CONTAINER ===== */}
         <div className="max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          
+
           {/* LAYER 1: REVIEW SUMMARY HEADER & CONTROLS */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 mb-8">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center border-b border-slate-100 pb-8">
@@ -439,7 +377,7 @@ export default function ReviewsPage() {
                     </div>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowForm(!showForm)}
                   className="w-full max-w-sm bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-6 rounded-xl transition duration-150 shadow-sm"
                 >
@@ -452,17 +390,18 @@ export default function ReviewsPage() {
             <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center space-x-2 overflow-x-auto pb-2 md:pb-0">
                 <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Branch:</span>
-                {['All', 'Kericho', 'Bomet'].map((branch) => (
+                {['All', ...branchOptions].map((branch) => (
                   <button
                     key={branch}
-                    onClick={() => setActiveBranch(branch as any)}
+                    onClick={() => setActiveBranch(branch)}
                     className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition duration-150 whitespace-nowrap ${
-                      activeBranch === branch 
-                        ? 'bg-slate-900 text-white border-slate-900' 
+                      activeBranch === branch
+                        ? 'bg-slate-900 text-white border-slate-900'
                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    {branch === 'All' ? 'All Locations' : `FamousGate - ${branch}`}
+                    {branch === 'All' ? 'All Locations' : formatBranchDisplayName(branch)}
+
                   </button>
                 ))}
               </div>
@@ -513,8 +452,8 @@ export default function ReviewsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">Your Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={formName}
                       onChange={e => setFormName(e.target.value)}
                       placeholder="e.g. John Doe"
@@ -524,8 +463,8 @@ export default function ReviewsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">Location/City</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={formLocation}
                       onChange={e => setFormLocation(e.target.value)}
                       placeholder="e.g. Nairobi, Kenya"
@@ -537,18 +476,21 @@ export default function ReviewsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">Branch</label>
-                    <select 
+                    <select
                       value={formBranch}
-                      onChange={e => setFormBranch(e.target.value as any)}
+                      onChange={e => setFormBranch(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
                     >
-                      <option value="Kericho">FamousGate Kericho</option>
-                      <option value="Bomet">FamousGate Bomet</option>
+                      {officialBranches.length === 0 && <option value="">Loading branches…</option>}
+                      {officialBranches.map((b) => (
+                        <option key={b.id} value={b.name}>{b.name}</option>
+
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">Service Type</label>
-                    <select 
+                    <select
                       value={formType}
                       onChange={e => setFormType(e.target.value as any)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
@@ -559,7 +501,7 @@ export default function ReviewsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">Travel Type</label>
-                    <select 
+                    <select
                       value={formStayType}
                       onChange={e => setFormStayType(e.target.value as any)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
@@ -575,9 +517,9 @@ export default function ReviewsPage() {
                     <label className="block text-sm font-bold text-slate-700 mb-2">Overall Rating (1-5)</label>
                     <div className="flex items-center space-x-1 mt-1 text-2xl text-amber-400">
                       {[1, 2, 3, 4, 5].map(stars => (
-                        <button 
-                          type="button" 
-                          key={stars} 
+                        <button
+                          type="button"
+                          key={stars}
                           onClick={() => setFormRating(stars)}
                         >
                           {stars <= formRating ? '★' : '☆'}
@@ -602,7 +544,7 @@ export default function ReviewsPage() {
                     ].map(sub => (
                       <div key={sub.label} className="text-xs">
                         <span className="block text-slate-600 font-bold mb-1">{sub.label}</span>
-                        <select 
+                        <select
                           value={sub.val}
                           onChange={e => sub.set(Number(e.target.value))}
                           className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-xs"
@@ -616,7 +558,7 @@ export default function ReviewsPage() {
 
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Write Your Honest Review</label>
-                  <textarea 
+                  <textarea
                     value={formContent}
                     onChange={e => setFormContent(e.target.value)}
                     placeholder="We loved the hot breakfast and quiet garden view. However, check-in was a bit slow..."
@@ -627,18 +569,19 @@ export default function ReviewsPage() {
                 </div>
 
                 <div className="flex justify-end space-x-3">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => setShowForm(false)}
                     className="px-5 py-2 rounded-xl text-slate-600 border border-slate-200 hover:bg-slate-50 font-bold text-sm"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     type="submit"
-                    className="px-6 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-sm"
+                    disabled={submitting}
+                    className="px-6 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-sm disabled:opacity-50"
                   >
-                    Submit Review
+                    {submitting ? 'Submitting…' : 'Submit Review'}
                   </button>
                 </div>
               </form>
@@ -686,18 +629,22 @@ export default function ReviewsPage() {
 
           {/* ===== REVIEWS GRID ===== */}
           <div className="grid grid-cols-1 gap-8">
-            {displayedReviews.length === 0 ? (
+            {loadingReviews ? (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
+                <div className="animate-pulse text-slate-400 text-sm font-bold">Loading reviews…</div>
+              </div>
+            ) : displayedReviews.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
                 <svg className="w-12 h-12 mx-auto text-slate-300 mb-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <h3 className="text-lg font-bold text-slate-900 mb-1">No matching reviews found</h3>
-                <p className="text-sm text-slate-500">Try adjusting your filters or location choice.</p>
+                <p className="text-sm text-slate-500">Try adjusting your filters, or be the first to write one!</p>
               </div>
             ) : (
               displayedReviews.map((rev) => (
                 <div key={rev.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                  
+
                   {/* LAYER 3: REVIEW CARD UI */}
                   <div className="p-6 md:p-8">
                     {/* Upper profile section */}
@@ -730,8 +677,9 @@ export default function ReviewsPage() {
                           ))}
                         </div>
                         <span className="inline-block bg-slate-100 text-slate-800 text-xs font-black px-2.5 py-1 rounded">
-                          FamousGate {rev.branch}
+                          {formatBranchDisplayName(rev.branch)}
                         </span>
+
                       </div>
                     </div>
 
@@ -796,18 +744,19 @@ export default function ReviewsPage() {
                     {/* Card Footer Actions */}
                     <div className="flex items-center justify-between border-t border-slate-100 pt-5 text-xs text-slate-500 font-bold">
                       <div className="flex items-center space-x-4">
-                        <button 
+                        <button
                           onClick={() => handleHelpful(rev.id)}
+                          disabled={rev.isHelpfulByUser}
                           className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border transition duration-150 ${
-                            rev.isHelpfulByUser 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            rev.isHelpfulByUser
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
                           <span>👍</span>
                           <span>Helpful ({rev.helpfulCount})</span>
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleLike(rev.id)}
                           className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition duration-150 ${
                             rev.isLikedByUser ? 'text-rose-600 scale-110' : 'text-slate-400 hover:text-rose-600'

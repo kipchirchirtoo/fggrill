@@ -2550,6 +2550,23 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  Future<Map<String, dynamic>> deleteCorporateCustomer(String id) async {
+    final res = await _dio.delete('/corporate/customers/$id');
+    return _asMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllCorporateBills({String? customerId}) async {
+    final res = await _dio.get('/corporate/bills', queryParameters: {
+      if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
+    });
+    return _asList(res.data);
+  }
+
+  Future<Map<String, dynamic>> getCorporateCustomerFolio(String customerId) async {
+    final res = await _dio.get('/corporate/customers/$customerId/folio');
+    return _asMap(res.data);
+  }
+
   Future<List<Map<String, dynamic>>> getPendingCorporateBills() async {
     final res = await _dio.get('/corporate/bills/pending');
     return _asList(res.data);

@@ -788,4 +788,35 @@ class BranchManagerRepository {
     await file.writeAsBytes(bytes, flush: true);
     return file;
   }
+
+  // ── Guest Reviews ──────────────────────────────────────────────────────
+  // Backend scopes this list by the caller's own branch_id (from the JWT)
+  // for non-global roles — branch_id is still sent as a query param too
+  // (getList's default branchScoped behavior) but is a defensive no-op
+  // server-side, not the actual scoping mechanism.
+  Future<List<Map<String, dynamic>>> getReviews({
+    bool? responded,
+    int? rating,
+    String? search,
+  }) {
+    return getList('/reviews/manager/list', query: {
+      if (responded != null) 'responded': responded.toString(),
+      if (rating != null) 'rating': rating,
+      if (search != null && search.isNotEmpty) 'search': search,
+    });
+  }
+
+  /// Publishes a public reply to a review, or clears an existing one when
+  /// [responseText] is empty (matches the backend's toggle-by-emptiness
+  /// semantics).
+  Future<Map<String, dynamic>> respondToReview(
+    String id,
+    String responseText,
+  ) {
+    return patchMap(
+      '/reviews/manager/$id/respond',
+      data: {'response_text': responseText},
+      branchScoped: false,
+    );
+  }
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/notification_icon.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../admin/data/admin_repository.dart';
 import '../../admin/data/models/notification.dart';
@@ -144,24 +144,22 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   separatorBuilder: (_, __) => const Divider(),
                   itemBuilder: (context, index) {
                     final n = notifications[index];
+                    final style = notificationIconStyle(
+                      category: n.category,
+                      type: n.type,
+                    );
                     return Card(
                       margin: EdgeInsets.zero,
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: n.isRead
                               ? AppColors.kSurface
-                              : AppColors.kPrimary.withValues(alpha: 0.1),
+                              : style.color.withValues(alpha: 0.1),
                           child: Icon(
-                            n.type == 'update' ||
-                                    n.type == 'app_update' ||
-                                    n.type == 'desktop_update'
-                                ? PhosphorIcons.downloadSimple()
-                                : n.type == 'alert' || n.type == 'warning'
-                                    ? PhosphorIcons.warning()
-                                    : PhosphorIcons.bellRinging(),
+                            style.icon,
                             color: n.isRead
                                 ? AppColors.kTextSecondary
-                                : AppColors.kPrimary,
+                                : style.color,
                             size: 20,
                           ),
                         ),

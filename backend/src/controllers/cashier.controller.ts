@@ -8677,6 +8677,51 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         ? logbookNumber(shift.variance)
         : (closingFloat - expectedCash);
 
+    const inferRevenueBucket = (line: any): string => {
+        const ref = String(line.transaction_ref || line.reference || line.receipt_number || '').toUpperCase();
+        const sourceTable = String(line.source_table || line.source || '').toLowerCase();
+        const notes = String(line.notes || line.description || '').toLowerCase();
+        const raw = String(
+            line.revenue_type ||
+            line.outlet_type ||
+            line.reference_type ||
+            line.section ||
+            line.type ||
+            ''
+        ).toLowerCase();
+
+        if (
+            ref.startsWith('CNF') ||
+            ref.includes('CONF') ||
+            sourceTable.includes('conf') ||
+            notes.includes('conf') ||
+            raw.includes('conf') ||
+            raw.includes('hall') ||
+            raw.includes('event')
+        ) {
+            return 'conference';
+        }
+        if (
+            ref.startsWith('RM') ||
+            ref.startsWith('RSV') ||
+            sourceTable.includes('room') ||
+            sourceTable.includes('booking') ||
+            notes.includes('room') ||
+            raw.includes('room') ||
+            raw.includes('hotel') ||
+            raw.includes('folio')
+        ) {
+            return 'rooms';
+        }
+        if (sourceTable.includes('bar') || notes.includes('bar') || raw.includes('bar') || raw.includes('drink') || raw.includes('beverage')) {
+            return 'bar';
+        }
+        if (sourceTable.includes('pool') || notes.includes('pool') || raw.includes('pool') || raw.includes('swim')) {
+            return 'pool';
+        }
+        return 'restaurant';
+    };
+
     // Build revenue stream evidence ONCE without double/triple counting lines
     const revenueEvidence: Record<string, number> = {
         restaurant: 0,

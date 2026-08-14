@@ -105,6 +105,10 @@ class AdminRepository {
       'message': _asString(json['message'] ?? json['body'] ?? json['content']),
       'type':
           _asString(json['type']).isNotEmpty ? _asString(json['type']) : 'info',
+      'category': _asString(json['category']),
+      'priority': _asString(json['priority']).isNotEmpty
+          ? _asString(json['priority'])
+          : 'medium',
       'isRead': json['isRead'] == true ||
           json['is_read'] == true ||
           json['read'] == true,

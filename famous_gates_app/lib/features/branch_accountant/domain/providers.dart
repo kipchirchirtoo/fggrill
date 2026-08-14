@@ -164,3 +164,7 @@ final pendingCorporateBillsProvider = FutureProvider<List<Map<String, dynamic>>>
 final corporateInvoicesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return ref.watch(branchAccountantRepositoryProvider).getCorporateInvoices();
 });
+
+final corporateFolioBillsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(branchAccountantRepositoryProvider).getAllCorporateBills();
+});

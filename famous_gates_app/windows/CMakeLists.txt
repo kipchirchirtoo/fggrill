@@ -32,6 +32,17 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Some plugins (audioplayers_windows, local_auth_windows) still pull in
+# <experimental/coroutine> via their vendored C++/WinRT headers. Newer MSVC
+# STL releases (this repo currently builds against VS 2026's 14.51 toolset)
+# turned that from a deprecation warning into a hard static_assert error.
+# Silencing it here (rather than patching the plugin sources, which live in
+# the pub cache and would be wiped on the next `pub get`) is what the MSVC
+# error message itself recommends. Placed before add_subdirectory() calls so
+# it's inherited by every plugin target added below, including the ones
+# pulled in via flutter/generated_plugins.cmake.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

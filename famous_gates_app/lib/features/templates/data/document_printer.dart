@@ -24,6 +24,7 @@ Future<void> printCustomerDocument(
   num? amountTendered,
   num? changeGiven,
   String? duplicateLabel,
+  List<MapEntry<String, String>>? extraKvRows,
 }) async {
   final branding = _customerDocumentBranding(
     branchId: branchId,
@@ -37,12 +38,8 @@ Future<void> printCustomerDocument(
   );
   final sections = doc?.sections ?? const [];
   if (sections.isNotEmpty) {
-    // The pre-payment Customer Bill omits the VAT 16% breakdown (folded back
-    // into the subtotal) and carries a reminder to collect the fiscal ETR
-    // receipt at the cashier. The Customer Receipt (post-payment, with ETR)
-    // keeps the full VAT breakdown. The CL 2% / SC 3% levies are inclusive on
-    // both documents and never change the printed total.
     final isCustomerBill = templateKey == 'customer_bill';
+    final isRoomCharge = templateKey == 'room_charge';
     final data = _templateData(
       sale: sale,
       items: items,
@@ -60,8 +57,9 @@ Future<void> printCustomerDocument(
       showVat: !isCustomerBill,
       noticeText: isCustomerBill
           ? 'Collect Official Receipt with ETR at the Cashier'
-          : null,
+          : (isRoomCharge ? 'Posted to Guest Room Folio' : null),
       duplicateLabel: duplicateLabel,
+      extraKvRows: extraKvRows ?? const [],
     );
     await TemplatePrintRenderer().printThermal(sections, data);
     return;
@@ -329,10 +327,20 @@ TemplatePrintData _templateData({
     kvRows: [
       if (receiptNumber.isNotEmpty) MapEntry('Receipt #:', receiptNumber),
       if (code != null) MapEntry('Bill code:', code),
-      MapEntry('Date:', date),
-      if (resolvedTable != null) MapEntry('Table:', resolvedTable),
-      if (resolvedRoom != null) MapEntry('Room:', resolvedRoom),
-      if (resolvedCustomer != null) MapEntry('Customer:', resolvedCustomer),
+      MapEntry(
+        duplicateLabel != null && duplicateLabel.trim().isNotEmpty
+            ? 'Date:'
+            : 'Printed:',
+        date,
+      ),
+      if (resolvedTable != null && resolvedTable.trim().isNotEmpty)
+        MapEntry('Table:', resolvedTable),
+      if (resolvedRoom != null && resolvedRoom.trim().isNotEmpty)
+        MapEntry('Room:', resolvedRoom),
+      if (resolvedCustomer != null &&
+          resolvedCustomer.trim().isNotEmpty &&
+          resolvedCustomer.trim().toLowerCase() != 'walk-in')
+        MapEntry('Customer:', resolvedCustomer),
       if (resolvedStaffName != null)
         MapEntry('$resolvedStaffLabel:', resolvedStaffName),
       if (tendered > 0)

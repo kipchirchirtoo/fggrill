@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/notification_icon.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
 import '../../domain/admin_providers.dart';
@@ -120,27 +121,12 @@ class _NotificationsSectionState extends ConsumerState<NotificationsSection> {
   }
 
   Widget _buildNotificationCard(dynamic notification) {
-    Color iconColor;
-    IconData icon;
-
-    switch (notification.type) {
-      case 'error':
-      case 'alert':
-        iconColor = AppColors.kError;
-        icon = PhosphorIcons.warning();
-        break;
-      case 'warning':
-        iconColor = AppColors.kWarning;
-        icon = PhosphorIcons.warning();
-        break;
-      case 'success':
-        iconColor = AppColors.kSuccess;
-        icon = PhosphorIcons.checkCircle();
-        break;
-      default:
-        iconColor = AppColors.kPrimary;
-        icon = PhosphorIcons.bell();
-    }
+    final style = notificationIconStyle(
+      category: '${notification.category ?? ''}',
+      type: '${notification.type ?? 'info'}',
+    );
+    final iconColor = style.color;
+    final icon = style.icon;
 
     return InkWell(
       onTap: () async {

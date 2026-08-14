@@ -15,6 +15,7 @@ import '../data/outlet_pos_repository.dart';
 import '../domain/models.dart';
 import 'customer_bills_panel.dart';
 import 'cross_outlet_settlements_panel.dart';
+import '../../../core/services/windows_keyboard_helper.dart';
 
 enum OutletPosSection { station, orders, myCreditBills }
 
@@ -478,6 +479,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               ],
               TextField(
                 controller: _searchController,
+                onTap: WindowsKeyboardHelper.openVirtualKeyboard,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search),
@@ -662,6 +664,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _recentOrdersSearchController,
+              onTap: WindowsKeyboardHelper.openVirtualKeyboard,
               decoration: InputDecoration(
                 hintText: 'Search bill by last digits/code (e.g. UR6, 002), order #, waiter, table...',
                 prefixIcon: const Icon(Icons.search),
@@ -2905,43 +2908,26 @@ class _OrderContextPanel extends StatelessWidget {
                   label: Text('Dine in'),
                   icon: Icon(Icons.table_restaurant),
                 ),
-                ButtonSegment(
-                  value: 'takeaway',
-                  label: Text('Takeaway'),
-                  icon: Icon(Icons.shopping_bag_outlined),
-                ),
-                ButtonSegment(
-                  value: 'room_service',
-                  label: Text('Room'),
-                  icon: Icon(Icons.hotel),
-                ),
               ],
-              selected: {orderType},
-              onSelectionChanged: (value) => onOrderTypeChanged(value.first),
+              selected: const {'dine_in'},
+              onSelectionChanged: (value) => onOrderTypeChanged('dine_in'),
             ),
             SizedBox(
               width: 180,
               child: TextField(
                 controller: customerController,
+                onTap: WindowsKeyboardHelper.openVirtualKeyboard,
                 decoration: const InputDecoration(labelText: 'Customer name'),
               ),
             ),
-            if (orderType == 'dine_in')
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: tableController,
-                  decoration: const InputDecoration(labelText: 'Table'),
-                ),
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: tableController,
+                onTap: WindowsKeyboardHelper.openVirtualKeyboard,
+                decoration: const InputDecoration(labelText: 'Table'),
               ),
-            if (orderType == 'room_service')
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: roomController,
-                  decoration: const InputDecoration(labelText: 'Room'),
-                ),
-              ),
+            ),
           ],
         ),
       ),

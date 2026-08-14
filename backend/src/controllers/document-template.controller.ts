@@ -94,7 +94,7 @@ const catalogSections = (titleText: string, body: string): TemplateSection[] => 
   { id: sid('div1'), type: 'divider', visible: true },
   { id: sid('body'), type: 'notice', content: body, visible: true },
   { id: sid('meta'), type: 'kv', visible: true },
-  { id: sid('footer'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+  { id: sid('footer'), type: 'footer', content: 'System made and maintained by Hirall', size: 7, align: 'center', visible: true },
 ];
 
 const pythonPdf = (name: string, titleText: string, source: string): TemplateDef => ({
@@ -157,7 +157,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       tillComplianceSection(),
       { id: sid('come'), type: 'text', content: 'Please come again', size: 7, align: 'center', visible: true },
       { id: sid('barcode'), type: 'barcode', visible: true },
-      { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+      { id: sid('hirall'), type: 'footer', content: 'System made and maintained by Hirall', size: 7, align: 'center', visible: true },
     ],
   },
   customer_receipt: {
@@ -179,7 +179,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('thanks'), type: 'footer', content: 'THANK YOU!', bold: true, size: 10, align: 'center', visible: true },
       tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
-      { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+      { id: sid('hirall'), type: 'footer', content: 'System made and maintained by Hirall', size: 7, align: 'center', visible: true },
     ],
   },
   credit_bill: {
@@ -199,7 +199,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('notice'), type: 'notice', content: '** UNPAID CREDIT - NOT A PAYMENT **\nSettle with the Branch Accountant (cash/M-Pesa) OR have it deducted from your payroll.', visible: true },
       tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
-      { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+      { id: sid('hirall'), type: 'footer', content: 'System made and maintained by Hirall', size: 7, align: 'center', visible: true },
     ],
   },
   void_order: {
@@ -218,7 +218,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('notice'), type: 'notice', content: 'NOT PAYABLE - NOT AN UNPAID BILL\nReason: {{void_reason}}', visible: true },
       tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
-      { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+      { id: sid('hirall'), type: 'footer', content: 'System made and maintained by Hirall', size: 7, align: 'center', visible: true },
     ],
   },
   booking_invoice: pythonPdf('Booking Invoice', 'HOTEL BOOKING INVOICE', 'python-services/pdf_generator/invoice.py'),

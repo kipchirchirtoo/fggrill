@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/notification_icon.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
 import '../../data/admin_repository.dart';
@@ -67,39 +68,11 @@ class _NotificationDrawerState extends ConsumerState<NotificationDrawer>
     return '${(diff.inDays / 30).floor()}mo ago';
   }
 
-  IconData _iconForType(String type) {
-    switch (type) {
-      case 'update':
-      case 'app_update':
-      case 'desktop_update':
-        return PhosphorIcons.downloadSimple();
-      case 'success':
-        return PhosphorIcons.checkCircle();
-      case 'warning':
-        return PhosphorIcons.warning();
-      case 'error':
-        return PhosphorIcons.warningCircle();
-      default:
-        return PhosphorIcons.bellRinging();
-    }
-  }
-
-  Color _colorForType(String type) {
-    switch (type) {
-      case 'update':
-      case 'app_update':
-      case 'desktop_update':
-        return AppColors.kAccent;
-      case 'success':
-        return AppColors.kSuccess;
-      case 'warning':
-        return AppColors.kWarning;
-      case 'error':
-        return AppColors.kError;
-      default:
-        return AppColors.kPrimary;
-    }
-  }
+  // Icon/color now come from notificationIconStyle() (see
+  // lib/core/utils/notification_icon.dart) instead of a local type-only
+  // switch — this used to render the same generic icon for nearly every
+  // notification because the backend sends type: 'info' for most events
+  // (void acknowledgment, recall, etc); category disambiguates them.
 
   void _dismiss() {
     _controller.reverse().then((_) {
@@ -166,10 +139,14 @@ class _NotificationDrawerState extends ConsumerState<NotificationDrawer>
                                   color: AppColors.kDivider),
                               itemBuilder: (context, index) {
                                 final notif = notifications[index];
+                                final style = notificationIconStyle(
+                                  category: notif.category,
+                                  type: notif.type,
+                                );
                                 return _NotificationItem(
                                   notification: notif,
-                                  icon: _iconForType(notif.type),
-                                  color: _colorForType(notif.type),
+                                  icon: style.icon,
+                                  color: style.color,
                                   timeAgo: _timeAgo(notif.createdAt),
                                   onTap: () async {
                                     if (!notif.isRead) {

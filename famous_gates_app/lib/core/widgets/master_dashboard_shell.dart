@@ -59,6 +59,8 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
     required this.child,
     this.breadcrumbRoot,
     this.searchHint = 'Search...',
+    this.onSearchChanged,
+    this.searchController,
     this.palette,
     this.initialSidebarCollapsed = false,
     this.allowSidebarCollapse = true,
@@ -73,6 +75,8 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
   final String initials;
   final String? breadcrumbRoot;
   final String searchHint;
+  final ValueChanged<String>? onSearchChanged;
+  final TextEditingController? searchController;
   final T currentSection;
   final List<MasterNavItem<T>> items;
   final ValueChanged<T> onSectionSelected;
@@ -155,6 +159,8 @@ class _MasterDashboardShellState<T>
                   title: widget.title,
                   breadcrumbRoot: widget.breadcrumbRoot ?? widget.title,
                   searchHint: widget.searchHint,
+                  onSearchChanged: widget.onSearchChanged,
+                  searchController: widget.searchController,
                   palette: widget.palette,
                   onMenuTap:
                       isMobile ? () => _showMobileNav(context, ref) : null,
@@ -556,6 +562,8 @@ class _MasterTopBar extends ConsumerWidget {
     required this.title,
     required this.breadcrumbRoot,
     required this.searchHint,
+    this.onSearchChanged,
+    this.searchController,
     this.onMenuTap,
     this.palette,
   });
@@ -563,6 +571,8 @@ class _MasterTopBar extends ConsumerWidget {
   final String title;
   final String breadcrumbRoot;
   final String searchHint;
+  final ValueChanged<String>? onSearchChanged;
+  final TextEditingController? searchController;
   final VoidCallback? onMenuTap;
   final ShellPalette? palette;
 
@@ -622,7 +632,13 @@ class _MasterTopBar extends ConsumerWidget {
             ),
           ),
           const Spacer(),
-          if (!isCompact) _SearchBox(hint: searchHint),
+          if (!isCompact)
+            _SearchBox(
+              hint: searchHint,
+              onChanged: onSearchChanged,
+              controller: searchController,
+              palette: palette,
+            ),
           if (!isCompact) const SizedBox(width: 16),
           AppUpdateButton(
               iconColor: palette?.mutedText ?? Colors.grey.shade700),
@@ -745,32 +761,48 @@ class _MasterTopBar extends ConsumerWidget {
 }
 
 class _SearchBox extends StatelessWidget {
-  const _SearchBox({required this.hint});
+  const _SearchBox({
+    required this.hint,
+    this.onChanged,
+    this.controller,
+    this.palette,
+  });
 
   final String hint;
+  final ValueChanged<String>? onChanged;
+  final TextEditingController? controller;
+  final ShellPalette? palette;
 
   @override
   Widget build(BuildContext context) {
+    final bg = palette?.surface ?? Colors.grey.shade50;
+    final border = palette?.border ?? Colors.grey.shade200;
+    final textColor = palette?.text ?? Colors.black87;
+    final muted = palette?.mutedText ?? Colors.grey.shade400;
+
     return Container(
       width: 280,
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: bg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: border),
       ),
       child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: TextStyle(fontSize: 13, color: textColor),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+          hintStyle: TextStyle(fontSize: 13, color: muted),
           prefixIcon: Icon(
             PhosphorIcons.magnifyingGlass(),
             size: 18,
-            color: Colors.grey.shade400,
+            color: muted,
           ),
           border: InputBorder.none,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         ),
       ),
     );

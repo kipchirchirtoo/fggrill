@@ -13,6 +13,7 @@ import '../data/held_orders_repository.dart';
 import '../data/sales_repository.dart';
 import '../domain/models.dart';
 import '../domain/pos_providers.dart';
+import '../../../core/services/windows_keyboard_helper.dart';
 
 class POSScreen extends ConsumerWidget {
   const POSScreen({super.key});
@@ -225,6 +226,7 @@ class _ProductPane extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
+            onTap: WindowsKeyboardHelper.openVirtualKeyboard,
             onChanged: ref.read(productsNotifierProvider.notifier).search,
             decoration: InputDecoration(
               hintText: 'Search products...',

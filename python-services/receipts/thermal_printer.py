@@ -63,6 +63,16 @@ except ImportError:
         def barcode(self, *args, **kwargs): pass
         def qr(self, *args, **kwargs): pass
 
+# Windows-specific printing using win32print
+try:
+    import win32print
+    import win32ui
+    from PIL import Image, ImageDraw, ImageFont
+    WIN32PRINT_AVAILABLE = True
+except ImportError:
+    WIN32PRINT_AVAILABLE = False
+    logging.warning("win32print not installed. Install with: pip install pywin32 pillow")
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,7 +85,8 @@ class ThermalPrinter:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.printer = None
-        self.connection_type = self.config.get('connection_type', 'network')
+        default_conn = 'windows' if (os.name == 'nt' and WIN32PRINT_AVAILABLE) else 'network'
+        self.connection_type = self.config.get('connection_type', default_conn)
         
         # Default printer settings
         self.settings = {
@@ -105,6 +116,12 @@ class ThermalPrinter:
 
     def connect(self) -> bool:
         """Establish connection to the printer"""
+        # On Windows systems with win32print available, use fast local spooler
+        if os.name == 'nt' and WIN32PRINT_AVAILABLE:
+            logger.info("Windows detected with win32print available; using fast local ESC/POS spooler")
+            self.printer = Dummy()
+            return True
+
         if not ESCPOS_AVAILABLE:
             logger.warning("ESC/POS library not available, using dummy printer")
             self.printer = Dummy()
@@ -133,13 +150,6 @@ class ThermalPrinter:
             logger.info(f"Connected to thermal printer via {target}")
             return True
         except Exception as e:
-            # Deliberately NOT falling back to Dummy() here. A Dummy printer
-            # is truthy, so a later call's `if not self.printer` check would
-            # see it as "already connected" and skip reconnecting forever —
-            # every print after the first failure would then silently run
-            # against a fake printer instead of retrying the real one.
-            # Leaving self.printer as None forces every subsequent call to
-            # attempt a fresh real connection.
             logger.error(f"Failed to connect to printer ({target}): {e}", exc_info=True)
             self.printer = None
             return False
@@ -314,13 +324,22 @@ class ThermalPrinter:
             p.text(f"{copy_label} - DO NOT GIVE TO CUSTOMER\n")
             p.text("\n")
 
-            # Cut paper
+            # Feed paper past physical printer cutter blade before cutting
+            p.text("\n\n\n\n")
             p.cut()
             
             # Get raw output if using Dummy printer
             output = None
             if isinstance(self.printer, Dummy):
                 output = self.printer.output
+                if os.name == 'nt' and WIN32PRINT_AVAILABLE and output:
+                    spooled = print_raw_windows_spooler(output, f"Captain Order {order_no}")
+                    if spooled:
+                        return {
+                            'success': True,
+                            'message': 'Captain order printed to kitchen via Windows spooler',
+                            'receipt_number': order_no,
+                        }
             
             return {
                 'success': True,
@@ -538,18 +557,27 @@ class ThermalPrinter:
             p.text("\n")
             p.text("-" * 32 + "\n")
             p.set(align='center', font='a', bold=True)
-            p.text("System managed and made by Hirall\n")
+            p.text("System made and maintained by Hirall\n")
             p.set(align='center', font='a', bold=False)
-            p.text("+254 710 944 249 | admin@hirall.com\n")
+            p.text("+254 710 944 249 | www.hirall.com\n")
             p.text("-" * 32 + "\n")
             
-            # Cut paper
+            # Feed paper past physical printer cutter blade before cutting
+            p.text("\n\n\n\n")
             p.cut()
             
             # Get raw output if using Dummy printer
             output = None
             if isinstance(self.printer, Dummy):
                 output = self.printer.output
+                if os.name == 'nt' and WIN32PRINT_AVAILABLE and output:
+                    spooled = print_raw_windows_spooler(output, f"Receipt {receipt_no}")
+                    if spooled:
+                        return {
+                            'success': True,
+                            'message': 'Receipt printed successfully via Windows spooler',
+                            'receipt_number': receipt_no,
+                        }
             
             return {
                 'success': True,
@@ -645,6 +673,28 @@ try:
 except ImportError:
     WIN32PRINT_AVAILABLE = False
     logger.warning("win32print not installed. Install with: pip install pywin32 pillow")
+
+
+def print_raw_windows_spooler(data_bytes: bytes, job_name: str = "Thermal Receipt") -> bool:
+    """Send raw ESC/POS bytes directly to Windows default printer queue via win32print"""
+    if not WIN32PRINT_AVAILABLE or not data_bytes:
+        return False
+    try:
+        printer_name = win32print.GetDefaultPrinter()
+        hPrinter = win32print.OpenPrinter(printer_name)
+        try:
+            hJob = win32print.StartDocPrinter(printer_name, 1, (job_name, None, "RAW"))
+            win32print.StartPagePrinter(hPrinter)
+            win32print.WritePrinter(hPrinter, data_bytes)
+            win32print.EndPagePrinter(hPrinter)
+            win32print.EndDocPrinter(hPrinter)
+            logger.info(f"Successfully spooled {len(data_bytes)} bytes to default Windows printer '{printer_name}'")
+            return True
+        finally:
+            win32print.ClosePrinter(hPrinter)
+    except Exception as e:
+        logger.error(f"Error spooling to Windows printer: {e}")
+        return False
 
 
 def print_captain_order_windows(receipt_data: Dict[str, Any]) -> Dict[str, Any]:

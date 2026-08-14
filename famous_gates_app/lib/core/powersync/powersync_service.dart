@@ -626,6 +626,23 @@ class PowerSyncService {
     if (value is num) return value.toDouble();
     return double.tryParse('$value') ?? 0;
   }
+
+  /// Tears down the sync connection and closes the local database. No-op if
+  /// [ensureReady] was never called (nothing was ever opened). Called from
+  /// the app's window-close handler — without this, an active PowerSync
+  /// connection's background isolate/socket would keep the desktop process
+  /// alive after the window itself closes.
+  Future<void> close() async {
+    final database = _database;
+    if (database == null) return;
+    _database = null;
+    try {
+      await database.disconnect();
+    } catch (_) {}
+    try {
+      await database.close();
+    } catch (_) {}
+  }
 }
 
 // Matches CAPTAIN_ORDER_FEED_LOOKBACK_HOURS in

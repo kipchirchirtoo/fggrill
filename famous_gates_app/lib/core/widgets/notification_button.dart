@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../features/admin/domain/admin_providers.dart';
 import '../../features/admin/presentation/widgets/notification_drawer.dart';
@@ -21,10 +20,18 @@ class AppNotificationButton extends ConsumerWidget {
       children: [
         IconButton(
           onPressed: () => showAppNotificationPanel(context, ref),
+          tooltip: 'Notifications',
+          // Uses Flutter's own Icons.notifications constant directly rather
+          // than routing through the hand-rolled phosphor_flutter_compat
+          // shim (packages/phosphor_flutter_compat) — that shim maps every
+          // icon to a raw MaterialIcons codepoint by hand, and a
+          // mismapped/mis-rendering entry there was indistinguishable from
+          // a real bell at a glance. This constant is verified by the SDK
+          // itself, removing that whole class of doubt.
           icon: Icon(
-            PhosphorIcons.bell(),
+            count > 0 ? Icons.notifications_active : Icons.notifications_none,
             color: count > 0 ? AppColors.kAccent : iconColor,
-            size: 21,
+            size: 22,
           ),
         ),
         if (count > 0)

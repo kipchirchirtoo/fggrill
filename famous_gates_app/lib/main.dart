@@ -1,19 +1,24 @@
+import 'dart:async';
 import 'dart:io' show Platform, File, Directory;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:updat/updat.dart';
 import 'package:updat/updat_window_manager.dart';
 import 'package:timezone/data/latest.dart' as tz; // KENYA TIME
 import 'package:window_manager/window_manager.dart';
 
+import 'core/powersync/powersync_service.dart';
+import 'core/realtime/realtime_service.dart';
 import 'core/router/app_router.dart';
 import 'core/services/desktop_update_service.dart';
 import 'core/state/app_refresh.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/working_directory_guard.dart';
+import 'core/widgets/notification_toast_overlay.dart';
 
 bool _updateNoticeShown = false;
 bool _isExitingFullScreen = false;
@@ -28,6 +33,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones(); // KENYA TIME
   ensureStableWorkingDirectory();
+
+  // Owned explicitly (instead of letting ProviderScope create its own)
+  // so the window-close handler below can read providers to tear down
+  // background connections before the process exits — see
+  // _AppWindowCloseListener.
+  final container = ProviderContainer();
 
   // Desktop: start from a stable normal window, then enter full screen.
   // On Windows, creating the window directly in fullScreen mode can leave the
@@ -48,6 +59,15 @@ Future<void> main() async {
         await windowManager.setFullScreen(true);
       },
     );
+    // Intercept the OS close button so background connections (Supabase
+    // Realtime's WebSocket + heartbeat, opened the moment any of the
+    // cashier/kitchen/POS/bar/restaurant screens watch live data; PowerSync,
+    // if ever enabled) get torn down before the window is destroyed.
+    // Without this, the window disappears but those sockets/timers keep the
+    // process alive — the .exe lingers until force-killed from Task Manager,
+    // which is exactly the symptom this fixes.
+    await windowManager.setPreventClose(true);
+    windowManager.addListener(_AppWindowCloseListener(container));
   }
   FlutterError.onError = (details) {
     final message = details.exceptionAsString();
@@ -161,10 +181,56 @@ Future<void> main() async {
     );
   };
   runApp(
-    const ProviderScope(
-      child: FamousGatesApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const FamousGatesApp(),
     ),
   );
+}
+
+/// Runs cleanup for background connections that would otherwise keep the
+/// desktop process alive after the window closes, then actually destroys
+/// the window. `setPreventClose(true)` in main() is what makes the OS close
+/// button route here instead of closing immediately.
+class _AppWindowCloseListener extends WindowListener {
+  _AppWindowCloseListener(this._container);
+
+  final ProviderContainer _container;
+  bool _closing = false;
+
+  @override
+  void onWindowClose() {
+    if (_closing) return;
+    _closing = true;
+    unawaited(_shutdown());
+  }
+
+  Future<void> _shutdown() async {
+    // Cap cleanup with a hard deadline — a hung network call during
+    // teardown must not recreate the exact "won't exit" bug this exists to
+    // fix. Best-effort only: whichever finishes first, the window still
+    // closes.
+    await Future.any([
+      _cleanup(),
+      Future.delayed(const Duration(seconds: 3)),
+    ]);
+    await windowManager.destroy();
+  }
+
+  Future<void> _cleanup() async {
+    try {
+      _container.read(realtimeServiceProvider).disposeAll();
+    } catch (_) {}
+    try {
+      await _container.read(powerSyncServiceProvider).close();
+    } catch (_) {}
+    try {
+      // Guards itself: throws if Supabase.initialize() was never called
+      // (i.e. no screen ever watched live data this session), which is
+      // expected and fine to swallow here.
+      await Supabase.instance.dispose();
+    } catch (_) {}
+  }
 }
 
 class FamousGatesApp extends ConsumerWidget {
@@ -187,7 +253,8 @@ class FamousGatesApp extends ConsumerWidget {
         // select-all (Ctrl+C/V/X/A) keep working inside fields. Ctrl+R and F5
         // raise a global refresh signal that screens react to.
         //
-        final Widget wrapped = CallbackShortcuts(
+        final Widget wrapped = NotificationToastOverlay(
+          child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
                 triggerGlobalRefresh(ref),
@@ -222,6 +289,7 @@ class FamousGatesApp extends ConsumerWidget {
           child: Focus(
             autofocus: true,
             child: child,
+          ),
           ),
         );
 

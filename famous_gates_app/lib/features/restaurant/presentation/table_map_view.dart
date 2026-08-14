@@ -597,29 +597,18 @@ class _OrderPane extends ConsumerWidget {
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'dine_in', label: Text('Dine In')),
-              ButtonSegment(value: 'takeaway', label: Text('Takeaway')),
-              ButtonSegment(value: 'room_service', label: Text('Room')),
             ],
-            selected: {orderType},
-            onSelectionChanged: (value) => onOrderTypeChanged(value.first),
+            selected: const {'dine_in'},
+            onSelectionChanged: (value) => onOrderTypeChanged('dine_in'),
           ),
           const SizedBox(height: 12),
-          if (orderType == 'dine_in')
-            TextField(
-              controller: tableController,
-              decoration: const InputDecoration(
-                labelText: 'Table number',
-                prefixIcon: Icon(Icons.table_restaurant),
-              ),
+          TextField(
+            controller: tableController,
+            decoration: const InputDecoration(
+              labelText: 'Table number',
+              prefixIcon: Icon(Icons.table_restaurant),
             ),
-          if (orderType == 'room_service')
-            TextField(
-              controller: roomController,
-              decoration: const InputDecoration(
-                labelText: 'Room number',
-                prefixIcon: Icon(Icons.meeting_room),
-              ),
-            ),
+          ),
           if (orderType != 'dine_in') ...[
             const SizedBox(height: 12),
             TextField(

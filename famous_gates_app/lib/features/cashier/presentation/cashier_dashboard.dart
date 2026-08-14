@@ -1848,43 +1848,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   padding: EdgeInsets.only(bottom: 10),
                   child: LinearProgressIndicator(),
                 ),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: _selectedRoomChargeGuest == null
+              _RoomChargeGuestSearchField(
+                guests: _eligibleRoomChargeGuests,
+                initialBookingId: _selectedRoomChargeGuest == null
                     ? null
                     : '${_selectedRoomChargeGuest!['booking_id'] ?? ''}',
-                decoration: const InputDecoration(
-                  labelText: 'Select room to charge',
-                  prefixIcon: Icon(Icons.meeting_room_outlined),
-                  helperText: 'Only checked-in overnight stays are shown here.',
-                ),
-                items: _eligibleRoomChargeGuests
-                    .map(
-                      (guest) => DropdownMenuItem<String>(
-                        value: '${guest['booking_id'] ?? ''}',
-                        child: Text(
-                          'Room ${guest['room_number'] ?? '-'} • ${guest['guest_name'] ?? 'Guest'}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _roomChargeGuestsLoading
-                    ? null
-                    : (bookingId) {
-                        setState(() {
-                          _selectedRoomChargeGuest = bookingId == null
-                              ? null
-                              : _eligibleRoomChargeGuests
-                                  .cast<Map<String, dynamic>?>()
-                                  .firstWhere(
-                                    (guest) =>
-                                        '${guest?['booking_id'] ?? ''}' ==
-                                        bookingId,
-                                    orElse: () => null,
-                                  );
-                        });
-                      },
+                onSelected: (guest) {
+                  setState(() => _selectedRoomChargeGuest = guest);
+                },
               ),
               if (_selectedRoomChargeGuest != null) ...[
                 const SizedBox(height: 10),
@@ -2049,18 +2020,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   style: TextStyle(color: AppColors.kError, fontSize: 12),
                 )
               else
-                DropdownButtonFormField<String>(
-                  value: _selectedCorporateCustomerId,
-                  decoration: const InputDecoration(
-                      labelText: 'Select Corporate Account'),
-                  items: _corporateCustomers
-                      .map((c) => DropdownMenuItem<String>(
-                            value: c['id'],
-                            child: Text(c['name'] ?? c['company_name'] ?? c['contact_person'] ?? 'Unknown Company'),
-                          ))
-                      .toList(),
-                  onChanged: (val) =>
-                      setState(() => _selectedCorporateCustomerId = val),
+                _CorporateCustomerSearchField(
+                  customers: _corporateCustomers,
+                  initialId: _selectedCorporateCustomerId,
+                  onSelected: (c) {
+                    setState(() => _selectedCorporateCustomerId = c?['id']);
+                  },
                 ),
             ],
             const SizedBox(height: 12),
@@ -2815,6 +2780,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
                         roomNumber: roomNo,
                         guestName: guestName,
                         amount: amount,
+                        guestPhone: selectedGuest!['guest_phone']?.toString(),
+                        bookingRef: selectedGuest!['confirmation_number']?.toString(),
+                        stayNights: int.tryParse('${selectedGuest!['stay_nights'] ?? ''}'),
                       );
                     },
                   ),
@@ -3086,6 +3054,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
     required String roomNumber,
     required String guestName,
     required num amount,
+    String? guestPhone,
+    String? bookingRef,
+    int? stayNights,
   }) async {
     setState(() => _loading = true);
     try {
@@ -3160,6 +3131,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
             publicCode: _billShortCode(bill).isNotEmpty
                 ? _billShortCode(bill)
                 : displayBillNo,
+            extraKvRows: [
+              if (bookingRef != null && bookingRef.isNotEmpty)
+                MapEntry('Booking Ref:', bookingRef),
+              if (guestPhone != null && guestPhone.isNotEmpty)
+                MapEntry('Guest Phone:', guestPhone),
+            ],
           );
         } catch (printError) {
           _snack('Charged to room, but slip print failed: '
@@ -5976,41 +5953,14 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                               if (showMoney) ...[
                                 // Full money breakdown for closed shifts
                                 _LogbookSummaryGrid(
-                                  entries: [
-                                    _LogbookEntry('Opening float',
-                                        _money(_num(row['opening_float']))),
-                                    _LogbookEntry(
-                                        'Cash sales', _money(baseCash),
-                                        accent: AppColors.kSuccess),
-                                    _LogbookEntry(
-                                        'M-Pesa sales', _money(baseMpesa),
-                                        accent: AppColors.kPrimary),
-                                    _LogbookEntry(
-                                        'Card sales', _money(baseCard)),
-                                    _LogbookEntry(
-                                        'Credit bills', _money(credits),
-                                        accent: AppColors.kWarning),
-                                    _LogbookEntry(
-                                        'Net sales', _money(baseCash + baseMpesa + baseCard),
-                                        bold: true),
-                                    _LogbookEntry(
-                                        'Expenses', _money(_num(row['expense_total'])),
-                                        accent: AppColors.kError),
-                                    _LogbookEntry(
-                                        'Expected cash', _money(expectedCash)),
-                                    _LogbookEntry('Actual cash counted',
-                                        _money(closingFloat),
-                                        accent: AppColors.kSuccess),
-                                    _LogbookEntry(
-                                      'Variance',
-                                      (variance >= 0 ? '+' : '') +
-                                          _money(variance),
-                                      accent: variance >= 0
-                                          ? AppColors.kSuccess
-                                          : AppColors.kError,
-                                      bold: true,
-                                    ),
-                                  ],
+                                  row: row,
+                                  baseCash: baseCash.toDouble(),
+                                  baseMpesa: baseMpesa.toDouble(),
+                                  baseCard: baseCard.toDouble(),
+                                  credits: credits.toDouble(),
+                                  closingFloat: closingFloat.toDouble(),
+                                  expectedCash: expectedCash.toDouble(),
+                                  variance: variance.toDouble(),
                                 ),
                               ] else ...[
                                 // Open shifts: do not reveal financial figures
@@ -6290,61 +6240,349 @@ class _LogbookEntry {
   final bool bold;
 }
 
-/// A compact 2-column grid that renders logbook [_LogbookEntry] rows.
+/// A clean, high-premium reconciliation table and KPI grid.
 class _LogbookSummaryGrid extends StatelessWidget {
-  const _LogbookSummaryGrid({required this.entries});
-  final List<_LogbookEntry> entries;
+  const _LogbookSummaryGrid({
+    required this.row,
+    required this.baseCash,
+    required this.baseMpesa,
+    required this.baseCard,
+    required this.credits,
+    required this.closingFloat,
+    required this.expectedCash,
+    required this.variance,
+  });
+
+  final Map<String, dynamic> row;
+  final double baseCash;
+  final double baseMpesa;
+  final double baseCard;
+  final double credits;
+  final double closingFloat;
+  final double expectedCash;
+  final double variance;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+    final openingFloat = _num(row['opening_float']);
+    final expenses = _num(row['expense_total'] ?? row['expenses'] ?? row['payouts']);
+    final netSales = baseCash + baseMpesa + baseCard;
+    final mpesaActual = _num(row['actual_mpesa_logged']);
+    final cardActual = _num(row['actual_card_logged']);
+    final mpesaVariance = mpesaActual > 0 ? mpesaActual - baseMpesa : 0.0;
+    final cardVariance = cardActual > 0 ? cardActual - baseCard : 0.0;
+
+    final conferenceRevenue = _num(row['conference_revenue']);
+    final paidCredits = _num(row['paid_bills_value'] ?? row['credit_payments'] ?? row['total_paid_credits']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── 1. KPI Cards Bar ───────────────────────────
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _kpiCard(
+              context,
+              'Opening Float',
+              _money(openingFloat),
+              Icons.account_balance_wallet_outlined,
+              AppColors.kTextSecondary,
+            ),
+            _kpiCard(
+              context,
+              'Net Sales',
+              _money(netSales),
+              Icons.trending_up,
+              AppColors.kPrimary,
+            ),
+            if (conferenceRevenue > 0)
+              _kpiCard(
+                context,
+                'Conference Sales',
+                _money(conferenceRevenue),
+                Icons.meeting_room_outlined,
+                AppColors.kAccent,
+              ),
+            _kpiCard(
+              context,
+              'Expenses',
+              _money(expenses),
+              Icons.receipt_long_outlined,
+              expenses > 0 ? AppColors.kError : AppColors.kTextSecondary,
+            ),
+            _kpiCard(
+              context,
+              'Cash Variance',
+              (variance >= 0 ? '+' : '') + _money(variance),
+              variance >= 0 ? Icons.check_circle_outline : Icons.error_outline,
+              variance >= 0 ? AppColors.kSuccess : AppColors.kError,
+            ),
+          ],
         ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Wrap(
-        spacing: 0,
-        runSpacing: 0,
-        children: entries
-            .map((entry) => SizedBox(
-                  width: 200,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.label,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.kTextSecondary,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          entry.value,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                entry.bold ? FontWeight.w800 : FontWeight.w600,
-                            color: entry.accent,
-                          ),
-                        ),
-                      ],
-                    ),
+        const SizedBox(height: 14),
+
+        // ── 2. Structured Payment Methods Table ────────
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2.3),
+                1: FlexColumnWidth(1.9),
+                2: FlexColumnWidth(1.9),
+                3: FlexColumnWidth(1.9),
+              },
+              children: [
+                // Header Row
+                TableRow(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.6),
                   ),
-                ))
-            .toList(),
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Text(
+                        'Payment Channel',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.kTextSecondary),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Text(
+                        'System Expected',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.kTextSecondary),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Text(
+                        'Cashier Declared',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.kTextSecondary),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Text(
+                        'Variance',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.kTextSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+                // Data Rows
+                _tableRow(
+                  context,
+                  '💵 Cash Drawer',
+                  _money(expectedCash),
+                  _money(closingFloat),
+                  variance,
+                  showVariance: true,
+                ),
+                _tableRow(
+                  context,
+                  '📲 M-Pesa',
+                  _money(baseMpesa),
+                  mpesaActual > 0 ? _money(mpesaActual) : '—',
+                  mpesaVariance,
+                  showVariance: mpesaActual > 0,
+                ),
+                _tableRow(
+                  context,
+                  '💳 Card (PDQ)',
+                  _money(baseCard),
+                  cardActual > 0 ? _money(cardActual) : '—',
+                  cardVariance,
+                  showVariance: cardActual > 0,
+                ),
+                _tableRow(
+                  context,
+                  '📝 Credit Bills (Issued)',
+                  _money(credits),
+                  'Auto-Logged',
+                  0.0,
+                  showVariance: true,
+                  customVarianceText: 'Auto',
+                ),
+                if (conferenceRevenue > 0)
+                  _tableRow(
+                    context,
+                    '🏛️ Conference Sales',
+                    _money(conferenceRevenue),
+                    'Auto-Logged',
+                    0.0,
+                    showVariance: true,
+                    customVarianceText: 'Per Shift',
+                  ),
+                if (paidCredits > 0)
+                  _tableRow(
+                    context,
+                    '✅ Paid Credit Collections',
+                    _money(paidCredits),
+                    'Auto-Logged',
+                    0.0,
+                    showVariance: true,
+                    customVarianceText: 'Added to Till',
+                    isLast: true,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _kpiCard(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+    Color accentColor,
+  ) {
+    return Container(
+      width: 170,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: accentColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.kTextSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  TableRow _tableRow(
+    BuildContext context,
+    String methodLabel,
+    String expectedStr,
+    String declaredStr,
+    double varVal, {
+    bool showVariance = true,
+    String? customVarianceText,
+    bool isLast = false,
+  }) {
+    final isPos = varVal > 0.009;
+    final isNeg = varVal < -0.009;
+    final varColor = customVarianceText != null
+        ? AppColors.kPrimary
+        : (isPos
+            ? AppColors.kSuccess
+            : (isNeg ? AppColors.kError : AppColors.kTextSecondary));
+    final varText = customVarianceText ??
+        (showVariance
+            ? (isPos ? '+${moneyFormatted(varVal)}' : (isNeg ? moneyFormatted(varVal) : 'KES 0'))
+            : '—');
+
+    return TableRow(
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                ),
+              ),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            methodLabel,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            expectedStr,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            declaredStr,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            varText,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: varColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String moneyFormatted(double amount) {
+    return _money(amount);
   }
 }
 
@@ -6738,6 +6976,252 @@ class _StaffSearchFieldState extends State<_StaffSearchField> {
                             .where((e) => e.isNotEmpty)
                             .join(' · ')),
                     onTap: () => onSelected(s),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Searchable, autocomplete selector for in-house room charge guests.
+class _RoomChargeGuestSearchField extends StatefulWidget {
+  const _RoomChargeGuestSearchField({
+    required this.guests,
+    required this.onSelected,
+    this.initialBookingId,
+  });
+
+  final List<Map<String, dynamic>> guests;
+  final ValueChanged<Map<String, dynamic>?> onSelected;
+  final String? initialBookingId;
+
+  @override
+  State<_RoomChargeGuestSearchField> createState() =>
+      _RoomChargeGuestSearchFieldState();
+}
+
+class _RoomChargeGuestSearchFieldState
+    extends State<_RoomChargeGuestSearchField> {
+  String _label(Map<String, dynamic> g) =>
+      'Room ${g['room_number'] ?? '-'} • ${g['guest_name'] ?? 'Guest'}';
+
+  String _formatFolio(dynamic val) {
+    final n = num.tryParse('$val') ?? 0;
+    return 'KES ${n.toStringAsFixed(n.truncateToDouble() == n ? 0 : 2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Map<String, dynamic>? initial;
+    for (final g in widget.guests) {
+      if ('${g['booking_id'] ?? ''}' == widget.initialBookingId) {
+        initial = g;
+        break;
+      }
+    }
+
+    return Autocomplete<Map<String, dynamic>>(
+      key: ValueKey(
+          'room-charge-${widget.guests.length}-${widget.initialBookingId}'),
+      initialValue:
+          TextEditingValue(text: initial != null ? _label(initial) : ''),
+      displayStringForOption: _label,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return widget.guests;
+        return widget.guests.where((g) {
+          final room = '${g['room_number'] ?? ''}'.toLowerCase();
+          final name = '${g['guest_name'] ?? ''}'.toLowerCase();
+          final booking = '${g['confirmation_number'] ?? ''}'.toLowerCase();
+          final id = '${g['booking_id'] ?? ''}'.toLowerCase();
+          return room.contains(q) ||
+              name.contains(q) ||
+              booking.contains(q) ||
+              id.contains(q);
+        });
+      },
+      onSelected: widget.onSelected,
+      fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: const InputDecoration(
+            labelText: 'Select room to charge (search room/guest)',
+            isDense: true,
+            prefixIcon: Icon(Icons.meeting_room_outlined, size: 18),
+            hintText: 'Type room number or guest name…',
+            helperText: 'Only checked-in overnight stays are shown here.',
+          ),
+          onChanged: (v) {
+            if (v.trim().isEmpty) widget.onSelected(null);
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300, maxWidth: 460),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, i) {
+                  final g = options.elementAt(i);
+                  final stayNights =
+                      (num.tryParse('${g['stay_nights'] ?? 0}') ?? 0).round();
+                  final folio = g['folio_balance'] ?? 0;
+                  final conf = '${g['confirmation_number'] ?? '-'}';
+                  return ListTile(
+                    dense: true,
+                    leading: const CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Color(0xFFE8F0FE),
+                      child: Icon(Icons.bed_outlined,
+                          size: 16, color: AppColors.kPrimary),
+                    ),
+                    title: Text(
+                      'Room ${g['room_number'] ?? '-'} • ${g['guest_name'] ?? 'Guest'}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      'Booking: $conf • Stay: ${stayNights > 0 ? '$stayNights night${stayNights == 1 ? '' : 's'}' : 'In-house'} • Folio: ${_formatFolio(folio)}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onTap: () => onSelected(g),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Searchable, autocomplete selector for corporate accounts.
+class _CorporateCustomerSearchField extends StatefulWidget {
+  const _CorporateCustomerSearchField({
+    required this.customers,
+    required this.onSelected,
+    this.initialId,
+  });
+
+  final List<Map<String, dynamic>> customers;
+  final ValueChanged<Map<String, dynamic>?> onSelected;
+  final String? initialId;
+
+  @override
+  State<_CorporateCustomerSearchField> createState() =>
+      _CorporateCustomerSearchFieldState();
+}
+
+class _CorporateCustomerSearchFieldState
+    extends State<_CorporateCustomerSearchField> {
+  String _label(Map<String, dynamic> c) =>
+      c['name'] ??
+      c['company_name'] ??
+      c['contact_person'] ??
+      'Unknown Company';
+
+  @override
+  Widget build(BuildContext context) {
+    Map<String, dynamic>? initial;
+    for (final c in widget.customers) {
+      if ('${c['id'] ?? ''}' == widget.initialId) {
+        initial = c;
+        break;
+      }
+    }
+
+    return Autocomplete<Map<String, dynamic>>(
+      key: ValueKey(
+          'corp-account-${widget.customers.length}-${widget.initialId}'),
+      initialValue:
+          TextEditingValue(text: initial != null ? _label(initial) : ''),
+      displayStringForOption: _label,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return widget.customers;
+        return widget.customers.where((c) {
+          final name = '${c['name'] ?? ''}'.toLowerCase();
+          final company = '${c['company_name'] ?? ''}'.toLowerCase();
+          final contact = '${c['contact_person'] ?? ''}'.toLowerCase();
+          final phone =
+              '${c['phone'] ?? c['contact_phone'] ?? ''}'.toLowerCase();
+          final email = '${c['email'] ?? ''}'.toLowerCase();
+          final pin = '${c['tax_pin'] ?? c['pin'] ?? ''}'.toLowerCase();
+          return name.contains(q) ||
+              company.contains(q) ||
+              contact.contains(q) ||
+              phone.contains(q) ||
+              email.contains(q) ||
+              pin.contains(q);
+        });
+      },
+      onSelected: widget.onSelected,
+      fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: const InputDecoration(
+            labelText: 'Select Corporate Account (search company/contact)',
+            isDense: true,
+            prefixIcon: Icon(Icons.business_outlined, size: 18),
+            hintText: 'Type company name or contact…',
+          ),
+          onChanged: (v) {
+            if (v.trim().isEmpty) widget.onSelected(null);
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 460),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, i) {
+                  final c = options.elementAt(i);
+                  final name = _label(c);
+                  final sub = [
+                    if (c['contact_person'] != null &&
+                        '${c['contact_person']}'.isNotEmpty &&
+                        c['contact_person'] != name)
+                      'Contact: ${c['contact_person']}',
+                    if (c['phone'] != null && '${c['phone']}'.isNotEmpty)
+                      '${c['phone']}',
+                  ].join(' · ');
+                  return ListTile(
+                    dense: true,
+                    leading: const CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Color(0xFFF3E8FF),
+                      child: Icon(Icons.business,
+                          size: 16, color: Colors.purple),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: sub.isNotEmpty
+                        ? Text(sub, style: const TextStyle(fontSize: 11))
+                        : null,
+                    onTap: () => onSelected(c),
                   );
                 },
               ),

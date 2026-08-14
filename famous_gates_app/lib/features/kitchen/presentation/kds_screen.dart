@@ -66,6 +66,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   String _statusFilter = 'all';
   String? _tableFilter; // null = all tables
   String _historyTimeline = 'shift'; // shift | today | yesterday | 7days | all
+  String _searchQuery = '';
   bool _exportingHistory = false;
 
   // Forces a rebuild every minute purely so the "stale order" cutoff below
@@ -200,6 +201,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       initials: widget.scope.initials,
       breadcrumbRoot: 'Kitchen',
       searchHint: 'Search order, item, table...',
+      onSearchChanged: (q) => setState(() => _searchQuery = q.trim().toLowerCase()),
       palette: const ShellPalette(
         background: Color(0xFF1A1A2E),
         surface: Color(0xFF22223D),
@@ -265,7 +267,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
               // Self-contained: fetches/refreshes its own pending queues.
               ? _KdsVoidRequestsSection(scope: widget.scope)
               : FutureBuilder<_KitchenModuleSnapshot>(
-                  key: ValueKey('${_section.name}-$_notificationStatus'),
+                  key: ValueKey(
+                      '${_section.name}-$_notificationStatus-$_historyTimeline'),
                   future: _future,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting &&
@@ -416,12 +419,36 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         activeOrders.where((order) => order.hasPendingVoidRequest).length;
     final voided = activeOrders.where((order) => order.isVoided).length;
     final recalled = activeOrders.where((o) => o.hasRecalledItems).length;
-    // Orders visible after applying the top status filter + bottom table filter.
-    final visibleOrders = orders
-        .where((o) =>
-            _matchesStatus(o, _statusFilter) &&
-            (_tableFilter == null || '${o.tableNumber ?? ''}' == _tableFilter))
-        .toList();
+    final query = _searchQuery.trim().toLowerCase();
+    // Orders visible after applying the top status filter + bottom table filter + search query.
+    final visibleOrders = orders.where((o) {
+      if (!_matchesStatus(o, _statusFilter)) return false;
+      if (_tableFilter != null && '${o.tableNumber ?? ''}' != _tableFilter) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final matchesNum = o.orderNumber.toLowerCase().contains(query) ||
+            (o.shortCode?.toLowerCase().contains(query) ?? false);
+        final matchesLoc =
+            '${o.tableNumber ?? ''}'.toLowerCase().contains(query) ||
+                (o.roomNumber?.toLowerCase().contains(query) ?? false) ||
+                o.locationLabel.toLowerCase().contains(query);
+        final matchesWaiter =
+            o.waiterName?.toLowerCase().contains(query) ?? false;
+        final matchesCustomer =
+            o.customerName?.toLowerCase().contains(query) ?? false;
+        final matchesItems =
+            o.items.any((i) => i.name.toLowerCase().contains(query));
+        if (!matchesNum &&
+            !matchesLoc &&
+            !matchesWaiter &&
+            !matchesCustomer &&
+            !matchesItems) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
     // Distinct tables among the status-filtered orders → bottom table strip.
     final tableStrip = <MapEntry<String, String>>[];
     final seenTables = <String>{};
@@ -629,6 +656,30 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 
   Widget _history(_KitchenModuleSnapshot data) {
+    final timelineOrders = data.history;
+    final query = _searchQuery.trim().toLowerCase();
+    final filteredHistory = query.isEmpty
+        ? timelineOrders
+        : timelineOrders.where((o) {
+            final matchesNum = o.orderNumber.toLowerCase().contains(query) ||
+                (o.shortCode?.toLowerCase().contains(query) ?? false);
+            final matchesLoc =
+                '${o.tableNumber ?? ''}'.toLowerCase().contains(query) ||
+                    (o.roomNumber?.toLowerCase().contains(query) ?? false) ||
+                    o.locationLabel.toLowerCase().contains(query);
+            final matchesWaiter =
+                o.waiterName?.toLowerCase().contains(query) ?? false;
+            final matchesCustomer =
+                o.customerName?.toLowerCase().contains(query) ?? false;
+            final matchesItems =
+                o.items.any((i) => i.name.toLowerCase().contains(query));
+            return matchesNum ||
+                matchesLoc ||
+                matchesWaiter ||
+                matchesCustomer ||
+                matchesItems;
+          }).toList();
+
     return _Page(
       title: widget.scope.historyTitle,
       subtitle: widget.scope.historySubtitle,
@@ -636,8 +687,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         _scopeSwitcher(),
         OutlinedButton.icon(
           style: _kdsOutlinedButtonStyle,
-          onPressed:
-              _exportingHistory ? null : () => _exportHistoryPdf(data.history),
+          onPressed: _exportingHistory
+              ? null
+              : () => _exportHistoryPdf(filteredHistory),
           icon: _exportingHistory
               ? const SizedBox(
                   width: 16,
@@ -663,8 +715,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           _historyTimelineFilter(),
           const SizedBox(height: 16),
           _OrderList(
-            orders: data.history,
-            empty: widget.scope.emptyHistoryMessage,
+            orders: filteredHistory,
+            empty: query.isNotEmpty
+                ? 'No orders match "$_searchQuery"'
+                : widget.scope.emptyHistoryMessage,
           ),
         ],
       ),

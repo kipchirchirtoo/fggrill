@@ -2145,12 +2145,12 @@ const normalizeDateWindow = (startDate?: any, endDate?: any) => {
 };
 
 const outletGroupFor = (source: string, category?: string, orderType?: string, roomNumber?: string | null) => {
-  if (roomNumber && String(roomNumber).trim() !== '') return 'rooms';
   const normalized = `${source} ${category || ''} ${orderType || ''}`.toLowerCase();
   if (normalized.includes('non_consumable') || normalized.includes('non-consumable')) return 'non_consumables';
-  if (normalized.includes('bar')) return 'bar';
-  if (source.includes('restaurant') || normalized.includes('restaurant')) return 'restaurant';
-  if (normalized.includes('room')) return 'rooms';
+  if (normalized.includes('bar') || source === 'bar') return 'bar';
+  if (source.includes('restaurant') || normalized.includes('restaurant') || source === 'kitchen' || source === 'choma_zone') return 'restaurant';
+  if (normalized.includes('room') || source === 'rooms' || source === 'reception' || source === 'hotel') return 'rooms';
+  if (roomNumber && String(roomNumber).trim() !== '') return 'rooms';
   return 'restaurant';
 };
 
@@ -2489,12 +2489,50 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       barStockParams.push(numericBranchId);
     }
 
-    const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock] = await Promise.all([
+    let roomReservationsQueryText = `
+      SELECT 
+        r.id,
+        COALESCE(r.branch_id, rm.branch_id) as branch_id,
+        r.room_id,
+        r.room_type_id,
+        r.confirmation_number,
+        r.reservation_number,
+        r.check_in_date,
+        r.check_out_date,
+        r.status,
+        r.payment_status,
+        r.payment_method,
+        r.total_amount,
+        r.room_rate,
+        r.subtotal,
+        r.created_at,
+        r.created_by,
+        rm.room_number,
+        COALESCE(rt.name, rm.room_type, 'Standard Room') as room_type_name,
+        COALESCE(TRIM(CONCAT(g.first_name, ' ', g.last_name)), 'Guest') as guest_name
+      FROM public.reservations r
+      LEFT JOIN public.rooms rm ON r.room_id = rm.id
+      LEFT JOIN public.room_types rt ON (r.room_type_id = rt.id OR rm.room_type_id = rt.id)
+      LEFT JOIN public.guests g ON r.guest_id = g.id
+      WHERE r.status NOT IN ('cancelled', 'no_show', 'void')
+        AND (
+          (r.created_at >= $1 AND r.created_at <= $2)
+          OR (r.check_in_date >= $1 AND r.check_in_date <= $2)
+        )
+    `;
+    let roomReservationsParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      roomReservationsQueryText += ` AND (COALESCE(r.branch_id, rm.branch_id) = $3 OR r.branch_id IS NULL)`;
+      roomReservationsParams.push(numericBranchId);
+    }
+
+    const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock, rawRoomReservations] = await Promise.all([
       db.query(restQueryText, restParams),
       db.query(barQueryText, barParams),
       db.query(posShiftOrdersQueryText, posShiftOrdersParams),
       db.query(stockQueryText, stockParams),
-      db.query(barStockQueryText, barStockParams)
+      db.query(barStockQueryText, barStockParams),
+      db.query(roomReservationsQueryText, roomReservationsParams)
     ]);
 
     const restOrders = rawRest.rows || [];
@@ -2502,6 +2540,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     let outletOrders = rawOutletOrders.rows || [];
     const stockRequests = rawStock.rows || [];
     const barStockRequests = rawBarStock.rows || [];
+    const roomReservations = rawRoomReservations.rows || [];
 
     const outletIds = [...new Set(outletOrders.map((order: any) => order.outlet_id).filter(Boolean))];
     const outletShiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
@@ -2595,7 +2634,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const shiftCashierIds = [
       ...new Set([
         ...allOutletShifts.map((s: any) => s.cashier_id).filter(Boolean),
-        ...(legacyShiftsRes.data || []).map((s: any) => s.opened_by).filter(Boolean)
+        ...(legacyShiftsRes.data || []).map((s: any) => s.opened_by).filter(Boolean),
+        ...roomReservations.map((r: any) => r.created_by).filter(Boolean)
       ])
     ];
     let shiftCashierUsers: any[] = [];
@@ -2987,6 +3027,33 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           receiptNumber: order.order_number ? String(order.order_number) : undefined,
           kdsMinutes
         });
+      });
+    });
+
+    roomReservations.forEach((reservation: any) => {
+      const branchKey = String(reservation.branch_id || effectiveBranchId || '1');
+      const nights = Math.max(1, Math.ceil((new Date(reservation.check_out_date).getTime() - new Date(reservation.check_in_date).getTime()) / (24 * 60 * 60 * 1000))) || 1;
+      const revenue = Number(reservation.total_amount || (Number(reservation.room_rate || 0) * nights) || 0);
+      const roomNum = reservation.room_number ? `Room ${reservation.room_number}` : 'Room Stay';
+      const typeName = reservation.room_type_name || 'Accommodation';
+      const itemName = `${typeName} (${roomNum})`;
+      const itemId = reservation.room_id ? String(reservation.room_id) : String(reservation.id);
+      const sku = reservation.room_number ? `RM-${reservation.room_number}` : (reservation.confirmation_number || `ROOM-${reservation.id.slice(0, 8)}`);
+
+      addSoldItem({
+        branchId: branchKey,
+        itemId,
+        sku,
+        name: itemName,
+        quantity: nights,
+        revenue,
+        cost: 0,
+        category: 'Rooms',
+        source: 'rooms',
+        outletGroup: 'rooms',
+        soldAt: reservation.created_at || reservation.check_in_date,
+        orderId: String(reservation.id),
+        receiptNumber: reservation.confirmation_number || reservation.reservation_number || undefined
       });
     });
 
@@ -3411,6 +3478,32 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         shift_id: shiftId || 'no_shift',
         source: 'bar',
         outlet_group: 'bar'
+      });
+    });
+
+    roomReservations.forEach((reservation: any) => {
+      const cashierName = shiftCashierNameMap[String(reservation.created_by)] || 'Receptionist';
+      const nights = Math.max(1, Math.ceil((new Date(reservation.check_out_date).getTime() - new Date(reservation.check_in_date).getTime()) / (24 * 60 * 60 * 1000))) || 1;
+      const roomNum = reservation.room_number ? `Room ${reservation.room_number}` : 'Room Stay';
+      const typeName = reservation.room_type_name || 'Accommodation';
+      const itemName = `${typeName} (${roomNum})`;
+      const paymentMethods = reservation.payment_method ? [String(reservation.payment_method).toUpperCase()] : ['CASH'];
+      const confNum = reservation.confirmation_number || reservation.reservation_number || `HTL-${reservation.id.slice(0, 8)}`;
+
+      transactions.push({
+        id: String(reservation.id),
+        order_number: confNum,
+        created_at: reservation.created_at || reservation.check_in_date,
+        cashier_name: cashierName,
+        outlet_name: 'Reception / Rooms',
+        total_amount: Number(reservation.total_amount || 0),
+        payment_status: reservation.payment_status || reservation.status || 'confirmed',
+        payment_methods: paymentMethods,
+        payment_details: [{ method: paymentMethods[0] }],
+        item_summary: `${itemName} x${nights} night${nights === 1 ? '' : 's'} (${reservation.guest_name})`,
+        shift_id: 'no_shift',
+        source: 'rooms',
+        outlet_group: 'rooms'
       });
     });
 

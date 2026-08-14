@@ -21,32 +21,40 @@ if (!SKIP_PG && process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 10, // Reduced from 20 to be more conservative with pooler
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 10000, // Increased from 5000 to be more tolerant of pooler startup
-    maxUses: 7500, // Close connections after some use
+    max: 10, // Strict pool cap for Supabase pooler
+    idleTimeoutMillis: 5000, // Return idle connections to Supavisor quickly
+    connectionTimeoutMillis: 10000,
+    maxUses: 1000, // Recycle connections periodically to prevent stale state
+  });
+
+  // Automatically enforce strict query and session timeouts on every checked-out connection
+  pool.on('connect', (client) => {
+    client.query(`
+      SET statement_timeout = '30000';
+      SET idle_in_transaction_session_timeout = '20000';
+      SET lock_timeout = '10000';
+    `).catch((err) => {
+      console.warn('Could not set connection timeouts:', err.message);
+    });
   });
 
   // Handle pool errors gracefully
   pool.on('error', (err) => {
-    console.error(']: Database pool error:', err.message);
+    console.error('Database pool error:', err.message);
     dbAvailable = false;
   });
 
   // Test database connection (non-blocking)
   pool.connect()
     .then(client => {
-      console.log(']: Database connection established');
+      console.log('Database connection established');
       dbAvailable = true;
       client.release();
     })
     .catch(err => {
-      console.warn(']: Database connection failed - some features may be unavailable:', err.message);
+      console.warn('Database connection failed - some features may be unavailable:', err.message);
       dbAvailable = false;
-      // Don't exit - allow server to run without database
     });
-} else {
-  // console.warn(']: PostgreSQL disabled or DATABASE_URL not set - using mock database');
 }
 
 // Export query function for use in routes
@@ -56,24 +64,20 @@ export default {
       throw new Error('Database pool not initialized');
     }
 
-    // We try to query even if dbAvailable is false, as it might have recovered.
-    // The 8s timeout below will prevent long hangs.
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timed out')), 8000);
+      setTimeout(() => reject(new Error('Database query timed out after 30s')), 30000);
     });
 
     try {
       const queryPromise = pool.query(text, params);
       const result = await Promise.race([queryPromise, timeoutPromise]) as QueryResult<any>;
 
-      // If successful, ensure dbAvailable is true
       dbAvailable = true;
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Database query failed:', errorMessage);
 
-      // If it's a connection/timeout error, mark DB as unavailable
       if (errorMessage.includes('timeout') || errorMessage.includes('connection') || errorMessage.includes('terminated')) {
         dbAvailable = false;
       }
@@ -85,7 +89,21 @@ export default {
     if (!pool) {
       throw new Error('Database not available');
     }
-    return pool.connect();
+    const client = await pool.connect();
+    
+    // Safety tracker: warn if client is checked out and not released within 25 seconds
+    const stack = new Error().stack;
+    const leakTimer = setTimeout(() => {
+      console.warn('⚠️ [DB LEAK WARNING] A database client has been checked out for > 25s without release. Caller stack:\n', stack);
+    }, 25000);
+
+    const originalRelease = client.release.bind(client);
+    client.release = (err?: Error | boolean) => {
+      clearTimeout(leakTimer);
+      return originalRelease(err as any);
+    };
+
+    return client;
   },
   isAvailable: () => dbAvailable
 };

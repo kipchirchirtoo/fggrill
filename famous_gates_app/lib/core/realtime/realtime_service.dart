@@ -65,6 +65,26 @@ class VoidRequestRealtimeEvent {
   }
 }
 
+class NotificationRealtimeEvent {
+  final String id;
+  final String title;
+  final String message;
+  final String type;
+  final String category;
+  final String priority;
+  final Map<String, dynamic> payload;
+
+  NotificationRealtimeEvent({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.category,
+    required this.priority,
+    required this.payload,
+  });
+}
+
 class RealtimeService {
   RealtimeService(this._ref);
 
@@ -342,6 +362,100 @@ class RealtimeService {
 
     channel.subscribe((status, [error]) {
       debugPrint('🔌 RealtimeService Voids subscription status: $status');
+    });
+
+    _activeChannels[channelName] = channel;
+
+    controller.onCancel = () {
+      channel.unsubscribe();
+      _activeChannels.remove(channelName);
+    };
+  }
+
+  /// Live INSERT feed for notifications targeted at [userId] directly, or
+  /// broadcast to [role] (optionally scoped to [branchId] — see
+  /// notification.service.ts's notifyRole). Only ever emits genuinely new
+  /// rows created after the subscription is live — it never replays
+  /// existing/backlog notifications, so callers (the toast overlay) don't
+  /// need to de-dupe against GET /notifications history themselves.
+  Stream<NotificationRealtimeEvent> watchNotifications({
+    required String userId,
+    required String role,
+    int? branchId,
+  }) {
+    final controller = StreamController<NotificationRealtimeEvent>.broadcast();
+    final channelName = RealtimeChannelKeys.notificationsChannel(userId);
+
+    _initNotificationsChannel(channelName, userId, role, branchId, controller);
+
+    return controller.stream;
+  }
+
+  Future<void> _initNotificationsChannel(
+    String channelName,
+    String userId,
+    String role,
+    int? branchId,
+    StreamController<NotificationRealtimeEvent> controller,
+  ) async {
+    await _ref.read(supabaseDirectServiceProvider).ensureReady();
+    final client = _supabaseClient;
+    if (client == null) {
+      controller.addError(StateError('Direct Supabase client unavailable'));
+      return;
+    }
+
+    if (_activeChannels.containsKey(channelName)) {
+      _activeChannels[channelName]?.unsubscribe();
+    }
+
+    final channel = client.channel(channelName);
+
+    // No server-side filter: notifications target via user_id OR role
+    // (optionally AND branch_id) — see notifyUser/notifyRole/notifyBranch
+    // in backend/src/services/notification.service.ts. A single Postgres
+    // Changes filter can't express that OR across columns, so every insert
+    // is received and matched client-side here, same approach already used
+    // for restaurant_order_items above (no branch_id column to filter on).
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: RealtimeChannelKeys.notificationsTable,
+      callback: (payload) {
+        final record = payload.newRecord;
+        debugPrint('🔔 RealtimeService: notifications INSERT payload=$record');
+        if (record.isEmpty) return;
+
+        final recordUserId = record['user_id']?.toString();
+        final recordRole = record['role']?.toString();
+        final recordBranchId = record['branch_id'];
+
+        final matchesUser = recordUserId != null && recordUserId == userId;
+        final matchesRole = recordRole != null &&
+            recordRole.toLowerCase() == role.toLowerCase() &&
+            (recordBranchId == null ||
+                branchId == null ||
+                recordBranchId.toString() == branchId.toString());
+        debugPrint('🔔 RealtimeService: matchesUser=$matchesUser matchesRole=$matchesRole '
+            '(recordUserId=$recordUserId userId=$userId recordRole=$recordRole role=$role)');
+        if (!matchesUser && !matchesRole) return;
+
+        controller.add(NotificationRealtimeEvent(
+          id: record['id']?.toString() ?? '',
+          title: record['title']?.toString() ?? 'Notification',
+          message: record['message']?.toString() ?? '',
+          type: record['type']?.toString() ?? 'info',
+          category: record['category']?.toString() ?? '',
+          priority: record['priority']?.toString() ?? 'medium',
+          payload: record,
+        ));
+        debugPrint('🔔 RealtimeService: added NotificationRealtimeEvent to stream');
+      },
+    );
+
+    channel.subscribe((status, [error]) {
+      debugPrint('🔌 RealtimeService Notifications subscription status: $status'
+          '${error != null ? ' error=$error' : ''}');
     });
 
     _activeChannels[channelName] = channel;

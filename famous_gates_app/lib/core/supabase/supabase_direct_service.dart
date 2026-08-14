@@ -35,7 +35,13 @@ class SupabaseDirectService {
       AppConfig.supabaseAnonKey.isNotEmpty;
 
   Future<void> ensureReady() async {
-    if (!enabled || _initialized) return;
+    if (!enabled) return;
+    if (_initialized) {
+      // Already initialized — still resync realtime auth on every call in
+      // case the bridge token was reissued (e.g. re-login) since last time.
+      await _syncRealtimeAuth();
+      return;
+    }
     if (_initializing) return;
     _initializing = true;
     try {
@@ -45,9 +51,36 @@ class SupabaseDirectService {
         accessToken: () => _ref.read(authRepositoryProvider).getSupabaseToken(),
       );
       _initialized = true;
+      await _syncRealtimeAuth();
     } finally {
       _initializing = false;
     }
+  }
+
+  /// Explicitly pushes the bridge JWT into the Realtime WebSocket's own
+  /// auth state — the `accessToken` callback passed to Supabase.initialize
+  /// above only feeds Postgrest/Storage/Functions REST calls, it is never
+  /// wired into Realtime automatically.
+  ///
+  /// Traced through the SDK: `RealtimeClient.accessToken` (the string
+  /// field actually sent with each channel join, distinct from the
+  /// `customAccessToken` callback) is set exactly once at construction —
+  /// from the anon key, since no bearer header exists yet at that point
+  /// (realtime_client.dart's constructor: `accessToken = customJWT ??
+  /// params['apikey']`). The only thing that ever calls `realtime.setAuth`
+  /// afterwards is `SupabaseClient`'s own listener on GoTrue's
+  /// `onAuthStateChange` stream (supabase_client.dart) — which never fires
+  /// here, because this app's login is bcrypt + a custom JWT, not a
+  /// Supabase Auth sign-in (see this class's doc comment). Net effect
+  /// without this: the Realtime socket stays on the anon key forever,
+  /// `auth.uid()` evaluates NULL for every postgres_changes event, and any
+  /// RLS policy gated on `user_id = auth.uid()` matches nothing — silently
+  /// dropping every live event no matter how correct the policy or the
+  /// client-side subscription code is.
+  Future<void> _syncRealtimeAuth() async {
+    final token = await _ref.read(authRepositoryProvider).getSupabaseToken();
+    if (token == null || token.isEmpty) return;
+    await Supabase.instance.client.realtime.setAuth(token);
   }
 
   /// Null when direct-Supabase is disabled, not yet initialized, or the

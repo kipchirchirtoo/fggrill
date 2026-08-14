@@ -26,9 +26,9 @@ String _captainOrderLabel(String? outletType, {required bool isRecall}) {
 }
 
 class PrintService {
-  static const double _paperWidthMm = 80;
+  static const double _paperWidthMm = 76;
   static const double _safeMarginMm = 2;
-  static const double _barcodeWidthMm = 60;
+  static const double _barcodeWidthMm = 56;
 
   final String companyName = 'FamousGate Hotels';
   final String companyAddress = 'Bomet, Kenya';
@@ -75,7 +75,7 @@ class PrintService {
             headers: {'Content-Type': 'application/json'},
             body: json.encode(receiptData),
           )
-          .timeout(const Duration(milliseconds: 500));
+          .timeout(const Duration(milliseconds: 2500));
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
@@ -225,55 +225,54 @@ class PrintService {
               if ((duplicateLabel ?? '').trim().isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
-                  padding:
-                      const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(width: 1),
-                    color: PdfColors.grey300,
-                  ),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 3),
                   child: pw.Text(
-                    duplicateLabel!.trim().toUpperCase(),
+                    '*** ${duplicateLabel!.trim().toUpperCase()} ***',
                     textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
-                      fontSize: 11,
+                      fontSize: 10,
                     ),
                   ),
                 ),
-                pw.SizedBox(height: 4),
+                pw.SizedBox(height: 2),
               ],
               if (billCode.isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
-                  padding:
-                      const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(width: 0.8),
-                  ),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
                   child: pw.Column(
                     children: [
                       pw.Text('BILL VERIFICATION CODE',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 7)),
-                      pw.SizedBox(height: 2),
+                      pw.SizedBox(height: 1),
                       pw.Text(billCode.toUpperCase(),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 18)),
+                              fontWeight: pw.FontWeight.bold, fontSize: 16)),
                     ],
                   ),
                 ),
-                pw.SizedBox(height: 4),
+                pw.SizedBox(height: 2),
               ],
               _dashedLine(context),
               pw.SizedBox(height: 4),
               _infoRow('Receipt #:', sale.receiptNumber ?? ''),
               if (billCode.isNotEmpty)
                 _infoRow('Bill code:', billCode.toUpperCase()),
-              _infoRow('Date:', dateStr),
-              _infoRow('Printed:', printedStr),
-              if (tableNumber != null) _infoRow('Table:', tableNumber),
-              if (roomNumber != null) _infoRow('Room:', roomNumber),
-              if (customerName != null) _infoRow('Customer:', customerName),
+              if ((duplicateLabel ?? '').trim().isNotEmpty) ...[
+                _infoRow('Date:', dateStr),
+                _infoRow('Printed:', printedStr),
+              ] else
+                _infoRow('Printed:', printedStr),
+              if (tableNumber != null && tableNumber.trim().isNotEmpty)
+                _infoRow('Table:', tableNumber.trim()),
+              if (roomNumber != null && roomNumber.trim().isNotEmpty)
+                _infoRow('Room:', roomNumber.trim()),
+              if (customerName != null &&
+                  customerName.trim().isNotEmpty &&
+                  customerName.trim().toLowerCase() != 'walk-in')
+                _infoRow('Customer:', customerName.trim()),
               if (sale.cashierName != null)
                 _infoRow('${staffLabel ?? 'Cashier'}:', sale.cashierName!),
               pw.SizedBox(height: 4),
@@ -380,11 +379,12 @@ class PrintService {
                       style: const pw.TextStyle(fontSize: 7)),
                 ]),
               pw.SizedBox(height: 6),
-              pw.Text('System managed and made by Hirall',
+              pw.Text('System made and maintained by Hirall',
                   style: pw.TextStyle(
                       fontSize: 7, fontWeight: pw.FontWeight.bold)),
-              pw.Text('+254 710 944 249 | admin@hirall.com',
+              pw.Text('+254 710 944 249 | www.hirall.com',
                   style: const pw.TextStyle(fontSize: 6)),
+              pw.SizedBox(height: 18),
             ],
           );
         },
@@ -632,41 +632,34 @@ class PrintService {
               if (code.isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
-                  padding:
-                      const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  decoration:
-                      pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
                   child: pw.Column(children: [
                     pw.Text('CREDIT BILL CODE',
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 7)),
-                    pw.SizedBox(height: 2),
+                    pw.SizedBox(height: 1),
                     pw.Text(code.toUpperCase(),
                         style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 18)),
+                            fontWeight: pw.FontWeight.bold, fontSize: 16)),
                   ]),
                 ),
-                pw.SizedBox(height: 4),
+                pw.SizedBox(height: 2),
               ],
               _dashedLine(context),
               pw.SizedBox(height: 4),
               // Staff identity — the credit is owed by this person.
               pw.Container(
                 width: double.infinity,
-                padding:
-                    const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(width: 0.6),
-                ),
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
                 child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('STAFF',
+                      pw.Text('STAFF NAME:',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 7)),
                       pw.Text(staffName,
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                              fontWeight: pw.FontWeight.bold, fontSize: 11)),
                       if ((employeeId ?? '').isNotEmpty)
                         pw.Text('Employee ID: $employeeId',
                             style: const pw.TextStyle(fontSize: 8)),
@@ -726,19 +719,19 @@ class PrintService {
               // Settlement notice — the credit-bill flow.
               pw.Container(
                 width: double.infinity,
-                padding:
-                    const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
-                decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                padding: const pw.EdgeInsets.symmetric(vertical: 3),
                 child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
-                      pw.Text('** UNPAID CREDIT - NOT A PAYMENT **',
+                      pw.Text('*** UNPAID CREDIT - NOT A PAYMENT ***',
+                          textAlign: pw.TextAlign.center,
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 8)),
                       pw.SizedBox(height: 2),
                       pw.Text(
                           'Settle with the Branch Accountant (cash/M-Pesa) '
                           'OR have it deducted from your payroll.',
+                          textAlign: pw.TextAlign.center,
                           style: const pw.TextStyle(fontSize: 8)),
                     ]),
               ),
@@ -756,11 +749,12 @@ class PrintService {
                       style: const pw.TextStyle(fontSize: 7)),
                 ]),
               pw.SizedBox(height: 6),
-              pw.Text('System managed and made by Hirall',
+              pw.Text('System made and maintained by Hirall',
                   style: pw.TextStyle(
                       fontSize: 7, fontWeight: pw.FontWeight.bold)),
-              pw.Text('+254 710 944 249 | admin@hirall.com',
+              pw.Text('+254 710 944 249 | www.hirall.com',
                   style: const pw.TextStyle(fontSize: 6)),
+              pw.SizedBox(height: 18),
             ],
           );
         },
@@ -931,11 +925,12 @@ class PrintService {
                       style: const pw.TextStyle(fontSize: 7)),
                 ]),
               pw.SizedBox(height: 6),
-              pw.Text('System managed and made by Hirall',
+              pw.Text('System made and maintained by Hirall',
                   style: pw.TextStyle(
                       fontSize: 7, fontWeight: pw.FontWeight.bold)),
-              pw.Text('+254 710 944 249 | admin@hirall.com',
+              pw.Text('+254 710 944 249 | www.hirall.com',
                   style: const pw.TextStyle(fontSize: 6)),
+              pw.SizedBox(height: 18),
             ],
           );
         },

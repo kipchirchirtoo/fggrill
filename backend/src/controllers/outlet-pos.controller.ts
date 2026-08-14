@@ -4,6 +4,7 @@ import { supabase } from '../config/supabase';
 import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { billCache } from '../utils/bill-cache';
 import notificationService from '../services/notification.service';
 import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../services/cashier-automation.service';
 import {
@@ -3263,6 +3264,29 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     // only produce log noise (see the identical fix applied to
     // captain-order printing above).
 
+    // Previously nothing told the kitchen a recall happened — they only
+    // found out by noticing the RECALL badge next time they looked at the
+    // KDS screen. Recalled items need re-preparation, so this is exactly
+    // as time-sensitive as a new order.
+    Promise.allSettled(
+      KITCHEN_VOID_NOTIFY_ROLES.map((role) =>
+        notificationService.notifyRole(
+          role,
+          'Bill recalled — items need re-preparation',
+          `${order.order_number || 'A bill'} was recalled by the waiter. Check the KDS for updated items.`,
+          {
+            type: 'warning',
+            category: 'kds_recall',
+            priority: 'high',
+            branchId: shift.branch_id,
+            metadata: { order_id: orderId, shift_id: shiftId, recall_batch_id: recallBatchId }
+          }
+        )
+      )
+    ).catch((notifyError) => {
+      logger.warn('Failed to notify kitchen of bill recall:', notifyError);
+    });
+
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -4670,6 +4694,11 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
       .single();
     if (orderUpdateErr) throw orderUpdateErr;
 
+    // See the matching comment in cashierAcknowledgeItemVoid — this order's
+    // items just changed (void_pending_approval cleared), so any cached
+    // getBillDetails snapshot for it is now stale.
+    billCache.clear();
+
     const { data: outletRow } = await supabase
       .from('pos_outlets')
       .select('outlet_type')
@@ -4811,6 +4840,12 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
             updated_at: now
           })
           .eq('id', requestRow.order_id);
+
+        // See the matching comment in cashierAcknowledgeItemVoid — the item
+        // was just reinstated (quantity/total restored), so any cached
+        // getBillDetails snapshot for this order is now stale in the other
+        // direction: it would still show the item as voided/missing.
+        billCache.clear();
       }
     }
 
@@ -5051,6 +5086,19 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
       }
       throw rpcError;
     }
+
+    // The RPC just changed this order's items/total_amount/balance_amount in
+    // the DB, but getBillDetails (cashier.controller.ts) caches whole bill
+    // lookups for up to 5 minutes under a key derived from whatever the
+    // cashier searched (short_code/order_number/barcode/UUID — several keys
+    // can point at the same order). Without clearing it here, a Reprint
+    // within that window replays the pre-void snapshot: the voided item and
+    // its price still show even though total_amount/balance_amount are
+    // already correct everywhere else. Blunt invalidation (matches the
+    // pattern cashier.controller.ts already uses on every other bill
+    // mutation) rather than trying to derive every possible cache key for
+    // this one order.
+    billCache.clear();
 
     const { data: updatedReq, error: reqFetchErr } = await supabase
       .from('pos_item_void_requests')

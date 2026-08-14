@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/domain/auth_notifier.dart';
 import '../data/outlet_pos_repository.dart';
+import '../../../core/services/windows_keyboard_helper.dart';
 
 /// Opens the cross-outlet "Customer Bills" panel where a waiter recalls all of
 /// their own open orders across every outlet, combines them into ONE customer
@@ -212,6 +213,7 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                       child: TextField(
                         controller: _searchController,
+                        onTap: WindowsKeyboardHelper.openVirtualKeyboard,
                         decoration: InputDecoration(
                           hintText:
                               'Search by short code (e.g. UR6), bill #, waiter, table, customer...',

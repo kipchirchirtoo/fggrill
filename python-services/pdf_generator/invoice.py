@@ -161,9 +161,20 @@ def generate_booking_invoice(booking_data):
         alignment=TA_CENTER
     )
     elements.append(Paragraph("Thank you for choosing FamousGate Hotels", footer_style))
-    elements.append(Spacer(1, 0.1*inch))
+    elements.append(Spacer(1, 0.05*inch))
     elements.append(Paragraph("Bomet, Kenya", footer_style))
     elements.append(Paragraph("+254 706 782 828 • info@famousgatehotels.com", footer_style))
+    
+    # Hirall Branding
+    hirall_style = ParagraphStyle(
+        'HirallFooter',
+        parent=footer_style,
+        fontSize=8,
+        textColor=colors.HexColor('#666666'),
+        spaceBefore=8
+    )
+    elements.append(Paragraph("System made and maintained by <b>Hirall</b>", hirall_style))
+    elements.append(Paragraph("+254 710 944 249 | www.hirall.com", hirall_style))
     
     # Build PDF
     doc.build(elements)

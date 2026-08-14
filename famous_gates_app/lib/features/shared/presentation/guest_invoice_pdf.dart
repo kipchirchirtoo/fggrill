@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -28,7 +29,7 @@ String _pdfSafe(String? value) {
 
 /// Official A4 Guest Invoice PDF generator for FamousGate Hotels.
 Future<void> printBookingInvoicePDF({
-  required BuildContext context,
+  BuildContext? context,
   required String invoiceNumber,
   required String invoiceDate,
   required String dueDate,
@@ -47,11 +48,36 @@ Future<void> printBookingInvoicePDF({
 }) async {
   final pdf = pw.Document();
   pw.MemoryImage? logoImage;
-  try {
-    final logoBytes =
-        await rootBundle.load('assets/frontend_public/fglogo.png');
-    logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
-  } catch (_) {}
+
+  for (final assetPath in [
+    'assets/frontend_public/fglogo.png',
+    'assets/frontend_public/logo.png',
+    'assets/frontend_public/fg_grill_official_icon.png',
+  ]) {
+    try {
+      final logoBytes = await rootBundle.load(assetPath);
+      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+      break;
+    } catch (_) {}
+  }
+
+  if (logoImage == null) {
+    for (final filePath in [
+      'assets/frontend_public/fglogo.png',
+      'assets/frontend_public/logo.png',
+      'assets/frontend_public/fg_grill_official_icon.png',
+      'data/flutter_assets/assets/frontend_public/fglogo.png',
+    ]) {
+      try {
+        final f = File(filePath);
+        if (await f.exists()) {
+          final bytes = await f.readAsBytes();
+          logoImage = pw.MemoryImage(bytes);
+          break;
+        }
+      } catch (_) {}
+    }
+  }
 
   final double grossTotal = totalAmount > 0
       ? totalAmount
@@ -90,20 +116,22 @@ Future<void> printBookingInvoicePDF({
       build: (pw.Context ctx) {
         return [
           pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
               if (logoImage != null)
-                pw.Image(logoImage, width: 72, height: 50)
-              else
-                pw.Container(width: 72),
-              pw.SizedBox(width: 16),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(right: 14),
+                  child: pw.Image(logoImage, width: 80, height: 56, fit: pw.BoxFit.contain),
+                ),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text('FamousGate Hotels',
                         style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 16,
+                            color: PdfColors.blue900)),
                     pw.Text('Bomet, Kenya',
                         style: const pw.TextStyle(
                             fontSize: 10, color: PdfColors.grey700)),
@@ -130,7 +158,7 @@ Future<void> printBookingInvoicePDF({
                           fontWeight: pw.FontWeight.bold,
                           color: showAsReceipt
                               ? PdfColors.green800
-                              : PdfColors.grey800)),
+                              : PdfColors.blue900)),
                 ],
               ),
             ],
@@ -250,15 +278,6 @@ Future<void> printBookingInvoicePDF({
             ],
           ),
           pw.SizedBox(height: 14),
-          if (notes != null && notes.isNotEmpty) ...[
-            pw.Text('Notes / Instructions:',
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-            pw.SizedBox(height: 2),
-            pw.Text(_pdfSafe(notes),
-                style: const pw.TextStyle(
-                    fontSize: 8, color: PdfColors.grey700)),
-          ],
         ];
       },
       footer: (pw.Context ctx) {
@@ -270,16 +289,30 @@ Future<void> printBookingInvoicePDF({
               top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
             ),
           ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              pw.Text(
-                  'FamousGate Hotels - Finance System | www.famousgatehotels.com',
-                  style: const pw.TextStyle(
-                      fontSize: 7, color: PdfColors.grey600)),
-              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
-                  style: const pw.TextStyle(
-                      fontSize: 7, color: PdfColors.grey600)),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                      'FamousGate Hotels - Finance System | www.famousgatehotels.com',
+                      style: const pw.TextStyle(
+                          fontSize: 7, color: PdfColors.grey600)),
+                  pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                      style: const pw.TextStyle(
+                          fontSize: 7, color: PdfColors.grey600)),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Center(
+                child: pw.Text(
+                    'System made and maintained by Hirall | +254 710 944 249 | www.hirall.com',
+                    style: pw.TextStyle(
+                        fontSize: 6.5,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700)),
+              ),
             ],
           ),
         );

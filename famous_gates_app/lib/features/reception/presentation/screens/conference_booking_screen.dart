@@ -18,6 +18,7 @@ import 'package:printing/printing.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/api_error_message.dart';
+import '../../../shared/presentation/guest_invoice_pdf.dart';
 import '../../data/repository.dart';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -2435,407 +2436,104 @@ Future<void> printConferenceBookingInvoice({
   required String bookingStatus,
   required String notes,
 }) async {
-  final pdf = pw.Document();
+  final balanceDue = math.max(0.0, (grandTotal - depositPaid).toDouble());
+  final items = <Map<String, dynamic>>[];
 
-  final balanceDue = math.max(0, grandTotal - depositPaid);
-  final paymentStatus = depositPaid >= grandTotal && grandTotal > 0
-      ? 'PAID'
-      : (depositPaid > 0 ? 'PARTIAL' : 'UNPAID');
+  if (packageRate > 0 || packageTotal > 0) {
+    items.add({
+      'description':
+          'Conference Package: $packageTitle (${_kCurrency.format(packageRate)} pp x $pax pax x $days d)',
+      'qty': pax * days,
+      'unitPrice': packageRate.toDouble(),
+      'totalAmount': packageTotal.toDouble(),
+    });
+  }
 
-  pdf.addPage(
-    pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(32),
-      build: (pw.Context context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            // Header
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('FAMOUSGATE HOTELS',
-                        style: pw.TextStyle(
-                            fontSize: 18,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.blue900)),
-                    pw.Text('$branchName Branch • Conference & Events',
-                        style: const pw.TextStyle(
-                            fontSize: 10, color: PdfColors.grey700)),
-                    pw.Text('Tel: +254 700 000 000 | bookings@famousgatehotels.com',
-                        style: const pw.TextStyle(
-                            fontSize: 9, color: PdfColors.grey600)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.blue900,
-                        borderRadius: pw.BorderRadius.circular(4),
-                      ),
-                      child: pw.Text('CONFERENCE INVOICE',
-                          style: pw.TextStyle(
-                              fontSize: 11,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.white)),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text('Ref #: $bookingRef',
-                        style: pw.TextStyle(
-                            fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Date: ${DateFormat('dd MMM yyyy').format(bookingDate)}',
-                        style: const pw.TextStyle(fontSize: 9)),
-                  ],
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 16),
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.SizedBox(height: 12),
+  if (hallTotal > 0 || hallRate > 0) {
+    items.add({
+      'description':
+          'Hall Base Rental ($hallName - ${_kCurrency.format(hallRate)}/day x $days d)',
+      'qty': days,
+      'unitPrice': hallRate.toDouble(),
+      'totalAmount': hallTotal.toDouble(),
+    });
+  }
 
-            // Client & Event Details Box
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(
-                      color: PdfColors.grey100,
-                      borderRadius: pw.BorderRadius.circular(6),
-                    ),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('CLIENT / ORGANIZER DETAILS',
-                            style: pw.TextStyle(
-                                fontSize: 9,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.blue900)),
-                        pw.SizedBox(height: 4),
-                        pw.Text('Client Name: $clientName',
-                            style: pw.TextStyle(
-                                fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('Phone: $customerPhone',
-                            style: const pw.TextStyle(fontSize: 9)),
-                        if (organization.isNotEmpty)
-                          pw.Text('Organization: $organization',
-                              style: const pw.TextStyle(fontSize: 9)),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 12),
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(
-                      color: PdfColors.grey100,
-                      borderRadius: pw.BorderRadius.circular(6),
-                    ),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('HALL & RESERVATION DETAILS',
-                            style: pw.TextStyle(
-                                fontSize: 9,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.blue900)),
-                        pw.SizedBox(height: 4),
-                        pw.Text('Conference Hall: $hallName ($hallCapacity pax max)',
-                            style: pw.TextStyle(
-                                fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('Delegates: $pax pax | Duration: $days day(s)',
-                            style: const pw.TextStyle(fontSize: 9)),
-                        pw.Text('Booking Status: ${bookingStatus.toUpperCase()}',
-                            style: const pw.TextStyle(fontSize: 9)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+  if (addProjector) {
+    items.add({
+      'description': 'Projector & Presentation Screen',
+      'qty': 1,
+      'unitPrice': 2000.0,
+      'totalAmount': 2000.0,
+    });
+  }
 
-            pw.SizedBox(height: 16),
+  if (addPaSystem) {
+    items.add({
+      'description': 'PA System & Cordless Microphones',
+      'qty': 1,
+      'unitPrice': 3000.0,
+      'totalAmount': 3000.0,
+    });
+  }
 
-            // Itemized Charges Table
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-              children: [
-                // Header
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                  children: [
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text('Item Description',
-                            style: pw.TextStyle(
-                                fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text('Qty / Rate',
-                            style: pw.TextStyle(
-                                fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text('Total (KES)',
-                            style: pw.TextStyle(
-                                fontSize: 9, fontWeight: pw.FontWeight.bold),
-                            textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-                // Package line
-                if (packageRate > 0)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('Conference Package: $packageTitle',
-                                  style: const pw.TextStyle(fontSize: 9)),
-                              if (packageInclusions.isNotEmpty)
-                                pw.Text('Inclusions: $packageInclusions',
-                                    style: const pw.TextStyle(
-                                        fontSize: 8,
-                                        color: PdfColors.grey700)),
-                            ],
-                          )),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(
-                              '${_kCurrency.format(packageRate)} pp × $pax pax × $days d',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(_kCurrency.format(packageTotal),
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-                // Hall line
-                pw.TableRow(
-                  children: [
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text('Hall Base Rental ($hallName)',
-                            style: const pw.TextStyle(fontSize: 9))),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text('${_kCurrency.format(hallRate)}/day × $days d',
-                            style: const pw.TextStyle(fontSize: 9))),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
-                        child: pw.Text(_kCurrency.format(hallTotal),
-                            style: const pw.TextStyle(fontSize: 9),
-                            textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-                if (addProjector)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Equipment: HD Projector',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('KES 3,500/day × $days d',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(_kCurrency.format(3500 * days),
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-                if (addPaSystem)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Equipment: PA System & Microphones',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('KES 3,500/day × $days d',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(_kCurrency.format(3500 * days),
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-                if (chargeGarden)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Space Charge: Garden Grounds',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Fixed Rate',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('KES 5,000',
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-                if (chargeVideoShoot)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Space Charge: Video Shoot (8-9am)',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Fixed Rate',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('KES 5,000',
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-                if (chargePartySpace)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Space Charge: Party Area',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Fixed Rate',
-                              style: const pw.TextStyle(fontSize: 9))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('KES 5,000',
-                              style: const pw.TextStyle(fontSize: 9),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  ),
-              ],
-            ),
+  if (chargeGarden) {
+    items.add({
+      'description': 'Space Charge: Garden Grounds',
+      'qty': 1,
+      'unitPrice': 5000.0,
+      'totalAmount': 5000.0,
+    });
+  }
 
-            pw.SizedBox(height: 12),
+  if (chargeVideoShoot) {
+    items.add({
+      'description': 'Space Charge: Video Shoot (8-9am)',
+      'qty': 1,
+      'unitPrice': 5000.0,
+      'totalAmount': 5000.0,
+    });
+  }
 
-            // Summary Totals & Payment Box
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.grey300),
-                      borderRadius: pw.BorderRadius.circular(6),
-                    ),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('INCLUSIONS & TERMS',
-                            style: pw.TextStyle(
-                                fontSize: 8,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.grey800)),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          'Includes 500ml mineral water pp/session, high-speed Wi-Fi, flip charts & markers, biros & note pads. No outside catering permitted.',
-                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-                        ),
-                        if (notes.isNotEmpty) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Text('Notes: $notes',
-                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 16),
-                pw.Container(
-                  width: 200,
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.grey100,
-                    borderRadius: pw.BorderRadius.circular(6),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('Total Amount:', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                          pw.Text(_kCurrency.format(grandTotal), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('Deposit Paid:', style: const pw.TextStyle(fontSize: 8)),
-                          pw.Text(_kCurrency.format(depositPaid), style: const pw.TextStyle(fontSize: 8)),
-                        ],
-                      ),
-                      pw.Divider(thickness: 0.5, color: PdfColors.grey400),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('Balance Due:', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                          pw.Text(_kCurrency.format(balanceDue), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: balanceDue > 0 ? PdfColors.red900 : PdfColors.green900)),
-                        ],
-                      ),
-                      pw.SizedBox(height: 6),
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('Payment Status:', style: const pw.TextStyle(fontSize: 8)),
-                          pw.Text('$paymentStatus (${paymentMethod.toUpperCase()})',
-                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: paymentStatus == 'PAID' ? PdfColors.green800 : PdfColors.orange800)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+  if (chargePartySpace) {
+    items.add({
+      'description': 'Space Charge: Party Area',
+      'qty': 1,
+      'unitPrice': 5000.0,
+      'totalAmount': 5000.0,
+    });
+  }
 
-            pw.Spacer(),
+  if (items.isEmpty) {
+    items.add({
+      'description': 'Conference Hall Booking ($hallName)',
+      'qty': 1,
+      'unitPrice': grandTotal.toDouble(),
+      'totalAmount': grandTotal.toDouble(),
+    });
+  }
 
-            // Footer Signatures
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.SizedBox(height: 4),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Issued by: Receptionist Desk', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                pw.Text('Thank you for choosing FamousGate Hotels', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                pw.Text('Page 1 of 1', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-              ],
-            ),
-          ],
-        );
-      },
-    ),
-  );
+  final String eventDetails = [
+    'Hall: $hallName ($hallCapacity pax max)',
+    'Delegates: $pax pax | Duration: $days day(s)',
+    if (organization.isNotEmpty) 'Organization: $organization',
+    'Status: ${bookingStatus.toUpperCase()} (${paymentMethod.toUpperCase()})',
+  ].join('\n');
 
-  await Printing.layoutPdf(
-    onLayout: (PdfPageFormat format) async => pdf.save(),
-    name: 'Invoice_${bookingRef}.pdf',
+  await printBookingInvoicePDF(
+    invoiceNumber: bookingRef,
+    invoiceDate: DateFormat('dd MMM yyyy').format(bookingDate),
+    dueDate: DateFormat('dd MMM yyyy')
+        .format(bookingDate.add(Duration(days: days))),
+    clientName: clientName,
+    clientPhone: customerPhone,
+    clientDetails: eventDetails,
+    items: items,
+    totalAmount: grandTotal.toDouble(),
+    amountPaid: depositPaid.toDouble(),
+    balanceDue: balanceDue,
+    asReceipt: bookingStatus.toUpperCase() == 'PAID' ||
+        (depositPaid >= grandTotal && grandTotal > 0),
   );
 }
 

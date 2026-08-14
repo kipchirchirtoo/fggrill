@@ -315,10 +315,10 @@ class ReceiptGenerator:
         
         # === HIRALL BRANDING ===
         c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        c.drawCentredString(center_x, y, "System made and maintained by Hirall")
         y -= 4 * mm
         c.setFont("Helvetica", 6)
-        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
+        c.drawCentredString(center_x, y, "+254 710 944 249 | www.hirall.com")
         
         c.save()
         buffer.seek(0)
@@ -536,8 +536,8 @@ class InvoiceGenerator:
             textColor=colors.HexColor('#666666'),
             spaceBefore=10
         )
-        elements.append(Paragraph("System managed and made by <b>Hirall</b>", hirall_style))
-        elements.append(Paragraph("+254 710 944 249 | admin@hirall.com", hirall_style))
+        elements.append(Paragraph("System made and maintained by <b>Hirall</b>", hirall_style))
+        elements.append(Paragraph("+254 710 944 249 | www.hirall.com", hirall_style))
         
         doc.build(elements)
         buffer.seek(0)
@@ -706,8 +706,8 @@ class InventoryReceiptGenerator:
             textColor=colors.HexColor('#666666'),
             alignment=TA_CENTER
         )
-        elements.append(Paragraph("System managed and made by <b>Hirall</b>", hirall_style))
-        elements.append(Paragraph("+254 710 944 249 | admin@hirall.com", hirall_style))
+        elements.append(Paragraph("System made and maintained by <b>Hirall</b>", hirall_style))
+        elements.append(Paragraph("+254 710 944 249 | www.hirall.com", hirall_style))
         
         doc.build(elements)
         buffer.seek(0)
