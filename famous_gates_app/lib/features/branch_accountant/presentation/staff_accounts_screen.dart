@@ -1941,61 +1941,58 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   Future<void> _applyPaidEntryDialog(Map entry) async {
     final staffId = '${entry['staff_id'] ?? ''}';
     final candidates = _credit.where((c) {
-      if (_isCashierSourced(c)) return false;
       if (!_isOpenCredit(c)) return false;
-      if ('${c['status']}'.toLowerCase() == 'pending') return false;
       if (staffId.isEmpty) return true;
       return '${c['staff_id'] ?? ''}' == staffId;
     }).toList();
     final remaining = _n(entry, ['remaining_amount']);
-    Map<String, dynamic>? selected =
-        candidates.length == 1 ? candidates.first : null;
+
+    final generalOption = <String, dynamic>{
+      'id': 'unlinked',
+      'description': 'General Staff Salary Credit (Credit to Payroll / Future Bills)',
+    };
+    final options = [generalOption, ...candidates];
+
+    Map<String, dynamic>? selected = candidates.isNotEmpty ? candidates.first : generalOption;
     final amount = TextEditingController(text: remaining.toStringAsFixed(0));
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: const Text('Apply Paid Bill to Credit Bill'),
+          title: const Text('Apply Paid Bill Entry'),
           content: SizedBox(
-            width: 460,
+            width: 480,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_t(entry, [
-                        'staff_name'
-                      ]).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
-                  style:
-                      const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  '${_t(entry, ['staff_name']).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
-                if (candidates.isEmpty)
-                  const Text(
-                    'No approved, open credit bill found for this staff '
-                    'member. Approve their credit bill first, then apply '
-                    'this paid entry to it.',
-                    style: TextStyle(color: _danger, fontSize: 12),
-                  )
-                else
-                  DropdownButtonFormField<Map<String, dynamic>>(
-                    value: selected,
-                    decoration: _dec('Credit bill to clear *'),
-                    items: candidates
-                        .map((c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                '${_t(c, [
-                                      'description',
-                                      'reason'
-                                    ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
-                                overflow: TextOverflow.ellipsis,
+                DropdownButtonFormField<Map<String, dynamic>>(
+                  value: selected,
+                  decoration: _dec('Credit bill or account target *'),
+                  items: options
+                      .map((c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              c['id'] == 'unlinked'
+                                  ? c['description']
+                                  : '${_t(c, ['description', 'reason']).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: c['id'] == 'unlinked' ? FontWeight.w700 : FontWeight.w500,
+                                color: c['id'] == 'unlinked' ? _success : _text,
                               ),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setD(() => selected = v),
-                  ),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setD(() => selected = v),
+                ),
                 const SizedBox(height: 10),
                 _numField(amount, 'Amount to apply (KES) *'),
               ],
@@ -2006,17 +2003,15 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                 onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: candidates.isEmpty
-                  ? null
-                  : () {
-                      final v = num.tryParse(amount.text.trim()) ?? 0;
-                      if (selected == null || v <= 0) {
-                        _snack('Select a credit bill and a valid amount');
-                        return;
-                      }
-                      Navigator.pop(ctx, true);
-                    },
-              child: const Text('Apply'),
+              onPressed: () {
+                final v = num.tryParse(amount.text.trim()) ?? 0;
+                if (selected == null || v <= 0) {
+                  _snack('Select a valid target and amount');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Apply & Approve'),
             ),
           ],
         ),
@@ -2030,7 +2025,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
               'staff_credit_bill_id': '${selected!['id']}',
               'amount': value,
             }),
-        ok: 'Payment applied to credit bill');
+        ok: 'Payment processed successfully');
   }
 
   /// Directly record a staff member settling money toward their credit bill

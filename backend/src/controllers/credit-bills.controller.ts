@@ -613,14 +613,27 @@ export const getCashierPaidCreditEntries = async (req: Request, res: Response, n
                 if (status === 'all') return true;
                 if (status === 'pending') return entry.remaining_amount > 0;
                 if (status === 'applied') return entry.remaining_amount <= 0;
-                return String(entry.review_status).toLowerCase() === status;
-            });
+const openCreditStatuses = ['pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed'];
 
-        res.status(200).json({ success: true, data: rows });
-    } catch (error) {
-        next(error);
+async function syncLinkedCashierCreditBill(
+    sourceCashierCreditBillId: string | null | undefined,
+    updates: { paid_amount: number; balance_amount: number; status?: string }
+) {
+    if (!sourceCashierCreditBillId) return;
+    try {
+        const payload: any = {
+            amount_paid: updates.paid_amount,
+            balance_due: updates.balance_amount
+        };
+        if (updates.status) payload.status = updates.status;
+        await supabase
+            .from('credit_bills')
+            .update(payload)
+            .eq('id', sourceCashierCreditBillId);
+    } catch (err) {
+        logger.warn('Failed to sync linked cashier credit bill', err);
     }
-};
+}
 
 export const applyCashierPaidCreditEntry = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -628,7 +641,6 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
         const { staff_credit_bill_id, amount, notes } = req.body;
         const paymentAmount = toNumber(amount);
 
-        if (!staff_credit_bill_id) throw new AppError('Select the staff credit bill to clear', 400);
         if (!paymentAmount || paymentAmount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
 
         const sourceHint = String(req.body.source_table || '').trim();
@@ -684,52 +696,92 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             throw new AppError(`Payment amount exceeds remaining cashier paid-credit entry balance (${remainingEntryAmount})`, 400);
         }
 
-        const { data: bill, error: billError } = await supabase
-            .from('staff_credit_bills')
-            .select('*')
-            .eq('id', staff_credit_bill_id)
-            .single();
-        if (billError || !bill) throw new AppError('Staff credit bill not found', 404);
-        if (selectedEntry.staff_id && bill.staff_id && String(selectedEntry.staff_id) !== String(bill.staff_id)) {
-            throw new AppError('Paid-credit entry staff does not match selected credit bill staff', 400);
-        }
-        if (!openCreditStatuses.includes(String(bill.status))) {
-            throw new AppError('Selected credit bill is not open for payment application', 400);
-        }
-        if (String(bill.status) === 'pending') {
-            throw new AppError('Approve the credit bill before applying paid-credit entries', 400);
-        }
+        let updatedBill: any = null;
+        const isLinkedBill = staff_credit_bill_id &&
+            staff_credit_bill_id !== 'unlinked' &&
+            staff_credit_bill_id !== 'salary_credit';
 
-        const currentPaid = toNumber(bill.paid_amount);
-        const billAmount = toNumber(bill.amount);
-        const currentBalance = bill.balance !== null && bill.balance !== undefined
-            ? toNumber(bill.balance)
-            : Math.max(0, billAmount - currentPaid);
-        if (paymentAmount > currentBalance + 0.001) {
-            throw new AppError(`Payment amount exceeds selected credit bill balance (${currentBalance})`, 400);
-        }
+        if (isLinkedBill) {
+            const { data: bill, error: billError } = await supabase
+                .from('staff_credit_bills')
+                .select('*')
+                .eq('id', staff_credit_bill_id)
+                .single();
+            if (billError || !bill) throw new AppError('Staff credit bill not found', 404);
+            if (selectedEntry.staff_id && bill.staff_id && String(selectedEntry.staff_id) !== String(bill.staff_id)) {
+                throw new AppError('Paid-credit entry staff does not match selected credit bill staff', 400);
+            }
+            if (!openCreditStatuses.includes(String(bill.status))) {
+                throw new AppError('Selected credit bill is not open for payment application', 400);
+            const currentPaid = toNumber(bill.paid_amount);
+            const billAmount = toNumber(bill.amount);
+            const currentBalance = bill.balance !== null && bill.balance !== undefined
+                ? toNumber(bill.balance)
+                : Math.max(0, billAmount - currentPaid);
 
-        const newPaid = Math.min(billAmount, currentPaid + paymentAmount);
-        const newBalance = Math.max(0, currentBalance - paymentAmount);
-        const newStatus = newBalance <= 0 ? 'paid_cash' : bill.status;
+            const newPaid = Math.min(billAmount, currentPaid + paymentAmount);
+            const newBalance = Math.max(0, currentBalance - paymentAmount);
+            const newStatus = newBalance <= 0 ? 'paid_cash' : bill.status;
 
-        const { data: updatedBill, error: updateError } = await supabase
-            .from('staff_credit_bills')
-            .update({
+            const { data: uBill, error: updateError } = await supabase
+                .from('staff_credit_bills')
+                .update({
+                    paid_amount: newPaid,
+                    balance: newBalance,
+                    status: newStatus,
+                    paid_in_shift_id: newStatus === 'paid_cash'
+                        ? selectedShift.id
+                        : bill.paid_in_shift_id || null
+                })
+                .eq('id', bill.id)
+                .select()
+                .single();
+            if (updateError) throw updateError;
+            updatedBill = uBill;
+
+            try {
+                await supabase.from('staff_credit_bill_payments').insert({
+                    credit_bill_id: bill.id,
+                    amount: paymentAmount,
+                    payment_method: selectedEntry.payment_method || 'cash',
+                    payment_date: new Date().toISOString().split('T')[0],
+                    reference: selectedEntry.reference || null,
+                    notes: `Applied cashier paid-credit entry ${selectedEntry.id || entryId}${notes ? `: ${notes}` : ''}`,
+                    recorded_by: (req as any).user?.id || null,
+                    shift_id: selectedShift.id
+                });
+            } catch (paymentHistoryError) {
+                logger.warn('Unable to write staff credit payment history for cashier paid-credit application', paymentHistoryError);
+            }
+
+            await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
                 paid_amount: newPaid,
-                balance: newBalance,
-                status: newStatus,
-                paid_in_shift_id: newStatus === 'paid_cash'
-                    ? selectedShift.id
-                    : bill.paid_in_shift_id || null
-            })
-            .eq('id', bill.id)
-            .select()
-            .single();
-        if (updateError) throw updateError;
+                balance_amount: newBalance,
+                status: newBalance <= 0 ? 'paid' : undefined
+            });
+        } else {
+            // General Staff Salary Credit: Record payroll adjustment for staff
+            const staffId = selectedEntry.staff_id;
+            if (staffId) {
+                try {
+                    await supabase.from('payroll_adjustments').insert({
+                        staff_id: staffId,
+                        type: 'addition',
+                        category: 'bonus',
+                        amount: paymentAmount,
+                        description: notes || `Cashier paid bill credit (Direct Salary Credit)`,
+                        month: new Date().getMonth() + 1,
+                        year: new Date().getFullYear(),
+                        status: 'approved'
+                    });
+                } catch (adjErr) {
+                    logger.warn('Unable to record payroll adjustment for unlinked paid bill', adjErr);
+                }
+            }
+        }
 
         const application = {
-            staff_credit_bill_id: bill.id,
+            staff_credit_bill_id: staff_credit_bill_id !== 'unlinked' && staff_credit_bill_id !== 'salary_credit' ? staff_credit_bill_id : null,
             amount: paymentAmount,
             applied_at: new Date().toISOString(),
             applied_by: (req as any).user?.id || null,

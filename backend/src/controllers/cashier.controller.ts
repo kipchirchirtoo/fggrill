@@ -5960,7 +5960,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 amount: totalAmount,
                 amount_paid: 0,
                 balance: totalAmount,
-                status: 'pending',
+                status: 'approved',
                 source_cashier_credit_bill_id: data.id
             })
             .select('id')
