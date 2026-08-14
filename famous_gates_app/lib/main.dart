@@ -52,11 +52,12 @@ Future<void> main() async {
         center: true,
         size: Size(1440, 900),
         minimumSize: Size(800, 580),
+        fullScreen: true,
       ),
       () async {
         await windowManager.show();
         await windowManager.focus();
-        await windowManager.maximize();
+        await windowManager.setFullScreen(true);
       },
     );
     // Intercept the OS close button so background connections (Supabase
