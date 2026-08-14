@@ -8,14 +8,26 @@ class AppConfig {
   static const String powerSyncToken = '';
   static const String mainApiBaseUrl = String.fromEnvironment(
     'MAIN_API_URL',
-    defaultValue: 'https://api.hirall.com/api',
+    defaultValue: String.fromEnvironment(
+      'NEXT_PUBLIC_API_URL',
+      defaultValue: String.fromEnvironment(
+        'API_URL',
+        defaultValue: 'http://localhost:5000/api',
+      ),
+    ),
   );
   static const String mainApiUrl = mainApiBaseUrl;
   static const String apiUrl = mainApiBaseUrl;
 
   static const String pythonServicesBaseUrl = String.fromEnvironment(
     'PYTHON_SERVICES_URL',
-    defaultValue: 'https://services.hirall.com',
+    defaultValue: String.fromEnvironment(
+      'NEXT_PUBLIC_PYTHON_API_URL',
+      defaultValue: String.fromEnvironment(
+        'PYTHON_SERVICE_URL',
+        defaultValue: 'http://localhost:5001',
+      ),
+    ),
   );
 
   static const String authBaseUrl = '$mainApiBaseUrl/auth';
