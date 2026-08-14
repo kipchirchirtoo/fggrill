@@ -737,8 +737,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
           }
         }
       }
-      selectedGuest ??= guests.isNotEmpty ? guests.first : null;
-
       setState(() {
         _eligibleRoomChargeGuests = guests;
         _selectedRoomChargeGuest = selectedGuest;
@@ -2112,7 +2110,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
       avatar: Icon(icon, size: 16),
       label: Text(label),
       onSelected: (_) {
-        setState(() => _method = value);
+        setState(() {
+          _method = value;
+          if (value == 'room_charge') {
+            _selectedRoomChargeGuest = null;
+          }
+        });
         if (value == 'credit_bill') _loadStaff();
         if (value == 'corporate_credit') _loadCorporateCustomers();
         if (value == 'room_charge') _loadEligibleRoomChargeGuests(force: true);
@@ -7033,7 +7036,7 @@ class _RoomChargeGuestSearchFieldState
       optionsBuilder: (value) {
         final q = value.text.trim().toLowerCase();
         if (q.isEmpty) return widget.guests;
-        return widget.guests.where((g) {
+        final list = widget.guests.where((g) {
           final room = '${g['room_number'] ?? ''}'.toLowerCase();
           final name = '${g['guest_name'] ?? ''}'.toLowerCase();
           final booking = '${g['confirmation_number'] ?? ''}'.toLowerCase();
@@ -7042,7 +7045,17 @@ class _RoomChargeGuestSearchFieldState
               name.contains(q) ||
               booking.contains(q) ||
               id.contains(q);
+        }).toList();
+        list.sort((a, b) {
+          final roomA = '${a['room_number'] ?? ''}'.toLowerCase();
+          final roomB = '${b['room_number'] ?? ''}'.toLowerCase();
+          final aStarts = roomA.startsWith(q);
+          final bStarts = roomB.startsWith(q);
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          return roomA.compareTo(roomB);
         });
+        return list;
       },
       onSelected: widget.onSelected,
       fieldViewBuilder: (context, controller, focusNode, onSubmit) {
