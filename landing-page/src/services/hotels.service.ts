@@ -24,6 +24,8 @@ export function formatBranchDisplayName(name: string): string {
     .replace(/^Famous\s+Gate\s+Hotel\s*[—–-]?\s*/i, '')
     .replace(/^FamousGate\s+Hotel\s*[—–-]?\s*/i, '')
     .replace(/^FamousGate\s+[—–-]?\s*/i, '')
+    .replace(/^[\(\s]+/, '')
+    .replace(/[\)\s]+$/, '')
     .trim();
 
   if (!cleanName) return 'FamousGate Hotel';
@@ -36,6 +38,7 @@ export function formatBranchDisplayName(name: string): string {
 
   return `FamousGate Hotel (${cleanName})`;
 }
+
 
 /**
  * Static fallback branches — shown instantly if API is slow or unreachable.

@@ -181,17 +181,7 @@ export default function ReviewsPage() {
       return 0;
     });
 
-  // --- Sentiment & Tag Insights ---
-  const positiveTags = ['Clean rooms', 'Friendly staff', 'Comfortable beds', 'Good food', 'Nice Wi-Fi', 'Quiet environment', 'Fast service'];
-  const negativeTags = ['Slow check-in', 'Delayed food', 'Noisy rooms', 'Cold shower', 'Poor parking', 'Slow service'];
 
-  // Count tags from actual reviews
-  const tagCounts: Record<string, number> = {};
-  filteredForStats.forEach(r => {
-    r.issuesMentioned.forEach(issue => {
-      tagCounts[issue] = (tagCounts[issue] || 0) + 1;
-    });
-  });
 
   // --- Handle Helpful Action ---
   // Backend only supports incrementing (no guest accounts to track a
@@ -286,9 +276,10 @@ export default function ReviewsPage() {
   return (
     <>
       <SEO
-        title="Guest Reviews & Sentiment Insights — FamousGate Hotels"
-        description="Read verified guest reviews, rating breakdowns, and automated sentiment analysis from FamousGate Hotel branches."
+        title="Guest Reviews — FamousGate Hotels"
+        description="Read verified guest reviews and rating breakdowns from FamousGate Hotel branches."
         url="https://famousgatehotels.com/reviews"
+
         breadcrumbs={[
           { name: "Reviews", item: "/reviews" }
         ]}
@@ -588,44 +579,7 @@ export default function ReviewsPage() {
             </div>
           )}
 
-          {/* LAYER 2: REVIEW ANALYTICS TAGS */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-4">Semantic Mentions & Trend Tracker</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <span className="block text-xs font-bold text-emerald-700 mb-2.5 flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
-                  Frequently Praised Topics
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {positiveTags.map(tag => {
-                    const count = tagCounts[tag] || 0;
-                    return (
-                      <span key={tag} className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 border border-emerald-100 text-emerald-800">
-                        {tag} <span className="ml-1.5 bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px]">{count}</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <span className="block text-xs font-bold text-amber-700 mb-2.5 flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 mr-2 animate-pulse" />
-                  Service Bottlenecks Mentioned
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {negativeTags.map(tag => {
-                    const count = tagCounts[tag] || 0;
-                    return (
-                      <span key={tag} className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-rose-50 border border-rose-100 text-rose-800">
-                        {tag} <span className="ml-1.5 bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px]">{count}</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
+
 
           {/* ===== REVIEWS GRID ===== */}
           <div className="grid grid-cols-1 gap-8">
@@ -706,41 +660,6 @@ export default function ReviewsPage() {
                       “{rev.content}”
                     </div>
 
-                    {/* LAYER 5: SMART SENTIMENT ANALYSIS (AI Feature) */}
-                    <div className="mb-6 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-indigo-100 text-indigo-800 rounded-lg">
-                          <svg className="w-5 h-5 text-indigo-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-black text-slate-400 uppercase tracking-wider">AI Sentiment:</span>
-                            <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
-                              rev.sentiment === 'Positive' ? 'bg-emerald-100 text-emerald-800' :
-                              rev.sentiment === 'Neutral' ? 'bg-amber-100 text-amber-800' :
-                              'bg-rose-100 text-rose-800'
-                            }`}>
-                              {rev.sentiment}
-                            </span>
-                            <span className="text-xs text-indigo-600 font-bold">({rev.sentimentConfidence}% confidence)</span>
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-1 items-center">
-                            <span className="text-[10px] text-slate-400 font-bold mr-1">Extracted Topics:</span>
-                            {rev.issuesMentioned.map(issue => (
-                              <span key={issue} className="text-[10px] bg-white text-slate-600 border border-slate-200 px-1.5 py-0.2 rounded font-semibold">
-                                {issue}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-slate-400 font-semibold">
-                        Stayed on: {rev.stayedOn}
-                      </div>
-                    </div>
-
                     {/* Card Footer Actions */}
                     <div className="flex items-center justify-between border-t border-slate-100 pt-5 text-xs text-slate-500 font-bold">
                       <div className="flex items-center space-x-4">
@@ -767,11 +686,18 @@ export default function ReviewsPage() {
                         </button>
                       </div>
                       <div className="flex items-center space-x-3 text-slate-400">
+                        {rev.stayedOn && (
+                          <>
+                            <span>Stayed on: {rev.stayedOn}</span>
+                            <span>•</span>
+                          </>
+                        )}
                         <span>Report 🚩</span>
                         <span>•</span>
                         <span>{rev.date}</span>
                       </div>
                     </div>
+
                   </div>
 
                   {/* LAYER 4: MANAGEMENT REPLY SYSTEM */}
