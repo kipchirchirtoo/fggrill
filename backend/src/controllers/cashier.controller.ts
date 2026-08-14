@@ -8752,9 +8752,23 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         revenueEvidence.other += creditPaymentsReceived;
     }
 
-    const rawRestaurant = logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) || logbookNumber(revenueEvidence.restaurant);
+    const isBarShift = (shift?.cashier_name || '').toLowerCase().includes('bar') ||
+                       (cashier?.role || '').toLowerCase().includes('bar') ||
+                       (logbook?.type || '').toLowerCase().includes('bar') ||
+                       (barOrders && barOrders.length > 0);
+
+    const isRestShift = (shift?.cashier_name || '').toLowerCase().includes('restaurant') ||
+                        (cashier?.role || '').toLowerCase().includes('restaurant') ||
+                        (logbook?.type || '').toLowerCase().includes('restaurant') ||
+                        (restaurantOrders && restaurantOrders.length > 0);
+
+    const isRoomsShift = (shift?.cashier_name || '').toLowerCase().includes('reception') ||
+                         (cashier?.role || '').toLowerCase().includes('reception') ||
+                         (logbook?.type || '').toLowerCase().includes('room');
+
+    let rawRestaurant = logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) || logbookNumber(revenueEvidence.restaurant);
     let rawBar = logbookNumber(breakdown.bar_revenue ?? shift?.bar_revenue) || logbookNumber(revenueEvidence.bar);
-    const rawRooms = logbookNumber(breakdown.room_booking_revenue ?? shift?.room_booking_revenue) || logbookNumber(revenueEvidence.rooms);
+    let rawRooms = logbookNumber(breakdown.room_booking_revenue ?? shift?.room_booking_revenue) || logbookNumber(revenueEvidence.rooms);
     const rawConf = logbookNumber(breakdown.conference_revenue ?? shift?.conference_revenue) || logbookNumber(revenueEvidence.conference);
     const rawPool = (
         logbookNumber(breakdown.swimming_pool_revenue ?? shift?.swimming_pool_revenue)
@@ -8762,42 +8776,36 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     ) || logbookNumber(revenueEvidence.pool);
     let rawOther = logbookNumber(breakdown.other_revenue ?? shift?.other_revenue) || logbookNumber(revenueEvidence.other);
 
-    const isBarShift = (shift?.cashier_name || '').toLowerCase().includes('bar') ||
-                       (cashier?.role || '').toLowerCase().includes('bar') ||
-                       (logbook?.type || '').toLowerCase().includes('bar') ||
-                       (barOrders && barOrders.length > 0);
-
-    if (isBarShift && rawBar === 0 && rawOther > 0) {
-        rawBar = rawOther;
-        rawOther = 0;
+    // Route any unmapped revenue away from 'other' to its true station
+    if (rawOther > 0) {
+        if (isBarShift) {
+            rawBar += rawOther;
+            rawOther = 0;
+        } else if (isRestShift) {
+            rawRestaurant += rawOther;
+            rawOther = 0;
+        } else if (isRoomsShift) {
+            rawRooms += rawOther;
+            rawOther = 0;
+        }
     }
 
-    const revenueBreakdown = [
-        {
-            label: 'Restaurant',
-            amount: rawRestaurant
-        },
-        {
-            label: 'Bar',
-            amount: rawBar
-        },
-        {
-            label: 'Rooms',
-            amount: rawRooms
-        },
-        {
-            label: 'Conference',
-            amount: rawConf
-        },
-        {
-            label: 'Pool',
-            amount: rawPool
-        },
-        {
-            label: 'Other',
-            amount: rawOther
-        }
-    ];
+    const barLabel = (shift?.cashier_name || '').toUpperCase().includes('MAIN')
+        ? 'Main Bar'
+        : (shift?.cashier_name || '').toUpperCase().includes('EXEC')
+            ? 'Executive Bar'
+            : 'Bar';
+
+    const revenueBreakdown = [];
+    if (rawRestaurant > 0) revenueBreakdown.push({ label: 'Restaurant', amount: rawRestaurant });
+    if (rawBar > 0) revenueBreakdown.push({ label: barLabel, amount: rawBar });
+    if (rawRooms > 0) revenueBreakdown.push({ label: 'Rooms', amount: rawRooms });
+    if (rawConf > 0) revenueBreakdown.push({ label: 'Conference', amount: rawConf });
+    if (rawPool > 0) revenueBreakdown.push({ label: 'Swimming Pool', amount: rawPool });
+    if (creditPaymentsReceived > 0) revenueBreakdown.push({ label: 'Credit Bill Settlements', amount: creditPaymentsReceived });
+    if (revenueBreakdown.length === 0 && rawOther > 0) {
+        revenueBreakdown.push({ label: `${cashierName || 'POS'} Sales`, amount: rawOther });
+    }
 
     const paymentBreakdown = Object.entries(payments)
         .filter(([method, amount]) => amount > 0 || ['cash', 'mpesa', 'card', 'credit_bill'].includes(method))

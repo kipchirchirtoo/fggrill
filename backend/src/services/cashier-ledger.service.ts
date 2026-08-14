@@ -160,7 +160,7 @@ export const calculateCashierShiftLedgerTotals = async (
             else if (isDefaultBarShift) activeRevenueType = 'BAR';
             else if (isDefaultRestaurantShift) activeRevenueType = 'RESTAURANT';
             else if (isDefaultRoomsShift) activeRevenueType = 'ROOM';
-            else activeRevenueType = 'OTHER';
+            else activeRevenueType = 'BAR'; // Default POS outlet fallback to BAR/RESTAURANT instead of OTHER
         }
 
         // Aggregate Revenue Streams (double entry mapping)

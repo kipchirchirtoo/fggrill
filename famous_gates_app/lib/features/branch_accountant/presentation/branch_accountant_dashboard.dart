@@ -6678,7 +6678,7 @@ List<Map<String, dynamic>> _shiftPaymentRows(Map<String, dynamic> shift) {
 
 List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
   final rows = _list(shift['revenue_breakdown'])
-      .where((row) => _num(row['amount']) > 0)
+      .where((row) => _num(row['amount']) > 0 && '${row['label']}'.trim().toLowerCase() != 'other')
       .toList();
   if (rows.isNotEmpty) return rows;
 
@@ -6686,14 +6686,23 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
   if (lines.isNotEmpty) {
     final Map<String, Map<String, dynamic>> aggregated = {};
     for (final line in lines) {
-      final source = '${line['source_table'] ?? ''}'.toLowerCase().trim();
-      String label = 'Other';
+      final source = '${line['source_table'] ?? line['source'] ?? ''}'.toLowerCase().trim();
+      final cashierName = '${shift['cashier_name'] ?? ''}'.toUpperCase();
+      String label = cashierName.contains('MAIN BAR')
+          ? 'Main Bar'
+          : cashierName.contains('EXEC')
+              ? 'Executive Bar'
+              : cashierName.contains('BAR')
+                  ? 'Bar'
+                  : 'Restaurant';
       if (source.contains('restaurant')) {
         label = 'Restaurant';
       } else if (source.contains('bar')) {
-        label = 'Bar';
+        label = cashierName.contains('MAIN') ? 'Main Bar' : cashierName.contains('EXEC') ? 'Executive Bar' : 'Bar';
       } else if (source.contains('room')) {
         label = 'Rooms';
+      } else if (source.contains('credit')) {
+        label = 'Credit Bill Settlements';
       }
       final amount =
           _num(line['amount'] ?? line['total_amount'] ?? line['total']);
@@ -6708,11 +6717,15 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
     }
   }
 
+  final cashierName = '${shift['cashier_name'] ?? ''}'.toUpperCase();
+  final isBar = cashierName.contains('BAR');
+  final isRest = cashierName.contains('RESTAURANT');
+  final barLabel = cashierName.contains('MAIN') ? 'Main Bar' : cashierName.contains('EXEC') ? 'Executive Bar' : 'Bar';
+
   return [
-    {'label': 'Restaurant', 'amount': _restaurantRevenue(shift)},
-    {'label': 'Bar', 'amount': _barRevenue(shift)},
+    {'label': 'Restaurant', 'amount': _restaurantRevenue(shift) > 0 ? _restaurantRevenue(shift) : (isRest ? _otherRevenue(shift) : 0.0)},
+    {'label': barLabel, 'amount': _barRevenue(shift) > 0 ? _barRevenue(shift) : (isBar ? _otherRevenue(shift) : 0.0)},
     {'label': 'Rooms', 'amount': _roomRevenue(shift)},
-    {'label': 'Other', 'amount': _otherRevenue(shift)},
   ].where((row) => _num(row['amount']) > 0).toList();
 }
 
