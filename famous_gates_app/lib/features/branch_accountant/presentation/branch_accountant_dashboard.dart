@@ -6962,14 +6962,14 @@ num _otherSales(Map<String, dynamic> shift) {
 
 num _shiftTotalSales(Map<String, dynamic> shift) {
   final summary = _map(shift['summary']);
+  final fromSummary = _num(summary['total_sales']);
+  if (fromSummary != 0) return fromSummary;
   final breakdown = _shiftSalesBreakdown(shift);
+  final fromBreakdown = _num(breakdown['total_sales']);
+  if (fromBreakdown != 0) return fromBreakdown;
   final direct =
       _firstNumFrom(shift, ['total_sales', 'total_revenue', 'sales']);
   if (direct != 0) return direct;
-  final fromSummary = _num(summary['total_sales']);
-  if (fromSummary != 0) return fromSummary;
-  final fromBreakdown = _num(breakdown['total_sales']);
-  if (fromBreakdown != 0) return fromBreakdown;
   return _shiftPaymentRows(shift).fold<num>(
     0,
     (sum, row) => sum + _num(row['amount']),
