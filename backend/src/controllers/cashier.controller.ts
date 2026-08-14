@@ -8668,14 +8668,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
 
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
 
-    const hasStoredExpected = shift != null && shift.expected_closing_float !== undefined && shift.expected_closing_float !== null;
-    const hasStoredVariance = shift != null && shift.variance !== undefined && shift.variance !== null;
-    const expectedCash = hasStoredExpected
-        ? logbookNumber(shift.expected_closing_float)
-        : (openingFloat + totalCash + creditPaymentsReceived - payouts);
-    const variance = hasStoredVariance
-        ? logbookNumber(shift.variance)
-        : (closingFloat - expectedCash);
+    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - payouts;
+    const variance = closingFloat - expectedCash;
 
     const inferRevenueBucket = (line: any): string => {
         const ref = String(line.transaction_ref || line.reference || line.receipt_number || '').toUpperCase();
@@ -8875,22 +8869,27 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             // Cash SALES the cashier holds = counted drawer − opening float
             // + cash payouts − credit payments received in cash. This keeps
             // (cashier − system) === (counted drawer − expected drawer).
-            cashierLogged = countedDrawer - openingFloat + payouts - creditPaymentsReceived;
+            cashierLogged = countedDrawer;
+            calcVariance = countedDrawer - expectedCash;
         } else if (method === 'mpesa') {
             cashierLogged = (row.actual_amount !== undefined && row.actual_amount !== null)
                 ? logbookNumber(row.actual_amount)
                 : logbookNumber(shift?.actual_mpesa_logged ?? logbook.total_mpesa ?? sysExpected);
+            calcVariance = cashierLogged - sysExpected;
         } else {
             cashierLogged = (row.actual_amount !== undefined && row.actual_amount !== null)
                 ? logbookNumber(row.actual_amount)
                 : logbookNumber(shift?.actual_card_logged ?? logbook.total_swipe ?? sysExpected);
+            calcVariance = cashierLogged - sysExpected;
         }
-
-        const calcVariance = cashierLogged - sysExpected;
 
         return {
             system_expected: sysExpected,
+            opening_float: method === 'cash' ? openingFloat : 0,
+            expenses: method === 'cash' ? payouts : 0,
+            expected_drawer: method === 'cash' ? expectedCash : sysExpected,
             cashier_logged: cashierLogged,
+            actual_counted: cashierLogged,
             variance: calcVariance,
             reference: logbookText(row.entry_reference)
         };
