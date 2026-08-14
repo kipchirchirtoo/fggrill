@@ -56,7 +56,7 @@ Future<void> main() async {
       () async {
         await windowManager.show();
         await windowManager.focus();
-        await windowManager.setFullScreen(true);
+        await windowManager.maximize();
       },
     );
     // Intercept the OS close button so background connections (Supabase
