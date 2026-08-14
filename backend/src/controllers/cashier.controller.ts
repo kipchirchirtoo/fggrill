@@ -8752,33 +8752,50 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         revenueEvidence.other += creditPaymentsReceived;
     }
 
+    const rawRestaurant = logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) || logbookNumber(revenueEvidence.restaurant);
+    let rawBar = logbookNumber(breakdown.bar_revenue ?? shift?.bar_revenue) || logbookNumber(revenueEvidence.bar);
+    const rawRooms = logbookNumber(breakdown.room_booking_revenue ?? shift?.room_booking_revenue) || logbookNumber(revenueEvidence.rooms);
+    const rawConf = logbookNumber(breakdown.conference_revenue ?? shift?.conference_revenue) || logbookNumber(revenueEvidence.conference);
+    const rawPool = (
+        logbookNumber(breakdown.swimming_pool_revenue ?? shift?.swimming_pool_revenue)
+        + logbookNumber(breakdown.pool_token_revenue ?? shift?.pool_token_revenue)
+    ) || logbookNumber(revenueEvidence.pool);
+    let rawOther = logbookNumber(breakdown.other_revenue ?? shift?.other_revenue) || logbookNumber(revenueEvidence.other);
+
+    const isBarShift = (shift?.cashier_name || '').toLowerCase().includes('bar') ||
+                       (cashier?.role || '').toLowerCase().includes('bar') ||
+                       (logbook?.type || '').toLowerCase().includes('bar') ||
+                       (barOrders && barOrders.length > 0);
+
+    if (isBarShift && rawBar === 0 && rawOther > 0) {
+        rawBar = rawOther;
+        rawOther = 0;
+    }
+
     const revenueBreakdown = [
         {
             label: 'Restaurant',
-            amount: logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) || logbookNumber(revenueEvidence.restaurant)
+            amount: rawRestaurant
         },
         {
             label: 'Bar',
-            amount: logbookNumber(breakdown.bar_revenue ?? shift?.bar_revenue) || logbookNumber(revenueEvidence.bar)
+            amount: rawBar
         },
         {
             label: 'Rooms',
-            amount: logbookNumber(breakdown.room_booking_revenue ?? shift?.room_booking_revenue) || logbookNumber(revenueEvidence.rooms)
+            amount: rawRooms
         },
         {
             label: 'Conference',
-            amount: logbookNumber(breakdown.conference_revenue ?? shift?.conference_revenue) || logbookNumber(revenueEvidence.conference)
+            amount: rawConf
         },
         {
             label: 'Pool',
-            amount: (
-                logbookNumber(breakdown.swimming_pool_revenue ?? shift?.swimming_pool_revenue)
-                + logbookNumber(breakdown.pool_token_revenue ?? shift?.pool_token_revenue)
-            ) || logbookNumber(revenueEvidence.pool)
+            amount: rawPool
         },
         {
             label: 'Other',
-            amount: logbookNumber(breakdown.other_revenue ?? shift?.other_revenue) || logbookNumber(revenueEvidence.other)
+            amount: rawOther
         }
     ];
 
