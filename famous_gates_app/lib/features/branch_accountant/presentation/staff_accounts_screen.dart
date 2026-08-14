@@ -64,6 +64,23 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   // apply them against an actual credit bill and shrink its balance.
   List<Map<String, dynamic>> _paidCreditEntries = [];
 
+  Timer? _searchTimer;
+  int _page = 1;
+  static const int _pageSize = 50;
+
+  Map<String, Map<String, dynamic>> _staffIndexMap = {};
+
+  void _buildStaffIndex() {
+    final map = <String, Map<String, dynamic>>{};
+    for (final s in _staffList) {
+      for (final idKey in ['id', 'staff_id', 'user_id', 'employee_id', 'employee_number', 'national_id']) {
+        final id = _t(s, [idKey]);
+        if (id.isNotEmpty) map[id] = s;
+      }
+    }
+    _staffIndexMap = map;
+  }
+
   BranchAccountantRepository get _repo =>
       ref.read(branchAccountantRepositoryProvider);
 
@@ -71,6 +88,12 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -99,6 +122,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _loans = List<Map<String, dynamic>>.from(res[2]);
         _staffList = List<Map<String, dynamic>>.from(res[3]);
         _paidCreditEntries = List<Map<String, dynamic>>.from(res[4]);
+        _buildStaffIndex();
+        _page = 1;
         _loading = false;
       });
     } catch (error) {
@@ -207,16 +232,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     return 'Staff';
   }
 
-  Map<String, Map<String, dynamic>> get _staffIndex {
-    final map = <String, Map<String, dynamic>>{};
-    for (final s in _staffList) {
-      for (final idKey in ['id', 'staff_id', 'user_id', 'employee_id', 'employee_number', 'national_id']) {
-        final id = _t(s, [idKey]);
-        if (id.isNotEmpty) map[id] = s;
-      }
-    }
-    return map;
-  }
+  Map<String, Map<String, dynamic>> get _staffIndex => _staffIndexMap;
 
   bool _statusMatch(String status) {
     final s = status.toLowerCase();
@@ -455,13 +471,13 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             'approved': 'Approved',
             'settled': 'Settled',
             'cancelled': 'Cancelled',
-          }, (v) => setState(() => _status = v)),
+          }, (v) => setState(() { _status = v; _page = 1; })),
           const SizedBox(width: 14),
           _fieldLabel('Staff'),
           _dropdown(_staff, {
             'all': 'All Staff',
             for (final e in staffNames.entries) e.key: e.value,
-          }, (v) => setState(() => _staff = v)),
+          }, (v) => setState(() { _staff = v; _page = 1; })),
           const SizedBox(width: 14),
           SizedBox(
             width: 220,
@@ -475,7 +491,17 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                 contentPadding: EdgeInsets.symmetric(horizontal: 8),
               ),
               style: const TextStyle(fontSize: 12),
-              onChanged: (v) => setState(() => _query = v),
+              onChanged: (v) {
+                _searchTimer?.cancel();
+                _searchTimer = Timer(const Duration(milliseconds: 250), () {
+                  if (mounted) {
+                    setState(() {
+                      _query = v;
+                      _page = 1;
+                    });
+                  }
+                });
+              },
             ),
           ),
           const SizedBox(width: 14),
@@ -661,7 +687,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   Widget _tab2(String id, String label, IconData icon, {int badge = 0}) {
     final selected = _tab == id;
     return InkWell(
-      onTap: () => setState(() => _tab = id),
+      onTap: () => setState(() { _tab = id; _page = 1; }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
@@ -1194,32 +1220,83 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             style: const TextStyle(color: _muted, fontSize: 13)),
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      padding: const EdgeInsets.all(10),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: const WidgetStatePropertyAll(_gridHead),
-          headingRowHeight: 34,
-          dataRowMinHeight: 34,
-          dataRowMaxHeight: 46,
-          columnSpacing: 22,
-          horizontalMargin: 12,
-          headingTextStyle: const TextStyle(
-              fontWeight: FontWeight.w800, fontSize: 11.5, color: _text),
-          border: TableBorder.all(color: _border, width: 0.6),
-          columns: cols.map((c) => DataColumn(label: Text(c))).toList(),
-          rows: [
-            for (var i = 0; i < rows.length; i++)
-              DataRow(
-                color: WidgetStatePropertyAll(
-                    i.isEven ? Colors.white : _rowAlt),
-                cells: rows[i].map((w) => DataCell(w)).toList(),
+
+    final totalCount = rows.length;
+    final totalPages = (totalCount / _pageSize).ceil();
+    final currentPage = _page.clamp(1, totalPages);
+    final startIndex = (currentPage - 1) * _pageSize;
+    final endIndex = (startIndex + _pageSize < totalCount)
+        ? startIndex + _pageSize
+        : totalCount;
+    final pageRows = (totalCount > _pageSize)
+        ? rows.sublist(startIndex < totalCount ? startIndex : 0, endIndex)
+        : rows;
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            padding: const EdgeInsets.all(10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: const WidgetStatePropertyAll(_gridHead),
+                headingRowHeight: 34,
+                dataRowMinHeight: 34,
+                dataRowMaxHeight: 46,
+                columnSpacing: 22,
+                horizontalMargin: 12,
+                headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 11.5, color: _text),
+                border: TableBorder.all(color: _border, width: 0.6),
+                columns: cols.map((c) => DataColumn(label: Text(c))).toList(),
+                rows: [
+                  for (var i = 0; i < pageRows.length; i++)
+                    DataRow(
+                      color: WidgetStatePropertyAll(
+                          i.isEven ? Colors.white : _rowAlt),
+                      cells: pageRows[i].map((w) => DataCell(w)).toList(),
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
-      ),
+        if (totalCount > _pageSize)
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: _border, width: 0.6)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  'Showing ${startIndex + 1}–$endIndex of $totalCount records',
+                  style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, size: 20),
+                  onPressed: currentPage > 1
+                      ? () => setState(() => _page = currentPage - 1)
+                      : null,
+                ),
+                Text(
+                  'Page $currentPage of $totalPages',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _text),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, size: 20),
+                  onPressed: currentPage < totalPages
+                      ? () => setState(() => _page = currentPage + 1)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
