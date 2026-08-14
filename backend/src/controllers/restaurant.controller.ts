@@ -157,15 +157,20 @@ export const getMenuItems = async (
     }
 
     const { data: items, error } = await query
-      .order('sort_order', {
-        ascending: true,
-        referencedTable: 'category',
-      })
       .order('name', { ascending: true })
       .limit(limit);
 
     if (error) {
       throw error;
+    }
+
+    if (items) {
+      items.sort((a: any, b: any) => {
+        const sortA = a.category?.sort_order ?? 999;
+        const sortB = b.category?.sort_order ?? 999;
+        if (sortA !== sortB) return sortA - sortB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
     }
 
     res.status(200).json({
