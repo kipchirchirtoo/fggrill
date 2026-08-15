@@ -59,11 +59,11 @@ class AlertsService {
     try {
       // Get low stock items from central warehouse
       const centralQuery = `
-        SELECT 
-          i.sku, 
-          i.name, 
-          i.category, 
-          i.central_stock as current_stock, 
+        SELECT
+          i.sku,
+          i.item_name AS name,
+          i.category,
+          i.central_stock as current_stock,
           i.reorder_level
         FROM inventory_items i
         WHERE i.central_stock <= i.reorder_level
@@ -71,9 +71,9 @@ class AlertsService {
 
       // Get low stock items from branches
       const branchQuery = `
-        SELECT 
-          i.sku, 
-          i.name, 
+        SELECT
+          i.sku,
+          i.item_name AS name, 
           i.category, 
           bs.quantity as current_stock, 
           i.reorder_level,

@@ -55,7 +55,34 @@ const toNumber = (value: unknown): number => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const openCreditStatuses = ['pending', 'accountant_confirmed', 'auditor_confirmed'];
+const openCreditStatuses = ['pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed'];
+
+// The `credit_bills` table (the "cashier" side of a linked bill) is a lean
+// table — it does NOT carry every field `staff_credit_bills` does (no
+// balance/description/bill_date/department/paid_amount/approval_status
+// columns). Callers here build payloads shaped for `staff_credit_bills` and
+// forward them wholesale; without this allow-list, any of those
+// staff-only fields reaching `credit_bills.update()` throws Postgres 42703
+// ("column does not exist") and silently no-ops (see catch below) — this
+// was firing continuously in production for `department` specifically via
+// editCreditBill(). Only forward columns that actually exist on
+// `credit_bills`.
+const CREDIT_BILLS_COLUMNS = new Set([
+    'amount', 'reason', 'status',
+    'accountant_confirmed_at', 'accountant_id',
+    'auditor_confirmed_at', 'auditor_id'
+]);
+
+// credit_bills.status has a CHECK constraint allowing only
+// pending/confirmed/paid/cancelled. staff_credit_bills uses a wider set
+// (e.g. 'voided') — map those onto the closest valid credit_bills value
+// instead of letting the update fail with a 23514 constraint violation.
+const CREDIT_BILLS_STATUS_MAP: Record<string, string> = {
+    voided: 'cancelled',
+    rejected: 'cancelled',
+    accountant_confirmed: 'confirmed',
+    auditor_confirmed: 'confirmed'
+};
 
 async function syncLinkedCashierCreditBill(
     sourceCashierCreditBillId: string | null | undefined,
@@ -63,14 +90,25 @@ async function syncLinkedCashierCreditBill(
 ) {
     if (!sourceCashierCreditBillId) return;
     const cleaned = Object.fromEntries(
-        Object.entries(payload).filter(([, value]) => value !== undefined)
+        Object.entries(payload).filter(
+            ([key, value]) => value !== undefined && CREDIT_BILLS_COLUMNS.has(key)
+        )
     );
+    if (typeof cleaned.status === 'string' && CREDIT_BILLS_STATUS_MAP[cleaned.status]) {
+        cleaned.status = CREDIT_BILLS_STATUS_MAP[cleaned.status];
+    }
     if (!Object.keys(cleaned).length) return;
     try {
-        await supabase
+        const { error } = await supabase
             .from('credit_bills')
             .update(cleaned)
             .eq('id', sourceCashierCreditBillId);
+        if (error) {
+            logger.warn('Unable to sync linked cashier credit bill', {
+                sourceCashierCreditBillId,
+                error
+            });
+        }
     } catch (error) {
         logger.warn('Unable to sync linked cashier credit bill', {
             sourceCashierCreditBillId,
@@ -613,27 +651,14 @@ export const getCashierPaidCreditEntries = async (req: Request, res: Response, n
                 if (status === 'all') return true;
                 if (status === 'pending') return entry.remaining_amount > 0;
                 if (status === 'applied') return entry.remaining_amount <= 0;
-const openCreditStatuses = ['pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed'];
+                return String(entry.review_status).toLowerCase() === status;
+            });
 
-async function syncLinkedCashierCreditBill(
-    sourceCashierCreditBillId: string | null | undefined,
-    updates: { paid_amount: number; balance_amount: number; status?: string }
-) {
-    if (!sourceCashierCreditBillId) return;
-    try {
-        const payload: any = {
-            amount_paid: updates.paid_amount,
-            balance_due: updates.balance_amount
-        };
-        if (updates.status) payload.status = updates.status;
-        await supabase
-            .from('credit_bills')
-            .update(payload)
-            .eq('id', sourceCashierCreditBillId);
-    } catch (err) {
-        logger.warn('Failed to sync linked cashier credit bill', err);
+        res.status(200).json({ success: true, data: rows });
+    } catch (error) {
+        next(error);
     }
-}
+};
 
 export const applyCashierPaidCreditEntry = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -697,11 +722,12 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
         }
 
         let updatedBill: any = null;
-        const isLinkedBill = staff_credit_bill_id &&
-            staff_credit_bill_id !== 'unlinked' &&
-            staff_credit_bill_id !== 'salary_credit';
+        const isAutoAllocate = !staff_credit_bill_id ||
+            staff_credit_bill_id === 'auto' ||
+            staff_credit_bill_id === 'unlinked' ||
+            staff_credit_bill_id === 'salary_credit';
 
-        if (isLinkedBill) {
+        if (!isAutoAllocate) {
             const { data: bill, error: billError } = await supabase
                 .from('staff_credit_bills')
                 .select('*')
@@ -713,15 +739,18 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             }
             if (!openCreditStatuses.includes(String(bill.status))) {
                 throw new AppError('Selected credit bill is not open for payment application', 400);
+            }
+
             const currentPaid = toNumber(bill.paid_amount);
             const billAmount = toNumber(bill.amount);
             const currentBalance = bill.balance !== null && bill.balance !== undefined
                 ? toNumber(bill.balance)
                 : Math.max(0, billAmount - currentPaid);
 
-            const newPaid = Math.min(billAmount, currentPaid + paymentAmount);
-            const newBalance = Math.max(0, currentBalance - paymentAmount);
-            const newStatus = newBalance <= 0 ? 'paid_cash' : bill.status;
+            const appliedToThisBill = Math.min(currentBalance, paymentAmount);
+            const newPaid = Math.min(billAmount, currentPaid + appliedToThisBill);
+            const newBalance = Math.max(0, currentBalance - appliedToThisBill);
+            const newStatus = newBalance <= 0 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
 
             const { data: uBill, error: updateError } = await supabase
                 .from('staff_credit_bills')
@@ -729,7 +758,7 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
                     paid_amount: newPaid,
                     balance: newBalance,
                     status: newStatus,
-                    paid_in_shift_id: newStatus === 'paid_cash'
+                    paid_in_shift_id: newBalance <= 0
                         ? selectedShift.id
                         : bill.paid_in_shift_id || null
                 })
@@ -742,7 +771,7 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             try {
                 await supabase.from('staff_credit_bill_payments').insert({
                     credit_bill_id: bill.id,
-                    amount: paymentAmount,
+                    amount: appliedToThisBill,
                     payment_method: selectedEntry.payment_method || 'cash',
                     payment_date: new Date().toISOString().split('T')[0],
                     reference: selectedEntry.reference || null,
@@ -760,28 +789,22 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
                 status: newBalance <= 0 ? 'paid' : undefined
             });
         } else {
-            // General Staff Salary Credit: Record payroll adjustment for staff
             const staffId = selectedEntry.staff_id;
             if (staffId) {
-                try {
-                    await supabase.from('payroll_adjustments').insert({
-                        staff_id: staffId,
-                        type: 'addition',
-                        category: 'bonus',
-                        amount: paymentAmount,
-                        description: notes || `Cashier paid bill credit (Direct Salary Credit)`,
-                        month: new Date().getMonth() + 1,
-                        year: new Date().getFullYear(),
-                        status: 'approved'
-                    });
-                } catch (adjErr) {
-                    logger.warn('Unable to record payroll adjustment for unlinked paid bill', adjErr);
-                }
+                await allocateStaffCreditPayment(
+                    String(staffId),
+                    selectedShift.branch_id || null,
+                    paymentAmount,
+                    selectedEntry.payment_method || 'cash',
+                    (req as any).user?.id || null,
+                    notes || `Cashier paid bill credit`,
+                    selectedShift.id
+                );
             }
         }
 
         const application = {
-            staff_credit_bill_id: staff_credit_bill_id !== 'unlinked' && staff_credit_bill_id !== 'salary_credit' ? staff_credit_bill_id : null,
+            staff_credit_bill_id: !isAutoAllocate ? staff_credit_bill_id : null,
             amount: paymentAmount,
             applied_at: new Date().toISOString(),
             applied_by: (req as any).user?.id || null,
@@ -812,32 +835,11 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             .eq('id', selectedShift.id);
         if (shiftUpdateError) throw shiftUpdateError;
 
-        try {
-            await supabase.from('staff_credit_bill_payments').insert({
-                credit_bill_id: bill.id,
-                amount: paymentAmount,
-                payment_method: selectedEntry.payment_method || 'cash',
-                payment_date: new Date().toISOString().split('T')[0],
-                reference: selectedEntry.reference || null,
-                notes: `Applied cashier paid-credit entry ${selectedEntry.id || entryId}${notes ? `: ${notes}` : ''}`,
-                recorded_by: (req as any).user?.id || null,
-                shift_id: selectedShift.id
-            });
-        } catch (paymentHistoryError) {
-            logger.warn('Unable to write staff credit payment history for cashier paid-credit application', paymentHistoryError);
-        }
-
-        await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
-            paid_amount: newPaid,
-            balance_amount: newBalance,
-            status: newBalance <= 0 ? 'paid' : undefined
-        });
-
         res.status(200).json({
             success: true,
-            message: newBalance <= 0
+            message: !isAutoAllocate && updatedBill?.balance <= 0
                 ? 'Credit bill fully cleared from cashier paid-credit entry'
-                : 'Partial credit payment applied',
+                : 'Payment entry approved and recorded',
             data: {
                 bill: updatedBill,
                 entry: {
@@ -856,7 +858,6 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
 
 // @desc    Get payment history for a credit bill
 // @route   GET /api/payroll/credit-bills/:id/payments
-// @access  Private
 export const getCreditBillPayments = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
@@ -1395,6 +1396,127 @@ export const editCreditBill = async (req: Request, res: Response, next: NextFunc
             success: true,
             message: 'Credit bill updated successfully',
             data: updatedBill
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const allocateStaffCreditPayment = async (
+    staffId: string,
+    branchId: number | string | null,
+    amount: number,
+    paymentMethod: string = 'cash',
+    recordedBy: string | null = null,
+    notes: string | null = null,
+    shiftId: string | null = null,
+    reference: string | null = null
+) => {
+    let remainingToApply = amount;
+    const appliedBills: any[] = [];
+
+    let query = supabase
+        .from('staff_credit_bills')
+        .select('*')
+        .eq('staff_id', staffId)
+        .in('status', ['pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed', 'partial', 'partially_applied'])
+        .order('created_at', { ascending: true });
+
+    if (branchId) {
+        query = query.eq('branch_id', branchId);
+    }
+
+    const { data: openBills } = await query;
+
+    for (const bill of openBills || []) {
+        if (remainingToApply <= 0.001) break;
+
+        const billAmount = toNumber(bill.amount);
+        const currentPaid = toNumber(bill.paid_amount);
+        const currentBalance = bill.balance !== null && bill.balance !== undefined
+            ? toNumber(bill.balance)
+            : Math.max(0, billAmount - currentPaid);
+
+        if (currentBalance <= 0) continue;
+
+        const applyAmt = Math.min(currentBalance, remainingToApply);
+        const newPaid = Math.min(billAmount, currentPaid + applyAmt);
+        const newBalance = Math.max(0, currentBalance - applyAmt);
+        const newStatus = newBalance <= 0.001 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
+
+        const { data: uBill } = await supabase
+            .from('staff_credit_bills')
+            .update({
+                paid_amount: newPaid,
+                balance: newBalance,
+                status: newStatus,
+                paid_in_shift_id: newBalance <= 0.001 ? shiftId : (bill.paid_in_shift_id || null)
+            })
+            .eq('id', bill.id)
+            .select()
+            .single();
+
+        try {
+            await supabase.from('staff_credit_bill_payments').insert({
+                credit_bill_id: bill.id,
+                amount: applyAmt,
+                payment_method: paymentMethod,
+                payment_date: new Date().toISOString().split('T')[0],
+                reference: reference || null,
+                notes: notes || (reference ? `Direct paid-bill settlement (${reference})` : `Direct paid-bill credit settlement`),
+                recorded_by: recordedBy,
+                shift_id: shiftId
+            });
+        } catch (_) {}
+
+        await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
+            paid_amount: newPaid,
+            balance_amount: newBalance,
+            status: newBalance <= 0.001 ? 'paid' : undefined
+        });
+
+        appliedBills.push(uBill || bill);
+        remainingToApply -= applyAmt;
+    }
+
+    return {
+        appliedBills,
+        remainingUnapplied: Math.max(0, remainingToApply)
+    };
+};
+
+export const recordPaidBillByStaff = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { staff_id, amount, payment_method, reference, reference_code, notes } = req.body;
+        const paymentAmount = toNumber(amount);
+        const refCode = String(reference || reference_code || '').trim();
+
+        if (!staff_id) throw new AppError('Staff member is required', 400);
+        if (!paymentAmount || paymentAmount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
+
+        const method = String(payment_method || 'cash').toLowerCase();
+        if (['mpesa', 'card'].includes(method) && !refCode) {
+            throw new AppError(`Reference code is required for ${method === 'mpesa' ? 'M-Pesa' : 'Card'} payments`, 400);
+        }
+
+        const branchId = (req as any).user?.branch_id || req.query.branch_id || null;
+        const recordedBy = (req as any).user?.id || null;
+
+        const result = await allocateStaffCreditPayment(
+            String(staff_id),
+            branchId,
+            paymentAmount,
+            method,
+            recordedBy,
+            notes || (refCode ? `Direct paid bill payment (${refCode})` : 'Direct paid bill payment'),
+            null,
+            refCode || null
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Recorded payment of KES ${paymentAmount.toLocaleString()} to staff credit account`,
+            data: result
         });
     } catch (error) {
         next(error);
