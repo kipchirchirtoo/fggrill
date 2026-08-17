@@ -91,7 +91,15 @@ const shouldIncludeRestaurantOrders = (scope: KitchenOutletScope): boolean =>
 const matchesKitchenOutletScope = (
   outletType: unknown,
   scope: KitchenOutletScope,
-): boolean => String(outletType || '').trim().toLowerCase() === scope;
+): boolean => {
+  const type = String(outletType || '').trim().toLowerCase();
+  if (scope === 'choma_zone') {
+    return type === 'choma_zone';
+  }
+  // For 'restaurant' KDS: include restaurant and all bar outlets (main_bar, executive_bar, sports_bar, etc.)
+  // because waiters at bar stations place and recall food orders from the restaurant kitchen.
+  return type !== 'choma_zone';
+};
 
 const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
@@ -126,10 +134,14 @@ const isKitchenVisiblePosOrder = (order: any, isRestaurantShift: boolean = true)
 
   if (!isRestaurantShift && !hasRecalledItem && kitchenStatus !== 'recalled') {
     const hasFoodItems = items.some((item: any) => {
+      const itemGroup = String(item?.item_group || '').toLowerCase();
+      if (['kitchen', 'restaurant', 'food', 'choma', 'pastry'].includes(itemGroup)) return true;
+      const outletType = String(item?.outlet_type || '').toLowerCase();
+      if (['restaurant', 'choma_zone', 'kitchen'].includes(outletType)) return true;
       const name = String(item?.name || item?.item_name || '').toLowerCase();
       const category = String(item?.category || item?.department || '').toLowerCase();
-      return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') ||
-             name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali');
+      return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') || category.includes('snack') || category.includes('accompaniment') || category.includes('breakfast') || category.includes('meal') || category.includes('pastr') || category.includes('hot beverage') ||
+             name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali') || name.includes('samosa') || name.includes('mandazi') || name.includes('chapati') || name.includes('sausage') || name.includes('egg') || name.includes('burger') || name.includes('sandwich');
     });
     if (!hasFoodItems) return false;
   }
@@ -597,10 +609,17 @@ router.get('/kitchen/orders',
             return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
           })
           .map((shift: any) => shift.id);
-        // restaurantShiftSet keeps the same semantics as before (used to drive
-        // the food-category heuristic inside isKitchenVisiblePosOrder), but now
-        // equals scopedShiftIds when outletScope === 'restaurant'.
-        const restaurantShiftSet = new Set(outletScope === 'restaurant' ? scopedShiftIds : []);
+        // restaurantShiftSet identifies genuine restaurant shifts so that bar shifts
+        // (which are included in scopedShiftIds) run the food-category & recall filter
+        // inside isKitchenVisiblePosOrder and don't flood KDS with pure drink tickets.
+        const restaurantShiftSet = new Set(
+          (outletShifts || [])
+            .filter((shift: any) => {
+              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+              return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
+            })
+            .map((shift: any) => shift.id)
+        );
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
         if (scopedShiftIds.length) {
