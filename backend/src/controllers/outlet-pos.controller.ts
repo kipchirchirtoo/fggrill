@@ -4355,12 +4355,7 @@ const matchesKitchenOutletScope = (
   outletScope: KitchenOutletScope,
 ): boolean => {
   if (!outletScope) return true;
-  const type = String(outletType || '').trim().toLowerCase();
-  if (outletScope === 'choma_zone') {
-    return type === 'choma_zone';
-  }
-  // 'restaurant' kitchen scope includes restaurant and bar stations (main_bar, executive_bar, sports_bar, etc.)
-  return type !== 'choma_zone';
+  return String(outletType || '').trim().toLowerCase() === outletScope;
 };
 
 const filterRowsByKitchenOutletScope = async <

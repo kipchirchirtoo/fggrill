@@ -91,15 +91,7 @@ const shouldIncludeRestaurantOrders = (scope: KitchenOutletScope): boolean =>
 const matchesKitchenOutletScope = (
   outletType: unknown,
   scope: KitchenOutletScope,
-): boolean => {
-  const type = String(outletType || '').trim().toLowerCase();
-  if (scope === 'choma_zone') {
-    return type === 'choma_zone';
-  }
-  // For 'restaurant' KDS: include restaurant and all bar outlets (main_bar, executive_bar, sports_bar, etc.)
-  // because waiters at bar stations place and recall food orders from the restaurant kitchen.
-  return type !== 'choma_zone';
-};
+): boolean => String(outletType || '').trim().toLowerCase() === scope;
 
 const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
@@ -609,17 +601,7 @@ router.get('/kitchen/orders',
             return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
           })
           .map((shift: any) => shift.id);
-        // restaurantShiftSet identifies genuine restaurant shifts so that bar shifts
-        // (which are included in scopedShiftIds) run the food-category & recall filter
-        // inside isKitchenVisiblePosOrder and don't flood KDS with pure drink tickets.
-        const restaurantShiftSet = new Set(
-          (outletShifts || [])
-            .filter((shift: any) => {
-              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-              return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
-            })
-            .map((shift: any) => shift.id)
-        );
+        const restaurantShiftSet = new Set(outletScope === 'restaurant' ? scopedShiftIds : []);
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
         if (scopedShiftIds.length) {
