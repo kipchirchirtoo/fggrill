@@ -8862,6 +8862,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         const sysExpected = salesForMethod;
 
         let cashierLogged: number;
+        let calcVariance: number;
         if (method === 'cash') {
             const countedDrawer = (row.actual_amount !== undefined && row.actual_amount !== null)
                 ? logbookNumber(row.actual_amount)

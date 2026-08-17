@@ -1084,21 +1084,47 @@ export async function getRequests(
       .in('id', requestingBranchIds)
     : { data: [] as any[] };
 
+  // Helper for batch-fetching stock request items without hitting 1000-row limit
+  const fetchStockRequestItemsChunked = async (rIds: string[]): Promise<any[]> => {
+    const CHUNK_SIZE = 15;
+    const all: any[] = [];
+    for (let i = 0; i < rIds.length; i += CHUNK_SIZE) {
+      const chunk = rIds.slice(i, i + CHUNK_SIZE);
+      const { data: chunkItems } = await supabase
+        .from('stock_request_items')
+        .select('*')
+        .in('request_id', chunk);
+      if (chunkItems && chunkItems.length > 0) {
+        all.push(...chunkItems);
+      }
+    }
+    return all;
+  };
+
+  // Helper for batch-fetching simple_items catalog without hitting 1000-row limit
+  const fetchSimpleItemsChunked = async (skus: string[]): Promise<any[]> => {
+    const CHUNK_SIZE = 100;
+    const all: any[] = [];
+    for (let i = 0; i < skus.length; i += CHUNK_SIZE) {
+      const chunk = skus.slice(i, i + CHUNK_SIZE);
+      const { data: chunkDetails } = await supabase
+        .from('simple_items')
+        .select('sku, item_name, description, category, unit_of_measure')
+        .in('sku', chunk);
+      if (chunkDetails && chunkDetails.length > 0) {
+        all.push(...chunkDetails);
+      }
+    }
+    return all;
+  };
+
   // Get request items
   const requestIds = requests.map(r => r.id);
-  const { data: items } = await supabase
-    .from('stock_request_items')
-    .select('*')
-    .in('request_id', requestIds);
+  const items = await fetchStockRequestItemsChunked(requestIds);
 
   // Get item details
-  const itemSkus = [...new Set((items || []).map(i => i.item_sku))];
-  const { data: itemDetails } = itemSkus.length
-    ? await supabase
-      .from('simple_items')
-      .select('sku, item_name, description, category, unit_of_measure')
-      .in('sku', itemSkus)
-    : { data: [] as any[] };
+  const itemSkus = [...new Set((items || []).map(i => i.item_sku).filter(Boolean))];
+  const itemDetails = itemSkus.length ? await fetchSimpleItemsChunked(itemSkus) : [];
 
   // Get reviewer details (if any)
   const reviewerIds = [...new Set(requests.map(r => r.reviewed_by).filter(Boolean))];
@@ -1189,21 +1215,46 @@ export async function getPendingRequests() {
       .in('id', branchIds)
     : { data: [] as any[] };
 
+  // Helper for batch-fetching stock request items without hitting 1000-row limit
+  const fetchStockRequestItemsChunked = async (rIds: string[]): Promise<any[]> => {
+    const CHUNK_SIZE = 15;
+    const all: any[] = [];
+    for (let i = 0; i < rIds.length; i += CHUNK_SIZE) {
+      const chunk = rIds.slice(i, i + CHUNK_SIZE);
+      const { data: chunkItems } = await supabase
+        .from('stock_request_items')
+        .select('*')
+        .in('request_id', chunk);
+      if (chunkItems && chunkItems.length > 0) {
+        all.push(...chunkItems);
+      }
+    }
+    return all;
+  };
+
+  const fetchSimpleItemsChunked = async (skus: string[]): Promise<any[]> => {
+    const CHUNK_SIZE = 100;
+    const all: any[] = [];
+    for (let i = 0; i < skus.length; i += CHUNK_SIZE) {
+      const chunk = skus.slice(i, i + CHUNK_SIZE);
+      const { data: chunkDetails } = await supabase
+        .from('simple_items')
+        .select('sku, item_name, description, category, unit_of_measure')
+        .in('sku', chunk);
+      if (chunkDetails && chunkDetails.length > 0) {
+        all.push(...chunkDetails);
+      }
+    }
+    return all;
+  };
+
   // Get items for these requests
   const requestIds = requests.map(r => r.id);
-  const { data: items } = await supabase
-    .from('stock_request_items')
-    .select('*')
-    .in('request_id', requestIds);
+  const items = await fetchStockRequestItemsChunked(requestIds);
 
   // Get item details
-  const itemSkus = [...new Set((items || []).map(i => i.item_sku))];
-  const { data: itemDetails } = itemSkus.length
-    ? await supabase
-      .from('simple_items')
-      .select('sku, item_name, description, category, unit_of_measure')
-      .in('sku', itemSkus)
-    : { data: [] as any[] };
+  const itemSkus = [...new Set((items || []).map(i => i.item_sku).filter(Boolean))];
+  const itemDetails = itemSkus.length ? await fetchSimpleItemsChunked(itemSkus) : [];
 
   // Combine data
   return requests.map(request => {

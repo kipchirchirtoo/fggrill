@@ -65,11 +65,19 @@ const attachRequestQuantities = async (
     const requestIds = [...new Set(dispatches.map(d => d.stock_request_id).filter(Boolean))];
     if (!requestIds.length || !items.length) return;
 
-    const { data: requestLines } = await supabase
-        .from('stock_request_items')
-        .select('request_id, item_sku, requested_quantity, approved_quantity')
-        .in('request_id', requestIds);
-    if (!requestLines || !requestLines.length) return;
+    const CHUNK_SIZE = 15;
+    const requestLines: any[] = [];
+    for (let i = 0; i < requestIds.length; i += CHUNK_SIZE) {
+        const chunk = requestIds.slice(i, i + CHUNK_SIZE);
+        const { data: chunkLines } = await supabase
+            .from('stock_request_items')
+            .select('request_id, item_sku, requested_quantity, approved_quantity')
+            .in('request_id', chunk);
+        if (chunkLines && chunkLines.length > 0) {
+            requestLines.push(...chunkLines);
+        }
+    }
+    if (!requestLines.length) return;
 
     const requestIdByDispatchId = new Map(
         dispatches.map(d => [String(d.id), String(d.stock_request_id || '')])

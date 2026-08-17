@@ -3113,11 +3113,21 @@ class RequisitionsSection extends ConsumerWidget {
 
   Future<void> _processRequisitionNow(
       BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final items = _list(row['items'] ?? row['request_items'] ?? []);
+    List<Map<String, dynamic>> items = _list(row['items'] ?? row['request_items'] ?? []);
     if (items.isEmpty) {
-      _snack(context, 'No items found on this request');
+      final requestId = _id(row);
+      if (requestId.isNotEmpty) {
+        try {
+          final single = await ref.read(adminRepositoryProvider).getStoreStockRequestById(requestId);
+          items = _list(single['items'] ?? single['request_items'] ?? []);
+        } catch (_) {}
+      }
+    }
+    if (items.isEmpty) {
+      if (context.mounted) _snack(context, 'No items found on this request');
       return;
     }
+    if (!context.mounted) return;
     final requestNumber = _text(row, ['request_number', 'id']);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -3234,11 +3244,21 @@ class PackingSection extends ConsumerWidget {
 
   Future<void> _showIssueStockDialog(
       BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final items = _list(row['items'] ?? row['request_items'] ?? []);
+    List<Map<String, dynamic>> items = _list(row['items'] ?? row['request_items'] ?? []);
     if (items.isEmpty) {
-      _snack(context, 'No items found on this request');
+      final requestId = _id(row);
+      if (requestId.isNotEmpty) {
+        try {
+          final single = await ref.read(adminRepositoryProvider).getStoreStockRequestById(requestId);
+          items = _list(single['items'] ?? single['request_items'] ?? []);
+        } catch (_) {}
+      }
+    }
+    if (items.isEmpty) {
+      if (context.mounted) _snack(context, 'No items found on this request');
       return;
     }
+    if (!context.mounted) return;
     await showDialog<void>(
       context: context,
       builder: (ctx) => _IssueStockDialog(

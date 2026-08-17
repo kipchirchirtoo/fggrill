@@ -23,14 +23,22 @@ const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>>
     const uniqueSkus = [...new Set(skus.map(normalizeSku).filter(Boolean))];
     if (uniqueSkus.length === 0) return new Map();
 
-    const { data, error } = await supabase
-        .from('simple_items')
-        .select(SIMPLE_ITEM_SELECT)
-        .in('sku', uniqueSkus);
+    const CHUNK_SIZE = 100;
+    const allItems: any[] = [];
+    for (let i = 0; i < uniqueSkus.length; i += CHUNK_SIZE) {
+        const chunk = uniqueSkus.slice(i, i + CHUNK_SIZE);
+        const { data, error } = await supabase
+            .from('simple_items')
+            .select(SIMPLE_ITEM_SELECT)
+            .in('sku', chunk);
 
-    if (error) throw error;
+        if (error) throw error;
+        if (data && data.length > 0) {
+            allItems.push(...data);
+        }
+    }
 
-    return new Map((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+    return new Map((allItems || []).map((item: any) => [normalizeSku(item.sku), item]));
 };
 
 const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
@@ -64,18 +72,26 @@ const fetchRequestItemsWithCatalog = async (requestIds: unknown[]): Promise<Reco
     const ids = [...new Set(requestIds.map(id => id ? String(id) : '').filter(Boolean))];
     if (ids.length === 0) return {};
 
-    const { data: items, error } = await supabase
-        .from('stock_request_items')
-        .select('*')
-        .in('request_id', ids)
-        .order('created_at', { ascending: true });
+    const CHUNK_SIZE = 15;
+    const allItems: any[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE);
+        const { data: items, error } = await supabase
+            .from('stock_request_items')
+            .select('*')
+            .in('request_id', chunk)
+            .order('created_at', { ascending: true });
 
-    if (error) throw error;
+        if (error) throw error;
+        if (items && items.length > 0) {
+            allItems.push(...items);
+        }
+    }
 
-    const itemMap = await fetchSimpleItemsBySku((items || []).map((item: any) => item.item_sku));
+    const itemMap = await fetchSimpleItemsBySku(allItems.map((item: any) => item.item_sku));
     const grouped: Record<string, any[]> = {};
 
-    (items || []).forEach((item: any) => {
+    allItems.forEach((item: any) => {
         const requestId = String(item.request_id);
         if (!grouped[requestId]) grouped[requestId] = [];
         grouped[requestId].push(attachCatalogItem(item, itemMap));
