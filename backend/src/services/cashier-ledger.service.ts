@@ -38,17 +38,20 @@ export const calculateCashierShiftLedgerTotals = async (
 ): Promise<LedgerTotals> => {
     // Fetch shift info to infer revenue stream for POS transactions
     const shiftRes = await client.query(
-        `SELECT cashier_name, type, notes FROM cashier_shift_logs WHERE id = $1`,
+        `SELECT csl.cashier_name, csl.notes, u.role as user_role
+         FROM cashier_shift_logs csl
+         LEFT JOIN users u ON u.id = csl.cashier_id
+         WHERE csl.id = $1`,
         [cashierShiftLogId]
     );
     const shiftInfo = shiftRes.rows[0] || {};
     const cashierNameUpper = String(shiftInfo.cashier_name || '').toUpperCase();
-    const shiftTypeUpper = String(shiftInfo.type || '').toUpperCase();
+    const userRoleUpper = String(shiftInfo.user_role || '').toUpperCase();
     const shiftNotesUpper = String(shiftInfo.notes || '').toUpperCase();
 
-    const isDefaultBarShift = cashierNameUpper.includes('BAR') || shiftTypeUpper.includes('BAR') || shiftNotesUpper.includes('BAR');
-    const isDefaultRestaurantShift = cashierNameUpper.includes('RESTAURANT') || shiftTypeUpper.includes('RESTAURANT') || shiftNotesUpper.includes('RESTAURANT');
-    const isDefaultRoomsShift = cashierNameUpper.includes('RECEPTION') || cashierNameUpper.includes('FRONT') || shiftTypeUpper.includes('ROOM');
+    const isDefaultBarShift = cashierNameUpper.includes('BAR') || userRoleUpper.includes('BAR') || shiftNotesUpper.includes('BAR');
+    const isDefaultRestaurantShift = cashierNameUpper.includes('RESTAURANT') || userRoleUpper.includes('RESTAURANT') || shiftNotesUpper.includes('RESTAURANT');
+    const isDefaultRoomsShift = cashierNameUpper.includes('RECEPTION') || cashierNameUpper.includes('FRONT') || userRoleUpper.includes('RECEPTION') || userRoleUpper.includes('ROOM');
 
     // 1. Fetch canonical transactions for this shift (combining Room/Front-Desk transactions from
     // cashier_transactions AND POS/Restaurant/Bar transactions from cashier_shift_transactions)
