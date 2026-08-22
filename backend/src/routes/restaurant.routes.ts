@@ -91,7 +91,15 @@ const shouldIncludeRestaurantOrders = (scope: KitchenOutletScope): boolean =>
 const matchesKitchenOutletScope = (
   outletType: unknown,
   scope: KitchenOutletScope,
-): boolean => String(outletType || '').trim().toLowerCase() === scope;
+): boolean => {
+  const type = String(outletType || '').trim().toLowerCase();
+  if (scope === 'choma_zone') {
+    return type === 'choma_zone';
+  }
+  // For 'restaurant' scope: include restaurant shifts plus bar/cashier shifts
+  // so food and recalled items from Main Bar/Executive Bar are fetched and filtered by isKitchenVisiblePosOrder
+  return type !== 'choma_zone';
+};
 
 const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
@@ -601,7 +609,14 @@ router.get('/kitchen/orders',
             return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
           })
           .map((shift: any) => shift.id);
-        const restaurantShiftSet = new Set(outletScope === 'restaurant' ? scopedShiftIds : []);
+        const restaurantShiftSet = new Set(
+          (outletShifts || [])
+            .filter((shift: any) => {
+              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+              return String(outlet?.outlet_type || '').trim().toLowerCase() === 'restaurant';
+            })
+            .map((shift: any) => shift.id)
+        );
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
         if (scopedShiftIds.length) {

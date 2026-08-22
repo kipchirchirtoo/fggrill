@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { billCache } from '../utils/bill-cache';
 import notificationService from '../services/notification.service';
+import cacheService from '../services/cacheService';
 import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../services/cashier-automation.service';
 import {
   assertPosStockAvailable,
@@ -3230,6 +3231,8 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         kitchen_status: 'recalled',
         kitchen_started_at: recalledAt,
         kitchen_ready_at: recalledAt,
+        kitchen_served_at: null,
+        captain_printed_at: null,
         void_request_status: null,
         items: nextItems,
         // The bill genuinely changed — give it a fresh reprint allowance
@@ -3244,6 +3247,10 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       .select('*')
       .single();
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
+
+    if (shift.branch_id) {
+      cacheService.delPattern(`fg:kds:${shift.branch_id}:*`).catch(() => {});
+    }
 
     // Recalled items still get a captain ticket, but this backend doesn't
     // print it (this backend never attempts its own cloud-side print, see
@@ -3323,7 +3330,12 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
         usedIndexes.add(index);
         return items[index];
       });
-      const totalAmount = splitItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+      // activeOrderItemsTotal, not a raw line_total sum: an item can already
+      // carry void state (is_fully_voided/active_total/voided_qty) when it's
+      // assigned into a split, and line_total never changes when an item is
+      // voided — summing it blindly re-inflates the split bill back to the
+      // pre-void price.
+      const totalAmount = activeOrderItemsTotal(splitItems);
       const splitItemsWithStatus = splitItems.map((item: any) => ({ ...item, kitchen_status: 'served' }));
       childRows.push({
         shift_id: shiftId,
@@ -4003,6 +4015,12 @@ export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response,
         reverse: true
       });
     }
+    // The financial void happens here: zero total_amount alongside
+    // balance_amount so a fully-voided bill reads as 0 everywhere (receipts,
+    // audit reports, exports) rather than keeping its pre-void price. This
+    // mirrors cashierVoidWholeBill below, which already does this correctly
+    // for the single-step cashier-initiated void path.
+    const originalTotal = numberValue(order.total_amount);
     const voidedItems = Array.isArray(order.items)
       ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
       : order.items;
@@ -4013,6 +4031,7 @@ export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response,
         payment_status: 'voided',
         kitchen_status: 'voided',
         items: voidedItems,
+        total_amount: 0,
         balance_amount: 0,
         voided_at: now,
         voided_by: req.user.id,
@@ -4023,6 +4042,26 @@ export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response,
       })
       .eq('id', requestRow.order_id);
     if (voidOrderError) throw voidOrderError;
+
+    // Preserve the pre-void total for compliance — same convention as
+    // cashierVoidWholeBill's void_bills_audit row, since total_amount above
+    // just got zeroed and would otherwise take the original amount with it.
+    await supabase.from('void_bills_audit').insert({
+      void_id: requestRow.id,
+      action: 'cashier_acknowledge_void',
+      actor_id: req.user.id,
+      details: {
+        order_number: order.order_number,
+        short_code: order.short_code,
+        waiter_id: order.waiter_id,
+        waiter_name: order.waiter_name,
+        outlet_id: order.outlet_id,
+        branch_id: order.branch_id,
+        original_total: originalTotal,
+        revised_total: 0,
+        reason: requestRow.reason
+      }
+    });
 
     // Defensive reverse-increment guard. ensureEditableOrder currently blocks
     // voiding a paid bill, so amount_paid is almost always 0 here. This guard

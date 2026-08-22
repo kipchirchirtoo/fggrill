@@ -125,7 +125,7 @@ class KitchenOrder {
         .join(' ');
   }
 
-  Duration get elapsed => DateTime.now().difference(createdAt);
+  Duration get elapsed => DateTime.now().difference(effectiveCreatedAt);
   bool get isUrgent => elapsed.inMinutes > 15;
   // Only the most recent recall batch — not every item ever recalled over
   // the order's lifetime. Without this, a second/third recall on the same
@@ -151,13 +151,24 @@ class KitchenOrder {
         .toList();
   }
 
-  bool get hasRecalledItems => recalledItems.isNotEmpty;
+  bool get hasRecalledItems =>
+      recalledItems.isNotEmpty || status.toLowerCase() == 'recalled';
 
   /// The original order time, unless the order has been recalled — then the
   /// time the most recent recall was triggered. Printed tickets must show
   /// when the recall actually happened, not the stale original order time.
-  DateTime get effectiveCreatedAt =>
-      recalledItems.isEmpty ? createdAt : (recalledItems.first.recalledAt ?? createdAt);
+  DateTime get effectiveCreatedAt {
+    if (recalledItems.isNotEmpty && recalledItems.first.recalledAt != null) {
+      return recalledItems.first.recalledAt!;
+    }
+    final anyFlagged = items
+        .where((item) => item.isRecalledItem && item.recalledAt != null)
+        .toList();
+    if (anyFlagged.isNotEmpty) {
+      return anyFlagged.first.recalledAt!;
+    }
+    return createdAt;
+  }
 
   String get kdsPrintKey {
     final batches = recalledItems

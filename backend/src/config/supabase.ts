@@ -22,22 +22,13 @@ if (!supabaseServiceKey || supabaseServiceKey === 'undefined' || supabaseService
   throw new Error(errorMsg);
 }
 
-// Shared fetch wrapper: add a 60-second timeout so slow network requests
-// fail gracefully while giving cloud deployments enough time for batch operations.
+// Shared fetch wrapper: add a 12-second timeout so that a slow/unreachable
+// Supabase endpoint (e.g. local dev behind a restrictive NAT or firewall) fails
+// fast instead of hanging for 30+ seconds and causing spurious 401s in the auth
+// middleware.
 const fetchWithTimeout: typeof fetch = (input, init) => {
-  const timeoutMs = Number(process.env.SUPABASE_FETCH_TIMEOUT_MS) || 60_000;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  const initSignal = init?.signal;
-  if (initSignal) {
-    if (initSignal.aborted) {
-      controller.abort();
-    } else {
-      initSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
-  }
-
+  const timer = setTimeout(() => controller.abort(), 12_000);
   return fetch(input, { ...init, signal: controller.signal }).finally(() =>
     clearTimeout(timer)
   );

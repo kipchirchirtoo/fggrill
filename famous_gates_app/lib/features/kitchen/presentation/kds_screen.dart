@@ -381,7 +381,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       case 'ready':
         return o.status == 'ready';
       case 'recalled':
-        return o.hasRecalledItems;
+        return o.hasRecalledItems || o.status.toLowerCase() == 'recalled';
       case 'void_pending':
         return o.hasPendingVoidRequest;
       default:
@@ -399,14 +399,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // otherwise a bill recalled after 90 minutes would vanish again in 10.
     final activeOrders = rawActiveOrders
         .where((order) =>
-            DateTime.now().difference(order.createdAt).inMinutes <=
-            _kStaleOrderMinutes)
+            order.hasRecalledItems ||
+            order.status.toLowerCase() == 'recalled' ||
+            DateTime.now().difference(order.effectiveCreatedAt).inMinutes <=
+                _kStaleOrderMinutes)
         .toList();
     // Oldest orders first (FIFO): the longest-waiting ticket sits at the front
     // and freshly-arrived orders queue behind it, so the kitchen works tickets
     // in the order they came in.
     final orders = [...activeOrders]
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      ..sort((a, b) => a.effectiveCreatedAt.compareTo(b.effectiveCreatedAt));
     final pending = activeOrders
         .where(
             (order) => order.status == 'pending' || order.status == 'confirmed')
