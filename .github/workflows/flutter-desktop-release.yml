@@ -58,7 +58,9 @@ jobs:
           BUILD_NUMBER="${{ github.run_number }}"
           perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
           flutter pub get
-          flutter build linux --release
+          flutter build linux --release \
+            --dart-define=MAIN_API_URL=https://api.hirall.com/api \
+            --dart-define=PYTHON_SERVICES_URL=https://services.hirall.com
           PACKAGE_ROOT="dist/linux/famous-gates_${VERSION}_amd64"
           mkdir -p "${PACKAGE_ROOT}/DEBIAN"
           mkdir -p "${PACKAGE_ROOT}/opt/famous-gates"
@@ -143,7 +145,9 @@ jobs:
           $buildNumber = "${{ github.run_number }}"
           (Get-Content pubspec.yaml) -replace '^version: .+$', "version: $version+$buildNumber" | Set-Content pubspec.yaml
           flutter pub get
-          flutter build windows --release
+          flutter build windows --release `
+            --dart-define=MAIN_API_URL=https://api.hirall.com/api `
+            --dart-define=PYTHON_SERVICES_URL=https://services.hirall.com
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\FamousGates-$fullVersion-windows-x64-portable.zip" -Force
           $stage = "C:\fg-release"
@@ -222,7 +226,9 @@ jobs:
           BUILD_NUMBER="${{ github.run_number }}"
           perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
           flutter pub get
-          flutter build apk --release
+          flutter build apk --release \
+            --dart-define=MAIN_API_URL=https://api.hirall.com/api \
+            --dart-define=PYTHON_SERVICES_URL=https://services.hirall.com
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk "dist/FamousGates-${VERSION}-android.apk"
 
