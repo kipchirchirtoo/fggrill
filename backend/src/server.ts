@@ -92,26 +92,19 @@ import dns from 'dns';
 // ──────────────────────────────────────────────────────────────────────────────
 
 // ── UNDICI RESILIENCE PATCH ─────────────────────────────────────────────────
-// Node's built-in fetch (undici) can negotiate HTTP/2 with Supabase. When that
-// HTTP/2 session stalls silently (no close, no RST — just goes dead), undici
-// keeps the broken connection pooled and reuses it for later requests, which
-// then hang until undici's own internal headersTimeout fires — 300s by
-// default. On a single-concurrency instance, enough stuck requests piling up
-// is enough to starve the process and make Render's proxy return 502s to
-// everyone else, even though the app itself never crashed.
-// Force HTTP/1.1 (no multiplexed session to get wedged) and cap connect/
-// header/body timeouts well under Render's proxy timeout so a stalled
-// connection fails fast and gets evicted instead of hanging for minutes.
-// Loaded via require() rather than `import ... from 'node:undici'` because the
-// installed @types/node (18.x) predates undici's type declarations, even
-// though the runtime (Node 20.11.0 per render.yaml) has it built in.
-const { Agent: UndiciAgent, setGlobalDispatcher } = require('node:undici');
-setGlobalDispatcher(new UndiciAgent({
-  allowH2: false,
-  connect: { timeout: 10_000 },
-  headersTimeout: 15_000,
-  bodyTimeout: 15_000,
-}));
+try {
+  const { Agent: UndiciAgent, setGlobalDispatcher } = require('undici');
+  if (UndiciAgent && typeof setGlobalDispatcher === 'function') {
+    setGlobalDispatcher(new UndiciAgent({
+      allowH2: false,
+      connect: { timeout: 10_000 },
+      headersTimeout: 15_000,
+      bodyTimeout: 15_000,
+    }));
+  }
+} catch (_undiciErr) {
+  // Graceful fallback if undici is not installed or unavailable
+}
 // ──────────────────────────────────────────────────────────────────────────────
 
 import express from 'express';
