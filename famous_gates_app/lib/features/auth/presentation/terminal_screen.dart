@@ -57,9 +57,24 @@ class TerminalScreen extends ConsumerWidget {
         }
       },
       child: Scaffold(
+        backgroundColor: const Color(0xFF070B16),
         body: Stack(
           fit: StackFit.expand,
           children: [
+            // 0 — Deep dark luxury base layer (guarantees no white background under any condition)
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF060B18),
+                    Color(0xFF0D1B2A),
+                    Color(0xFF050811),
+                  ],
+                ),
+              ),
+            ),
             // 1 — Background photo
             const SafeAssetImage(
               'assets/frontend_public/IMG_8704.JPG',
@@ -70,28 +85,28 @@ class TerminalScreen extends ConsumerWidget {
               filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
               child: const SizedBox.expand(),
             ),
-            // 3 — Dark gradient
+            // 3 — Dark gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
+                    Colors.black.withValues(alpha: 0.80),
+                    Colors.black.withValues(alpha: 0.55),
                     Colors.black.withValues(alpha: 0.82),
-                    Colors.black.withValues(alpha: 0.60),
-                    Colors.black.withValues(alpha: 0.84),
                   ],
                   stops: const [0.0, 0.5, 1.0],
                 ),
               ),
             ),
             // 5 — BACKOFFICE button pinned to true top-right edge (outside the 24px padding)
-            Positioned(
+            const Positioned(
               top: 0,
               right: 0,
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 18),
+                  padding: EdgeInsets.only(top: 18),
                   child: _BackOfficeButton(),
                 ),
               ),

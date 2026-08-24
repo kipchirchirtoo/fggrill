@@ -29,13 +29,25 @@ class SafeAssetImage extends StatelessWidget {
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Asset image unavailable: $assetName ($error)');
         return fallback ??
-            ColoredBox(
-              color: const Color(0xFFE5E7EB),
+            Container(
+              width: width,
+              height: height,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0F172A),
+                    Color(0xFF1E293B),
+                    Color(0xFF0A0F1D),
+                  ],
+                ),
+              ),
               child: Center(
                 child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: Colors.black.withValues(alpha: 0.35),
-                  size: 24,
+                  Icons.hotel_outlined,
+                  color: Colors.white.withValues(alpha: 0.15),
+                  size: 28,
                 ),
               ),
             );
