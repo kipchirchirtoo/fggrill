@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/storage/secure_storage_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart';
@@ -69,6 +70,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   String _searchQuery = '';
   bool _exportingHistory = false;
 
+  // KDS grid density / columns: 0 = Auto, 2 = 2 Cards, 3 = 3 Cards, 4 = 4 Cards (43" TV), 5 = 5 Cards
+  int _gridColumns = 4;
+
   // Forces a rebuild every minute purely so the "stale order" cutoff below
   // (orders older than _kStaleOrderMinutes that were never cleared/served)
   // actually disappears close to real time, instead of only re-evaluating
@@ -87,12 +91,34 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     super.initState();
     _section = widget.initialSection;
     _future = _load();
+    _loadGridColumnsPreference();
     // No polling timer — KdsNotifier uses Supabase Realtime to trigger
     // refreshes automatically. The FutureBuilder here handles history,
     // analytics, and notifications sections only.
     _staleSweepTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadGridColumnsPreference() async {
+    try {
+      final storage = ref.read(secureStorageProvider);
+      final val = await storage.read(key: 'kds_grid_columns');
+      if (val != null && mounted) {
+        final parsed = int.tryParse(val);
+        if (parsed != null && (parsed == 0 || (parsed >= 2 && parsed <= 5))) {
+          setState(() => _gridColumns = parsed);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setGridColumns(int cols) async {
+    setState(() => _gridColumns = cols);
+    try {
+      final storage = ref.read(secureStorageProvider);
+      await storage.write(key: 'kds_grid_columns', value: cols.toString());
+    } catch (_) {}
   }
 
   @override
@@ -191,10 +217,128 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
+  Widget _gridColumnSelector() {
+    return PopupMenuButton<int>(
+      tooltip: 'TV Columns / Grid Density',
+      initialValue: _gridColumns,
+      onSelected: (val) => _setGridColumns(val),
+      color: const Color(0xFF22223D),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: Color(0xFF34345A)),
+      ),
+      itemBuilder: (context) => [
+        const PopupMenuItem<int>(
+          value: 4,
+          child: Row(
+            children: [
+              Icon(Icons.tv, color: AppColors.kAccent, size: 20),
+              SizedBox(width: 10),
+              Text('4 Columns (43" TV Mode - 4 to 8 Cards)',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<int>(
+          value: 3,
+          child: Row(
+            children: [
+              Icon(Icons.view_column, color: Colors.white70, size: 20),
+              SizedBox(width: 10),
+              Text('3 Columns (Standard Display)',
+                  style: TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<int>(
+          value: 2,
+          child: Row(
+            children: [
+              Icon(Icons.splitscreen, color: Colors.white70, size: 20),
+              SizedBox(width: 10),
+              Text('2 Columns (Large Cards)',
+                  style: TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<int>(
+          value: 5,
+          child: Row(
+            children: [
+              Icon(Icons.grid_view, color: Colors.white70, size: 20),
+              SizedBox(width: 10),
+              Text('5 Columns (Dense / 4K TV)',
+                  style: TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(height: 1),
+        const PopupMenuItem<int>(
+          value: 0,
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome, color: Colors.white70, size: 20),
+              SizedBox(width: 10),
+              Text('Auto (Responsive Grid)',
+                  style: TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF22223D),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _gridColumns == 4 ? AppColors.kAccent : const Color(0xFF34345A),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _gridColumns == 4
+                  ? Icons.tv
+                  : _gridColumns == 0
+                      ? Icons.auto_awesome
+                      : Icons.grid_view,
+              color:
+                  _gridColumns == 4 ? AppColors.kAccent : const Color(0xFFF5F6FA),
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _gridColumns == 0 ? 'Auto Grid' : '$_gridColumns Cards Across',
+              style: TextStyle(
+                color: _gridColumns == 4
+                    ? AppColors.kAccent
+                    : const Color(0xFFF5F6FA),
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down,
+                color: Color(0xFFAAAFC4), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MasterDashboardShell<KitchenKdsSection>(
       initialSidebarCollapsed: true,
+      // This is a wall-mounted display screen, not one an operator navigates
+      // around in day-to-day — lock the sidebar collapsed so a stray tap
+      // (or a leftover expanded-sidebar preference from another screen)
+      // can't silently eat 168px of the card grid's width on a TV output.
+      allowSidebarCollapse: false,
       enableHorizontalAccess: false,
       title: widget.scope.shellTitle,
       subtitle: widget.scope.shellSubtitle,
@@ -467,6 +611,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       subtitle: widget.scope.ordersSubtitle,
       actions: [
         _scopeSwitcher(),
+        _gridColumnSelector(),
         // Realtime live indicator dot
         const _RealtimeLiveDot(),
         if (voided > 0)
@@ -514,19 +659,44 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                // 3 tickets per row on a wall-mounted display (wide, readable
-                // cards). Degrade to 2 or 1 only on genuinely narrow screens so
-                // cards never get cut off.
-                final columns =
-                    width >= 1080 ? 3 : (width / 360).floor().clamp(1, 3);
+                int columns;
+                if (_gridColumns > 0) {
+                  // User explicitly selected column mode (e.g. 4 for 43" TV)
+                  columns = width < 480 ? 1 : _gridColumns;
+                } else {
+                  // Auto mode: scale responsively up to 5 on ultra-wide / TV.
+                  // These thresholds are tuned to ticket-card readability
+                  // (order code, meta pills, item names), not the app's
+                  // general ScreenSize breakpoints (600/960) — don't merge
+                  // them into that shared constant.
+                  if (width >= 1600) {
+                    columns = 5;
+                  } else if (width >= 1200) {
+                    columns = 4;
+                  } else if (width >= 800) {
+                    columns = 3;
+                  } else if (width >= 500) {
+                    columns = 2;
+                  } else {
+                    columns = 1;
+                  }
+                }
+
+                // Compact extent (400px) allows 2 full rows (8 cards) to fit on a 1080p 43" TV!
+                final double cardExtent = columns >= 4
+                    ? 400.0
+                    : columns == 3
+                        ? 450.0
+                        : 470.0;
+
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    mainAxisExtent: 460,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    mainAxisExtent: cardExtent,
                   ),
                   itemCount: visibleOrders.length,
                   itemBuilder: (context, index) {
@@ -535,6 +705,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
                     return _OrderTicket(
                       order: order,
                       queuePosition: index + 1,
+                      isCompact: columns >= 4,
                       onItemReady: (item) => _run(
                         () => _repo.markItemReady(order.id, item.id),
                         successMessage: '${item.name} marked ready',
@@ -1505,8 +1676,15 @@ class _Page extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // On a TV-class window every horizontal pixel matters for how many
+    // ticket columns the orders grid below can fit — trim the side padding
+    // once there's clearly room to spare, without touching narrower layouts.
+    final width = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.symmetric(
+        horizontal: width >= 1200 ? 12 : 24,
+        vertical: 24,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1549,10 +1727,12 @@ class _OrderTicket extends StatelessWidget {
     required this.onReady,
     required this.onServed,
     this.queuePosition,
+    this.isCompact = false,
   });
 
   final KitchenOrder order;
   final int? queuePosition;
+  final bool isCompact;
   final ValueChanged<KitchenOrderItem> onItemReady;
   final VoidCallback onStart;
   final VoidCallback onReady;
@@ -1606,7 +1786,10 @@ class _OrderTicket extends StatelessWidget {
           // ── Header: big order number + timer (readable across the room) ──
           Container(
             color: color,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 10 : 14,
+              vertical: isCompact ? 8 : 12,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -1699,8 +1882,8 @@ class _OrderTicket extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
-                          fontSize: 28,
-                          letterSpacing: 2,
+                          fontSize: isCompact ? 22 : 28,
+                          letterSpacing: isCompact ? 1.2 : 2,
                           height: 1.1,
                           decoration:
                               isStopTicket ? TextDecoration.lineThrough : null,
@@ -1715,15 +1898,15 @@ class _OrderTicket extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Row(children: [
-                      const Icon(Icons.timer_outlined,
-                          color: Colors.white, size: 18),
+                      Icon(Icons.timer_outlined,
+                          color: Colors.white, size: isCompact ? 15 : 18),
                       const SizedBox(width: 4),
                       Text(
                         '${order.elapsed.inMinutes}m',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
-                          fontSize: 22,
+                          fontSize: isCompact ? 18 : 22,
                         ),
                       ),
                     ]),
@@ -1732,7 +1915,7 @@ class _OrderTicket extends StatelessWidget {
                         style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
                             fontWeight: FontWeight.w600,
-                            fontSize: 12)),
+                            fontSize: isCompact ? 11 : 12)),
                     if (order.captainPrintedAt != null) ...[
                       const SizedBox(height: 2),
                       Row(
@@ -1787,13 +1970,19 @@ class _OrderTicket extends StatelessWidget {
             ),
           // ── Location / type / shortcode / waiter (large, scannable) ──
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            padding: EdgeInsets.fromLTRB(
+              isCompact ? 10 : 14,
+              isCompact ? 8 : 12,
+              isCompact ? 10 : 14,
+              isCompact ? 6 : 8,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(_typeIcon, size: 22, color: AppColors.kPrimary),
+                    Icon(_typeIcon,
+                        size: isCompact ? 18 : 22, color: AppColors.kPrimary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1802,7 +1991,7 @@ class _OrderTicket extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
-                          fontSize: 19,
+                          fontSize: isCompact ? 16 : 19,
                           decoration:
                               isStopTicket ? TextDecoration.lineThrough : null,
                           decorationColor: AppColors.kError,
@@ -1812,10 +2001,10 @@ class _OrderTicket extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: isCompact ? 4 : 8),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: isCompact ? 4 : 8,
+                  runSpacing: isCompact ? 4 : 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _MetaPill(label: order.orderTypeLabel, icon: _typeIcon),
@@ -1875,9 +2064,10 @@ class _OrderTicket extends StatelessWidget {
                     return 0;
                   });
                 return ListView.separated(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(isCompact ? 8 : 12),
                   itemCount: sortedItems.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) =>
+                      SizedBox(height: isCompact ? 6 : 8),
                   itemBuilder: (context, index) {
                     final item = sortedItems[index];
                     final isRecalledItem = item.isRecalledItem;
@@ -1886,7 +2076,7 @@ class _OrderTicket extends StatelessWidget {
                     final itemVoid = item.voidRequest;
                     final isItemVoidActive = itemVoid?.isActive ?? false;
                 return Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(isCompact ? 7 : 10),
                   decoration: BoxDecoration(
                     color: isStopTicket
                         ? AppColors.kError.withValues(alpha: 0.04)
@@ -1906,26 +2096,28 @@ class _OrderTicket extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        constraints: const BoxConstraints(minWidth: 40),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                        constraints:
+                            BoxConstraints(minWidth: isCompact ? 32 : 40),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: isCompact ? 6 : 8,
+                            vertical: isCompact ? 4 : 6),
                         decoration: BoxDecoration(
                           color: isRecalledItem
                               ? Colors.deepOrange
                               : AppColors.kPrimary,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '${item.quantity}',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: isCompact ? 15 : 18,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: isCompact ? 8 : 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1933,7 +2125,7 @@ class _OrderTicket extends StatelessWidget {
                             Text(item.name,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
-                                  fontSize: 16,
+                                  fontSize: isCompact ? 14 : 16,
                                   color: isAlreadyMade
                                       ? AppColors.kTextSecondary
                                       : null,
@@ -1974,9 +2166,9 @@ class _OrderTicket extends StatelessWidget {
                             if (item.notes != null && item.notes!.isNotEmpty)
                               Text(
                                 'Note: ${item.notes}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppColors.kWarning,
-                                  fontSize: 13,
+                                  fontSize: isCompact ? 12 : 13,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -2015,7 +2207,7 @@ class _OrderTicket extends StatelessWidget {
                       // Checkbox to mark this item ready (large, wall-display
                       // friendly). Once ready it stays checked and locked.
                       Transform.scale(
-                        scale: 1.4,
+                        scale: isCompact ? 1.2 : 1.4,
                         child: Checkbox(
                           value: item.isReady,
                           onChanged: (item.isReady ||
@@ -2041,7 +2233,7 @@ class _OrderTicket extends StatelessWidget {
         ),
       ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isCompact ? 8 : 12),
             child: _ticketAction(status),
           ),
         ],
