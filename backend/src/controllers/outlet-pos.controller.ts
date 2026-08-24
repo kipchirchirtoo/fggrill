@@ -1432,7 +1432,7 @@ const seedOutletItemsFromExistingMenus = async (
         const sku = `R-${item.id}`;
         const existing = existingBySku.get(sku);
         let rawCat = categoryText(item.category) || '';
-        if (!rawCat || rawCat.toLowerCase().includes('accomp')) {
+        if (outletType === 'choma_zone' && (!rawCat || rawCat.toLowerCase().includes('accomp'))) {
           rawCat = 'Accompaniments';
         }
         return {
