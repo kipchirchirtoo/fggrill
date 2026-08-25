@@ -467,20 +467,29 @@ class _EventOrdersScreenState extends ConsumerState<EventOrdersScreen> {
                                         ),
                                       ),
                                       DataCell(
-                                        Wrap(
-                                          spacing: 8,
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             IconButton(
                                               tooltip: 'Edit',
+                                              iconSize: 20,
+                                              splashRadius: 18,
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                               onPressed: () =>
                                                   _openEditor(existing: row),
-                                              icon: const Icon(Icons.edit_outlined),
+                                              icon: Icon(Icons.edit_outlined, color: Colors.blueGrey.shade700),
                                             ),
                                             IconButton(
                                               tooltip: 'Export PDF',
+                                              iconSize: 20,
+                                              splashRadius: 18,
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                               onPressed: () => _exportOrder(row),
-                                              icon:
-                                                  const Icon(Icons.picture_as_pdf),
+                                              icon: Icon(
+                                                  Icons.picture_as_pdf_outlined,
+                                                  color: Colors.indigo.shade600),
                                             ),
                                             if (status.toLowerCase() !=
                                                     'completed' &&
@@ -488,14 +497,24 @@ class _EventOrdersScreenState extends ConsumerState<EventOrdersScreen> {
                                                     'cancelled')
                                               IconButton(
                                                 tooltip: 'Complete',
+                                                iconSize: 20,
+                                                splashRadius: 18,
+                                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                                 onPressed: () => _completeOrder(row),
-                                                icon: const Icon(
-                                                    Icons.task_alt_outlined),
+                                                icon: Icon(
+                                                    Icons.task_alt_outlined,
+                                                    color: Colors.teal.shade600),
                                               ),
                                             IconButton(
                                               tooltip: 'Delete',
+                                              iconSize: 20,
+                                              splashRadius: 18,
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                               onPressed: () => _deleteOrder(row),
-                                              icon: const Icon(Icons.delete_outline),
+                                              icon: Icon(Icons.delete_outline,
+                                                  color: Colors.red.shade600),
                                             ),
                                           ],
                                         ),
@@ -638,41 +657,45 @@ class _EventOrderEditorDialogState
       final repo = ref.read(branchAccountantRepositoryProvider);
       final packages = await repo.getChannelPackages(
         channel: _channelStandardCode,
-        completeOnly: true,
+        completeOnly: false,
       );
+      debugPrint('[EventOrders] Raw packages returned: ${packages.length} for channel=$_channelStandardCode');
+
+      final uniqueMap = <String, Map<String, dynamic>>{};
+      for (final p in packages) {
+        final name = p['package_name']?.toString().trim() ?? '';
+        if (name.isNotEmpty && !uniqueMap.containsKey(name)) {
+          uniqueMap[name] = p;
+        }
+      }
+
+      final completePackages =
+          uniqueMap.values.where((p) => p['is_complete'] == true).toList();
+      final displayPackages =
+          completePackages.isNotEmpty ? completePackages : uniqueMap.values.toList();
+
       final existingValue = _packageCtrl.text.trim();
       if (existingValue.isNotEmpty &&
-          !packages.any(
+          !displayPackages.any(
             (row) =>
                 (row['package_name']?.toString().trim() ?? '') == existingValue,
           )) {
-        packages.insert(0, {
+        displayPackages.insert(0, {
           'id': _selectedPackageDefinitionId,
           'package_name': existingValue,
           'is_complete': false,
         });
       }
-      if (_selectedPackageDefinitionId != null &&
-          !packages.any(
-            (row) =>
-                (row['id']?.toString().trim() ?? '') ==
-                _selectedPackageDefinitionId,
-          ) &&
-          existingValue.isNotEmpty) {
-        packages.insert(0, {
-          'id': _selectedPackageDefinitionId,
-          'package_name': existingValue,
-          'is_complete': false,
-        });
-      }
+
       if (mounted) {
         setState(() {
-          _packageOptions = packages;
+          _packageOptions = displayPackages;
           _loadingPackages = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        debugPrint('[EventOrders] Package load error: $e');
         setState(() {
           _packageLoadError = '$e';
           _packageOptions = const [];
@@ -811,7 +834,7 @@ class _EventOrderEditorDialogState
         const SizedBox(height: 8),
         Text(
           _packageLoadError != null
-              ? 'Could not load package standards for $_eventTypeLabelForPackage.'
+              ? 'Error loading packages: $_packageLoadError'
               : _packageOptions.isEmpty
                   ? 'No complete packages found for $_eventTypeLabelForPackage. Each package must have served POS menu items and raw stock items in Food Control Standards.'
                   : 'Loaded ${_packageOptions.length} configured package(s) with both served items and raw stock standards.',

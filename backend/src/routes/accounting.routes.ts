@@ -103,7 +103,7 @@ router.post('/booking-invoice-queue/:sourceType/:sourceId/invoice',
 
 // Event Orders
 router.get('/event-orders',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.HEAD_CHEF, UserRole.KITCHEN_OPERATIONS]),
   getEventOrders
 );
 
@@ -133,17 +133,17 @@ router.get('/event-orders/:id/export/pdf',
 );
 
 router.get('/food-control/channel-standards',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.BRANCH_MANAGER, UserRole.STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.HEAD_CHEF, UserRole.KITCHEN_OPERATIONS]),
   getChannelFoodStandards
 );
 
 router.get('/food-control/channel-packages',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.BRANCH_MANAGER, UserRole.STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.HEAD_CHEF, UserRole.KITCHEN_OPERATIONS]),
   getChannelPackages
 );
 
 router.get('/food-control/channel-package-menu-items',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.BRANCH_MANAGER, UserRole.STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.HEAD_CHEF, UserRole.KITCHEN_OPERATIONS]),
   getChannelPackageMenuItems
 );
 

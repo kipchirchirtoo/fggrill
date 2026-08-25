@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
@@ -53,17 +56,33 @@ class SilentPrinter {
       _cachedPrinter = saved;
       return saved;
     }
+    final stopwatch = Stopwatch()..start();
     try {
       final printers = await Printing.listPrinters().timeout(
         const Duration(milliseconds: 1200),
         onTimeout: () => <Printer>[],
       );
+      debugPrint(
+          'Printing.listPrinters() found ${printers.length} printer(s) in '
+          '${stopwatch.elapsedMilliseconds}ms');
       if (printers.isEmpty) return null;
       final resolved = printers.firstWhere(
         (p) => p.isDefault,
         orElse: () => printers.first,
       );
-      _cachedPrinter = resolved;
+      // Persist to secure storage (not just the in-memory cache) so this
+      // enumeration never has to run again on this machine — but only when
+      // there's exactly one printer to resolve. With more than one, the OS
+      // default can silently drift later (driver reinstalls, spooler
+      // resets, a Windows Update) independent of the till operator; keeping
+      // it in-memory-only means a changed default is picked up automatically
+      // on the next launch instead of requiring someone to notice a wrong
+      // printer and use "Clear override" in printer settings.
+      if (printers.length == 1) {
+        await savePrinter(resolved);
+      } else {
+        _cachedPrinter = resolved;
+      }
       return resolved;
     } catch (_) {
       return null;
@@ -72,25 +91,56 @@ class SilentPrinter {
 
   /// Drop-in replacement for `Printing.layoutPdf` that prints straight to a
   /// resolved printer instead of opening the OS print dialog/preview.
+  ///
+  /// Timed in two layers so a slow print can be attributed to the right
+  /// stage: [buildStopwatch] covers only onLayout itself (building the
+  /// pw.Document — including rendering the logo/barcode into it — and
+  /// calling doc.save()), while the surrounding dispatch timer covers the
+  /// full directPrintPdf/layoutPdf call. The difference between the two is
+  /// time spent purely in the OS/driver (rasterization + spooling), which
+  /// building the PDF faster can never reduce.
   static Future<void> print({
     required LayoutCallback onLayout,
     required PdfPageFormat format,
     String name = 'Document',
   }) async {
+    final buildStopwatch = Stopwatch();
+    Future<Uint8List> timedLayout(PdfPageFormat f) async {
+      buildStopwatch.start();
+      final bytes = await onLayout(f);
+      buildStopwatch.stop();
+      debugPrint(
+          'SilentPrinter: PDF build (onLayout, incl. logo/barcode) took '
+          '${buildStopwatch.elapsedMilliseconds}ms');
+      return bytes;
+    }
+
+    final resolveStopwatch = Stopwatch()..start();
     try {
       final printer = await _resolvePrinter();
+      debugPrint(
+          'SilentPrinter: printer resolution took ${resolveStopwatch.elapsedMilliseconds}ms');
       if (printer != null) {
+        final dispatchStopwatch = Stopwatch()..start();
         final ok = await Printing.directPrintPdf(
           printer: printer,
-          onLayout: onLayout,
+          onLayout: timedLayout,
           format: format,
           name: name,
         );
+        debugPrint(
+            'SilentPrinter: directPrintPdf total took ${dispatchStopwatch.elapsedMilliseconds}ms '
+            '(build was ${buildStopwatch.elapsedMilliseconds}ms), ok=$ok');
         if (ok) return;
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SilentPrinter: directPrintPdf threw: $e');
       // Fall through to the dialog so the document still prints somehow.
     }
-    await Printing.layoutPdf(onLayout: onLayout, format: format, name: name);
+    final fallbackStopwatch = Stopwatch()..start();
+    await Printing.layoutPdf(onLayout: timedLayout, format: format, name: name);
+    debugPrint(
+        'SilentPrinter: layoutPdf (dialog fallback) total took '
+        '${fallbackStopwatch.elapsedMilliseconds}ms');
   }
 }

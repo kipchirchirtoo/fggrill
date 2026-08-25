@@ -63,11 +63,21 @@ class PrintService {
   }
 
   /// Print directly via Python thermal printer service (NO DIALOG!)
+  ///
+  /// This targets a LOCAL print agent (see pythonServiceUrl's doc comment
+  /// above) that no current release actually installs anywhere — so on
+  /// every real till today, nothing is listening on this port and the call
+  /// is guaranteed to fail. The timeout below only needs to be long enough
+  /// to not falsely reject a real agent's genuine response time once one is
+  /// deployed; it should NOT be long enough to matter when (as today)
+  /// nothing is listening at all, since a refused loopback connection
+  /// resolves in low-single-digit ms.
   Future<bool> _printViaPythonService(Map<String, dynamic> receiptData) async {
     if (_pythonServiceOfflineUntil != null &&
         DateTime.now().isBefore(_pythonServiceOfflineUntil!)) {
       return false;
     }
+    final stopwatch = Stopwatch()..start();
     try {
       final response = await http
           .post(
@@ -75,19 +85,23 @@ class PrintService {
             headers: {'Content-Type': 'application/json'},
             body: json.encode(receiptData),
           )
-          .timeout(const Duration(milliseconds: 2500));
+          .timeout(const Duration(milliseconds: 300));
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
         if (result['success'] == true) {
           _pythonServiceOfflineUntil = null;
+          debugPrint(
+              'Python print service succeeded in ${stopwatch.elapsedMilliseconds}ms');
           return true;
         }
         debugPrint(
-            'Python print service ($pythonServiceUrl) reported failure: ${result['error']}');
+            'Python print service ($pythonServiceUrl) reported failure after '
+            '${stopwatch.elapsedMilliseconds}ms: ${result['error']}');
       } else {
         debugPrint(
-            'Python print service ($pythonServiceUrl) returned HTTP ${response.statusCode}: ${response.body}');
+            'Python print service ($pythonServiceUrl) returned HTTP ${response.statusCode} '
+            'after ${stopwatch.elapsedMilliseconds}ms: ${response.body}');
       }
       _pythonServiceOfflineUntil =
           DateTime.now().add(const Duration(seconds: 30));
@@ -95,7 +109,9 @@ class PrintService {
     } catch (e) {
       _pythonServiceOfflineUntil =
           DateTime.now().add(const Duration(seconds: 30));
-      debugPrint('Python print service ($pythonServiceUrl) unreachable: $e');
+      debugPrint(
+          'Python print service ($pythonServiceUrl) unreachable after '
+          '${stopwatch.elapsedMilliseconds}ms: $e');
       return false;
     }
   }
@@ -109,6 +125,7 @@ class PrintService {
     String? roomNumber,
     String? customerName,
     String? staffLabel,
+    String? waiterName,
     String? publicCode,
     String? barcodeValue,
     num? amountTendered,
@@ -137,6 +154,8 @@ class PrintService {
         'table_number': tableNumber,
         'room_number': roomNumber,
         'cashier_name': sale.cashierName,
+        'waiter_name': waiterName ?? (staffLabel?.toLowerCase() == 'waiter' ? sale.cashierName : null) ?? '',
+        'waiter': waiterName ?? (staffLabel?.toLowerCase() == 'waiter' ? sale.cashierName : null) ?? '',
         'items': items
             .map((item) => {
                   'name': item.name,
@@ -273,8 +292,15 @@ class PrintService {
                   customerName.trim().isNotEmpty &&
                   customerName.trim().toLowerCase() != 'walk-in')
                 _infoRow('Customer:', customerName.trim()),
-              if (sale.cashierName != null)
-                _infoRow('${staffLabel ?? 'Cashier'}:', sale.cashierName!),
+              if (waiterName != null && waiterName.trim().isNotEmpty)
+                _infoRow('Waiter:', waiterName.trim()),
+              if (sale.cashierName != null &&
+                  sale.cashierName!.trim().isNotEmpty &&
+                  (waiterName == null ||
+                      waiterName.trim().toLowerCase() !=
+                          sale.cashierName!.trim().toLowerCase() ||
+                      staffLabel?.toLowerCase() == 'cashier'))
+                _infoRow('${staffLabel ?? 'Cashier'}:', sale.cashierName!.trim()),
               pw.SizedBox(height: 4),
               _dashedLine(context),
               pw.SizedBox(height: 4),

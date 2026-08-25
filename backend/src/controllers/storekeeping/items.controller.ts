@@ -171,32 +171,50 @@ export const getItems = async (
       const itemIds = data.map((i: any) => i.id);
 
       // 1. Location-scoped balances (branch storekeepers)
-      const balMap = new Map<string, number>();
-      if (locationId) {
-        const { data: balances, error: balErr } = await supabase
-          .from('inventory_balances')
-          .select('item_id, current_quantity')
-          .eq('location_id', locationId);
-        if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
-        for (const b of (balances || [])) balMap.set(b.item_id, Number(b.current_quantity));
+      const balMapBySku = new Map<string, number>();
+      const balMapById = new Map<string, number>();
+      if (branchId || locationId) {
+        let locIds: string[] = locationId ? [locationId] : [];
+        if (branchId) {
+          const { data: locRows } = await supabase
+            .from('inventory_locations')
+            .select('id')
+            .eq('branch_id', branchId)
+            .eq('location_type', 'branch_store');
+          if (locRows && locRows.length > 0) {
+            locIds = [...new Set([...locIds, ...locRows.map((l: any) => l.id)])];
+          }
+        }
+
+        if (locIds.length > 0) {
+          const { data: balances, error: balErr } = await supabase
+            .from('inventory_balances')
+            .select('item_id, current_quantity, inventory_item_catalog(sku)')
+            .in('location_id', locIds);
+          if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
+          for (const b of (balances || [])) {
+            const qty = Number(b.current_quantity);
+            balMapById.set(b.item_id, qty);
+            const sku = (b as any).inventory_item_catalog?.sku;
+            if (sku) balMapBySku.set(sku, qty);
+          }
+        }
       }
 
       // 2. Fallback: inventory_items.quantity column (central store / no location)
       const itemQtyMap = new Map<string, number>();
-      if (!locationId || balMap.size === 0) {
-        const { data: qtyRows, error: qtyErr } = await supabase
-          .from('inventory_items')
-          .select('id, quantity')
-          .in('id', itemIds);
-        if (qtyErr) logger.warn(`getItems: quantity fallback error: ${qtyErr.message}`);
-        for (const r of (qtyRows || [])) {
-          if (r.quantity != null) itemQtyMap.set(r.id, Number(r.quantity));
-        }
+      const { data: qtyRows, error: qtyErr } = await supabase
+        .from('inventory_items')
+        .select('id, quantity')
+        .in('id', itemIds);
+      if (qtyErr) logger.warn(`getItems: quantity fallback error: ${qtyErr.message}`);
+      for (const r of (qtyRows || [])) {
+        if (r.quantity != null) itemQtyMap.set(r.id, Number(r.quantity));
       }
 
       // 3. Fallback: branch_stock quantities (branch storekeeper context).
-      // branch_stock is updated by stocktake approvals, GRN receipts and
-      // store stocktake approvals — it is the authoritative live stock for
+      // branch_stock is updated by stocktake approvals, GRN receipts, store transfers
+      // and store stocktake approvals — it is the authoritative live stock for
       // branch-level items even when inventory_balances hasn't been seeded.
       const branchStockMap = new Map<string, number>();
       if (branchId) {
@@ -217,7 +235,7 @@ export const getItems = async (
         unit_of_measure: item.unit,
         cost_price: item.default_unit_cost,
         retail_price: item.default_selling_price,
-        quantity: balMap.get(item.id) ?? itemQtyMap.get(item.id) ?? branchStockMap.get(item.sku) ?? 0,
+        quantity: balMapBySku.get(item.sku) ?? branchStockMap.get(item.sku) ?? balMapById.get(item.id) ?? itemQtyMap.get(item.id) ?? item.quantity ?? 0,
         last_updated: item.updated_at,
       }));
     }

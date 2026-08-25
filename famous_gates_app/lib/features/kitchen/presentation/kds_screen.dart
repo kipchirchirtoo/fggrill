@@ -234,11 +234,18 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             children: [
               Icon(Icons.tv, color: AppColors.kAccent, size: 20),
               SizedBox(width: 10),
-              Text('4 Columns (43" TV Mode - 4 to 8 Cards)',
+              Expanded(
+                child: Text(
+                  '4 Columns (43" TV Mode)',
                   style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13)),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
@@ -248,8 +255,14 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             children: [
               Icon(Icons.view_column, color: Colors.white70, size: 20),
               SizedBox(width: 10),
-              Text('3 Columns (Standard Display)',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              Expanded(
+                child: Text(
+                  '3 Columns (Standard Display)',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
@@ -259,8 +272,14 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             children: [
               Icon(Icons.splitscreen, color: Colors.white70, size: 20),
               SizedBox(width: 10),
-              Text('2 Columns (Large Cards)',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              Expanded(
+                child: Text(
+                  '2 Columns (Large Cards)',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
@@ -270,8 +289,14 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             children: [
               Icon(Icons.grid_view, color: Colors.white70, size: 20),
               SizedBox(width: 10),
-              Text('5 Columns (Dense / 4K TV)',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              Expanded(
+                child: Text(
+                  '5 Columns (Dense / 4K TV)',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
@@ -282,8 +307,14 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             children: [
               Icon(Icons.auto_awesome, color: Colors.white70, size: 20),
               SizedBox(width: 10),
-              Text('Auto (Responsive Grid)',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              Expanded(
+                child: Text(
+                  'Auto (Responsive Grid)',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
@@ -1796,79 +1827,92 @@ class _OrderTicket extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        if (queuePosition != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text('#$queuePosition',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 13)),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (_isNew)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text('NEW',
+                      Wrap(
+                        spacing: isCompact ? 4 : 6,
+                        runSpacing: isCompact ? 3 : 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (queuePosition != null)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isCompact ? 6 : 8,
+                                vertical: isCompact ? 1.5 : 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '#$queuePosition',
                                 style: TextStyle(
-                                    color: color,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 12,
-                                    letterSpacing: 1)),
-                          ),
-                        if (isStopTicket) ...[
-                          if (_isNew) const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              stopLabel,
-                              style: const TextStyle(
-                                color: AppColors.kError,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                                letterSpacing: 1,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: isCompact ? 11 : 13,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                        if (hasRecalledTicket) ...[
-                          if (_isNew || isStopTicket) const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'RECALLED BILL',
-                              style: TextStyle(
-                                color: Colors.deepOrange,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                                letterSpacing: 1,
+                          if (_isNew)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isCompact ? 6 : 8,
+                                vertical: isCompact ? 1.5 : 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'NEW',
+                                style: TextStyle(
+                                  color: color,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: isCompact ? 10 : 12,
+                                  letterSpacing: 0.8,
+                                ),
                               ),
                             ),
-                          ),
+                          if (isStopTicket)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isCompact ? 6 : 8,
+                                vertical: isCompact ? 1.5 : 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                stopLabel,
+                                style: TextStyle(
+                                  color: AppColors.kError,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: isCompact ? 10 : 12,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ),
+                          if (hasRecalledTicket)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isCompact ? 6 : 8,
+                                vertical: isCompact ? 1.5 : 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isCompact ? 'RECALLED' : 'RECALLED BILL',
+                                style: TextStyle(
+                                  color: Colors.deepOrange,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: isCompact ? 10 : 12,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ),
                         ],
-                      ]),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         // Show the customer-facing SHORT CODE as the ticket's
@@ -2007,45 +2051,14 @@ class _OrderTicket extends StatelessWidget {
                   runSpacing: isCompact ? 4 : 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _MetaPill(label: order.orderTypeLabel, icon: _typeIcon),
+                    if (order.locationLabel.toLowerCase().trim() !=
+                        order.orderTypeLabel.toLowerCase().trim())
+                      _MetaPill(label: order.orderTypeLabel, icon: _typeIcon),
                     if ((order.waiterName ?? '').isNotEmpty)
                       _MetaPill(
                         label: 'Waiter: ${order.waiterName!}',
                         icon: Icons.person_outline,
                       ),
-                    if ((order.customerName ?? '').isNotEmpty)
-                      _MetaPill(
-                        label: order.customerName!,
-                        icon: Icons.badge_outlined,
-                      ),
-                    if (order.isCaptainOrder)
-                      const _MetaPill(
-                          label: 'Captain', icon: Icons.point_of_sale),
-                    if (order.isExchangeOrder)
-                      const _MetaPill(
-                        label: 'Exchange',
-                        icon: Icons.swap_horiz,
-                        color: AppColors.kWarning,
-                      ),
-                    if (hasRecalledTicket)
-                      const _MetaPill(
-                        label: 'Recalled items',
-                        icon: Icons.replay_outlined,
-                      ),
-                    if (order.paymentStatus != null &&
-                        order.paymentStatus!.isNotEmpty)
-                      _MetaPill(
-                        label: order.paymentStatus!,
-                        icon: Icons.payments_outlined,
-                      ),
-                    if (order.hasPendingVoidRequest)
-                      const _MetaPill(
-                        label: 'Void approval',
-                        icon: Icons.block_outlined,
-                      ),
-                    if (order.isVoided)
-                      const _MetaPill(label: 'Voided', icon: Icons.block),
-                    _StatusPill(status: status),
                   ],
                 ),
               ],
@@ -2055,11 +2068,17 @@ class _OrderTicket extends StatelessWidget {
           Expanded(
             child: Builder(
               builder: (context) {
-                // Sort items so original/old items start first, followed by recalled/new items
+                // Sort items so recalled and active items needing preparation appear at the top,
+                // while already-made / completed items go to the bottom.
                 final sortedItems = [...order.items]
                   ..sort((a, b) {
                     if (a.isRecalledItem != b.isRecalledItem) {
-                      return a.isRecalledItem ? 1 : -1;
+                      return a.isRecalledItem ? -1 : 1;
+                    }
+                    final aMade = a.isReady;
+                    final bMade = b.isReady;
+                    if (aMade != bMade) {
+                      return aMade ? 1 : -1;
                     }
                     return 0;
                   });
@@ -2465,15 +2484,14 @@ class _OrderList extends StatelessWidget {
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.icon, this.color});
+  const _MetaPill({required this.label, required this.icon});
 
   final String label;
   final IconData icon;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final pillColor = color ?? AppColors.kPrimary;
+    const pillColor = AppColors.kPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -2488,7 +2506,7 @@ class _MetaPill extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label.toUpperCase(),
-            style: TextStyle(
+            style: const TextStyle(
               color: pillColor,
               fontSize: 10,
               fontWeight: FontWeight.w800,

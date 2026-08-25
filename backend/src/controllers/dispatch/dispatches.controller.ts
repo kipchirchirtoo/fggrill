@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { supabaseAdmin } from '../../config/supabase-admin';
+import { StoreTransferPostingService } from '../../modules/inventory/transfers/store-transfer-posting.service';
 
 /**
  * Create dispatch with dual OTP generation
@@ -279,7 +280,7 @@ export const verifyBranchOtp = async (req: Request, res: Response) => {
     // Get dispatch to check status
     const { data: dispatch } = await supabase
       .from('dispatches')
-      .select('status')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -329,12 +330,49 @@ export const verifyBranchOtp = async (req: Request, res: Response) => {
       })
       .eq('id', id);
 
+    // Increase stock in destination branch
+    const destBranch = dispatch.to_branch_id || dispatch.destination_branch_id;
+    if (destBranch) {
+      const { data: lines } = await supabase
+        .from('dispatch_lines')
+        .select('*, inventory_items(sku, item_name)')
+        .eq('dispatch_id', id);
+
+      if (lines && lines.length > 0) {
+        const transferItems = lines
+          .map((l: any) => ({
+            item_name: l.inventory_items?.item_name || l.item_name || l.item_id,
+            item_sku: l.inventory_items?.sku || l.item_sku || l.item_id,
+            quantity_received: Number(l.packed_quantity ?? l.quantity ?? 0),
+          }))
+          .filter((l: any) => l.item_sku && l.quantity_received > 0);
+
+        if (transferItems.length > 0) {
+          try {
+            await StoreTransferPostingService.postTransitReceipt({
+              actorId: userId,
+              dispatchId: id,
+              dispatchNumber: dispatch.dispatch_number || `DISP-${id.slice(0, 8)}`,
+              idempotencyKey: `otp-delivery-${id}`,
+              items: transferItems,
+              notes: 'Branch OTP verified receipt',
+              receivingBranchId: Number(destBranch),
+              sourceTable: 'dispatches',
+              sourceTableId: id,
+            });
+          } catch (postErr: any) {
+            console.error('Error posting inventory transit receipt in verifyBranchOtp:', postErr);
+          }
+        }
+      }
+    }
+
     // Log action
     await supabase.from('dispatch_audit_log').insert({
       dispatch_id: id,
       action: 'branch_otp_verified',
       performed_by: userId,
-      notes: 'Branch OTP verified, dispatch marked as Completed',
+      notes: 'Branch OTP verified, dispatch marked as Completed and stock received',
     });
 
     return res.status(200).json({ message: 'Branch OTP verified successfully', status: 'completed' });

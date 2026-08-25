@@ -10,13 +10,13 @@ void ensureStableWorkingDirectory() {
   }
 
   try {
-    final current = Directory.current;
-    current.statSync();
-    return;
-  } on FileSystemException {
-    // Fall through and recover below.
-  } on OSError {
-    // Fall through and recover below.
+    final exeDir = File(Platform.resolvedExecutable).parent;
+    if (exeDir.existsSync()) {
+      Directory.current = exeDir;
+      return;
+    }
+  } catch (_) {
+    // Fall through to fallback resolution below
   }
 
   final candidates = <Directory>[

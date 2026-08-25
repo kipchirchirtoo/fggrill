@@ -126,18 +126,20 @@ export class InventoryBalanceService {
 
   static async ensureLocation(client: PoolClient, input: InventoryPostingLocationInput) {
     const locationCode = codeForLocation(input);
-    const found = await client.query<{ id: string }>(
+    const found = await client.query<{ id: string; location_code: string }>(
       `
-        SELECT id
+        SELECT id, location_code
         FROM inventory_locations
         WHERE location_code = $1
+           OR (branch_id IS NOT DISTINCT FROM $2 AND location_type = $3 AND is_active = true)
+        ORDER BY CASE WHEN location_code = $1 THEN 0 ELSE 1 END
         LIMIT 1
       `,
-      [locationCode],
+      [locationCode, input.branchId ?? null, input.locationType],
     );
 
     if (found.rows[0]) {
-      return { id: found.rows[0].id, locationCode };
+      return { id: found.rows[0].id, locationCode: found.rows[0].location_code || locationCode };
     }
 
     const created = await client.query<{ id: string }>(
@@ -348,6 +350,17 @@ export class InventoryBalanceService {
       `,
       [input.deltaQuantity, input.itemSku, input.branchId],
     );
+
+    await client.query(
+      `
+        UPDATE inventory_items
+        SET quantity = GREATEST(COALESCE(quantity, 0) + $1, 0),
+            updated_at = NOW()
+        WHERE sku = $2
+          AND (branch_id = $3 OR branch_id IS NULL)
+      `,
+      [input.deltaQuantity, input.itemSku, input.branchId],
+    ).catch(() => {});
 
     const stock = await client.query<{ quantity: number }>(
       `

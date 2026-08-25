@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -75,54 +74,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 850;
+    final isWide = MediaQuery.of(context).size.width > 800;
     return Scaffold(
-      backgroundColor: const Color(0xFF070B16),
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          // ── 0. Deep dark luxury base layer ─────────────────────────────
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF060B18),
-                  Color(0xFF0D1B2A),
-                  Color(0xFF050811),
-                ],
-              ),
-            ),
-          ),
-
-          // ── 1. Full-screen background photo on narrow displays ─────────
-          if (!isWide) ...[
-            const SafeAssetImage(
-              'assets/frontend_public/IMG_8704.JPG',
-              fit: BoxFit.cover,
-            ),
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-              child: const SizedBox.expand(),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.85),
-                    Colors.black.withValues(alpha: 0.70),
-                    Colors.black.withValues(alpha: 0.88),
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
-                ),
-              ),
-            ),
-          ],
-
-          // ── 2. Content (Split on Wide, Centered Glass Card on Narrow) ──
           Row(
             children: [
               // ── Left panel — branding (wide screens only) ──────────────
@@ -139,226 +94,160 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Focus(
                     autofocus: true,
                     child: Container(
-                      color: isWide ? const Color(0xFF0A0F1D) : Colors.transparent,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isWide ? 64 : 24,
-                        vertical: 32,
-                      ),
+                      color: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 64),
                       child: Center(
-                        child: SingleChildScrollView(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 420),
-                            child: Container(
-                              padding: const EdgeInsets.all(32),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF131D2E).withValues(alpha: isWide ? 0.95 : 0.85),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xFF243247),
-                                  width: 1,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Show compact logo on narrow screens
+                              if (!isWide) ...[
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: Colors.black12),
+                                  ),
+                                  child: const SafeAssetImage(
+                                    'assets/frontend_public/fglogo.png',
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.40),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Logo header on card
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(12),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                            ),
-                                          ],
-                                        ),
-                                        child: const SafeAssetImage(
-                                          'assets/frontend_public/fglogo.png',
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      const Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'FAMOUS GATES',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 2,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Backoffice Portal',
-                                            style: TextStyle(
-                                              color: AppColors.kAccent,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 1.2,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 28),
-                                  const Text(
-                                    'Sign In',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 26,
+                                const SizedBox(height: 16),
+                              ],
+                              Text(
+                                'Login',
+                                style: Theme.of(context).textTheme.displaySmall?.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      letterSpacing: -0.5,
+                                      color: const Color(0xFF1E293B),
                                     ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Sign in to your account to continue.',
+                                style: TextStyle(
+                                  color: AppColors.kTextSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 32),
+                              // ── Email ──────────────────────────────
+                              TextField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                autofillHints: const [AutofillHints.email],
+                                textInputAction: TextInputAction.next,
+                                onSubmitted: (_) =>
+                                    _passwordFocus.requestFocus(),
+                                decoration: InputDecoration(
+                                  labelText: 'Email Address',
+                                  prefixIcon: const Icon(Icons.email_outlined),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  const SizedBox(height: 6),
-                                  const Text(
-                                    'Enter your credentials to access system controls.',
-                                    style: TextStyle(
-                                      color: Colors.white60,
-                                      fontSize: 13,
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // ── Password ───────────────────────────
+                              TextField(
+                                controller: _passwordController,
+                                focusNode: _passwordFocus,
+                                obscureText: _obscurePassword,
+                                autofillHints: const [AutofillHints.password],
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) =>
+                                    _isLoading ? null : _login(),
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  ),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscurePassword
+                                        ? 'Show password'
+                                        : 'Hide password',
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      size: 20,
                                     ),
+                                    onPressed: () => setState(() =>
+                                        _obscurePassword = !_obscurePassword),
                                   ),
-                                  const SizedBox(height: 28),
-                                  // ── Email ──────────────────────────────
-                                  TextField(
-                                    controller: _emailController,
-                                    keyboardType: TextInputType.emailAddress,
-                                    autofillHints: const [AutofillHints.email],
-                                    textInputAction: TextInputAction.next,
-                                    style: const TextStyle(color: Colors.white),
-                                    onSubmitted: (_) =>
-                                        _passwordFocus.requestFocus(),
-                                    decoration: InputDecoration(
-                                      labelText: 'Email Address',
-                                      labelStyle: const TextStyle(color: Colors.white60),
-                                      prefixIcon: const Icon(Icons.email_outlined, color: AppColors.kAccent),
-                                      filled: true,
-                                      fillColor: const Color(0xFF0C1422),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(color: Color(0xFF243247)),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(color: AppColors.kAccent, width: 1.5),
-                                      ),
-                                    ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // ── Remember me ────────────────────────
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _rememberMe,
+                                    activeColor: AppColors.kPrimary,
+                                    onChanged: (v) => setState(
+                                        () => _rememberMe = v ?? false),
                                   ),
-                                  const SizedBox(height: 16),
-                                  // ── Password ───────────────────────────
-                                  TextField(
-                                    controller: _passwordController,
-                                    focusNode: _passwordFocus,
-                                    obscureText: _obscurePassword,
-                                    autofillHints: const [AutofillHints.password],
-                                    textInputAction: TextInputAction.done,
-                                    style: const TextStyle(color: Colors.white),
-                                    onSubmitted: (_) =>
-                                        _isLoading ? null : _login(),
-                                    decoration: InputDecoration(
-                                      labelText: 'Password',
-                                      labelStyle: const TextStyle(color: Colors.white60),
-                                      prefixIcon: const Icon(Icons.lock_outline, color: AppColors.kAccent),
-                                      filled: true,
-                                      fillColor: const Color(0xFF0C1422),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(color: Color(0xFF243247)),
+                                  GestureDetector(
+                                    onTap: () => setState(
+                                        () => _rememberMe = !_rememberMe),
+                                    child: const Text(
+                                      'Remember me',
+                                      style: TextStyle(
+                                        color: Color(0xFF374151),
+                                        fontSize: 14,
                                       ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: const BorderSide(color: AppColors.kAccent, width: 1.5),
-                                      ),
-                                      suffixIcon: IconButton(
-                                        tooltip: _obscurePassword
-                                            ? 'Show password'
-                                            : 'Hide password',
-                                        icon: Icon(
-                                          _obscurePassword
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                          color: Colors.white60,
-                                          size: 20,
-                                        ),
-                                        onPressed: () => setState(() =>
-                                            _obscurePassword = !_obscurePassword),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // ── Remember me ────────────────────────
-                                  Row(
-                                    children: [
-                                      Checkbox(
-                                        value: _rememberMe,
-                                        activeColor: AppColors.kAccent,
-                                        checkColor: Colors.black,
-                                        side: const BorderSide(color: Colors.white38),
-                                        onChanged: (v) => setState(
-                                            () => _rememberMe = v ?? false),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () => setState(
-                                            () => _rememberMe = !_rememberMe),
-                                        child: const Text(
-                                          'Remember me',
-                                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 24),
-                                  // ── Login button ───────────────────────
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 48,
-                                    child: ElevatedButton(
-                                      onPressed: _isLoading ? null : _login,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.kAccent,
-                                        foregroundColor: Colors.black,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        elevation: 4,
-                                      ),
-                                      child: _isLoading
-                                          ? const SizedBox(
-                                              height: 20,
-                                              width: 20,
-                                              child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: Colors.black),
-                                            )
-                                          : const Text(
-                                              'Sign In to Dashboard',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                            ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
+                              const SizedBox(height: 24),
+                              // ── Login button ───────────────────────
+                              SizedBox(
+                                width: double.infinity,
+                                height: 46,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _login,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1A3C5E),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 2,
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white),
+                                        )
+                                      : const Text(
+                                          'Login',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -368,21 +257,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
           ),
-          // ── Back button overlay ─────────────────────────────────────────
+          // ── Back button overlay (Top-Left circle) ───────────────────────
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF131D2E).withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF243247)),
-                ),
-                child: IconButton(
-                  tooltip: 'Back to POS Terminal',
-                  onPressed: () => context.go('/terminal'),
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                ),
+              child: IconButton.filledTonal(
+                tooltip: 'Back to terminal',
+                onPressed: () => context.go('/terminal'),
+                icon: const Icon(Icons.arrow_back),
               ),
             ),
           ),
@@ -442,9 +324,9 @@ class _BrandPanel extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFF060D18).withValues(alpha: 0.78),
-                const Color(0xFF0D2137).withValues(alpha: 0.65),
-                const Color(0xFF060D18).withValues(alpha: 0.88),
+                const Color(0xFF060D18).withValues(alpha: 0.65),
+                const Color(0xFF0D2137).withValues(alpha: 0.50),
+                const Color(0xFF060D18).withValues(alpha: 0.75),
               ],
               stops: const [0.0, 0.50, 1.0],
             ),

@@ -6856,8 +6856,18 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
 
     const normalizedCashier = (cashierBills || []).map((b: any) => {
       const amt = Number(b.total_amount || b.amount || 0);
-      const paid = Number(b.amount_paid || b.paid_amount || 0);
-      const bal = b.balance_due != null ? Number(b.balance_due) : Math.max(0, amt - paid);
+      // credit_bills has no balance_due/paid_amount/amount_paid columns at
+      // all (see 20260206_create_credit_bills.sql) — it's a plain
+      // amount+status table, no partial-payment concept. status is the ONLY
+      // source of truth for whether this bill is still owed. Previously the
+      // balance here was computed from those nonexistent columns, so it
+      // always came out to the full amount regardless of status — a bill a
+      // cashier/accountant marked 'paid' could never show as settled to the
+      // waiter, since the "Settled" tab filters purely on balance <= 0.
+      const statusStr = String(b.status || '').toLowerCase();
+      const isSettled = statusStr === 'paid' || statusStr === 'cancelled';
+      const paid = isSettled ? amt : 0;
+      const bal = isSettled ? 0 : amt;
       return {
         id: b.id,
         bill_number: b.bill_number || `CRD-${b.id.substring(0, 8)}`,

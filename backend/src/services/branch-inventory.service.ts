@@ -1880,7 +1880,7 @@ export async function updateDispatchLogistics(
 export async function confirmDelivery(
   dispatchId: string,
   receiverId: string,
-  receivedItems: { id: string; received_quantity: number; damaged_quantity?: number; missing_quantity?: number; discrepancy_reason?: string }[],
+  receivedItems: Array<Record<string, any>>,
   deliveryNotes?: string,
   idempotencyKey?: string | null,
 ) {
@@ -1908,26 +1908,44 @@ export async function confirmDelivery(
   if (noteItemsError) throw noteItemsError;
   dispatch.items = noteItems || [];
 
-  const acceptedItems = receivedItems
-    .map((item: any) => {
-      const itemId = item.id || item.item_id;
-      const dispatchItem = dispatch.items.find((dispatchLine: any) => dispatchLine.id === itemId);
-      if (!dispatchItem) return null;
+  const acceptedItems: Array<{ item_name: string; item_sku: string; quantity_received: number }> = [];
 
-      const receivedQty = Math.max(0, Math.round(
-        Number(item.received_quantity ?? item.quantity ?? 0),
-      ));
-      const damagedQty = Math.max(0, Number(item.damaged_quantity ?? item.damaged ?? 0)) || 0;
-      const acceptedQty = Math.max(0, receivedQty - damagedQty);
-      if (acceptedQty <= 0) return null;
+  for (const item of receivedItems) {
+    const itemId = item.id || item.item_id || item.item_sku || item.sku;
+    const dispatchItem = (dispatch.items || []).find((dispatchLine: any) =>
+      (dispatchLine.id && dispatchLine.id === itemId) ||
+      (dispatchLine.item_sku && (dispatchLine.item_sku === itemId || dispatchLine.item_sku === item.item_sku || dispatchLine.item_sku === item.sku)) ||
+      (dispatchLine.item_id && dispatchLine.item_id === itemId)
+    );
 
-      return {
-        item_name: dispatchItem.item_name || dispatchItem.item_sku,
-        item_sku: dispatchItem.item_sku,
+    const sku = dispatchItem?.item_sku || item.item_sku || item.sku || (typeof itemId === 'string' && !itemId.includes('-') ? itemId : null);
+    if (!sku) continue;
+
+    const receivedQty = Math.max(0, Math.round(
+      Number(item.received_quantity ?? item.quantity ?? item.dispatched_quantity ?? 0),
+    ));
+    const damagedQty = Math.max(0, Number(item.damaged_quantity ?? item.damaged ?? 0)) || 0;
+    const acceptedQty = Math.max(0, receivedQty - damagedQty);
+
+    if (dispatchItem?.id) {
+      await supabase
+        .from('dispatch_items')
+        .update({
+          received_quantity: receivedQty,
+          status: 'RECEIVED',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', dispatchItem.id);
+    }
+
+    if (acceptedQty > 0) {
+      acceptedItems.push({
+        item_name: dispatchItem?.item_name || item.item_name || item.name || sku,
+        item_sku: sku,
         quantity_received: acceptedQty,
-      };
-    })
-    .filter(Boolean) as Array<{ item_name: string; item_sku: string; quantity_received: number }>;
+      });
+    }
+  }
 
   const postingResult = acceptedItems.length > 0
     ? await StoreTransferPostingService.postTransitReceipt({

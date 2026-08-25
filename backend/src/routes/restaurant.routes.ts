@@ -130,20 +130,29 @@ const isKitchenVisiblePosOrder = (order: any, isRestaurantShift: boolean = true)
   const voidRequestStatus = String(order?.void_request_status || '').toLowerCase();
 
   const items = Array.isArray(order?.items) ? order.items : [];
+  const isFoodItem = (item: any): boolean => {
+    const itemGroup = String(item?.item_group || '').toLowerCase();
+    if (['kitchen', 'restaurant', 'food', 'choma', 'pastry'].includes(itemGroup)) return true;
+    const outletType = String(item?.outlet_type || '').toLowerCase();
+    if (['restaurant', 'choma_zone', 'kitchen'].includes(outletType)) return true;
+    const name = String(item?.name || item?.item_name || '').toLowerCase();
+    const category = String(item?.category || item?.department || '').toLowerCase();
+    return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') || category.includes('snack') || category.includes('accompaniment') || category.includes('breakfast') || category.includes('meal') || category.includes('pastr') || category.includes('hot beverage') ||
+           name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali') || name.includes('samosa') || name.includes('mandazi') || name.includes('chapati') || name.includes('sausage') || name.includes('egg') || name.includes('burger') || name.includes('sandwich');
+  };
   const hasRecalledItem = items.some((item: any) => item?.is_recalled_item === true);
+  // A recall only needs kitchen attention if what got recalled is actually a
+  // food item. Previously ANY recall (or a bare kitchen_status of 'recalled'
+  // on the whole order) bypassed the food-item gate below entirely — so a
+  // Main Bar/Executive Bar order that was 100% drinks, recalled for a reason
+  // that had nothing to do with food (wrong item, cancellation, etc.), still
+  // leaked onto the restaurant kitchen's KDS just because *something* on the
+  // order was flagged recalled.
+  const hasRecalledFoodItem = items.some((item: any) => item?.is_recalled_item === true && isFoodItem(item));
 
-  if (!isRestaurantShift && !hasRecalledItem && kitchenStatus !== 'recalled') {
-    const hasFoodItems = items.some((item: any) => {
-      const itemGroup = String(item?.item_group || '').toLowerCase();
-      if (['kitchen', 'restaurant', 'food', 'choma', 'pastry'].includes(itemGroup)) return true;
-      const outletType = String(item?.outlet_type || '').toLowerCase();
-      if (['restaurant', 'choma_zone', 'kitchen'].includes(outletType)) return true;
-      const name = String(item?.name || item?.item_name || '').toLowerCase();
-      const category = String(item?.category || item?.department || '').toLowerCase();
-      return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') || category.includes('snack') || category.includes('accompaniment') || category.includes('breakfast') || category.includes('meal') || category.includes('pastr') || category.includes('hot beverage') ||
-             name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali') || name.includes('samosa') || name.includes('mandazi') || name.includes('chapati') || name.includes('sausage') || name.includes('egg') || name.includes('burger') || name.includes('sandwich');
-    });
-    if (!hasFoodItems) return false;
+  if (!isRestaurantShift) {
+    const hasFoodItems = items.some(isFoodItem);
+    if (!hasFoodItems && !hasRecalledFoodItem) return false;
   }
 
   // Kitchen must always see orders it hasn't finished yet, regardless of payment

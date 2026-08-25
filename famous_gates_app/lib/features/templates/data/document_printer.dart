@@ -19,6 +19,7 @@ Future<void> printCustomerDocument(
   String? roomNumber,
   String? customerName,
   String? staffLabel,
+  String? waiterName,
   String? publicCode,
   String? barcodeValue,
   num? amountTendered,
@@ -50,6 +51,7 @@ Future<void> printCustomerDocument(
       roomNumber: roomNumber,
       customerName: customerName,
       staffLabel: staffLabel,
+      waiterName: waiterName,
       publicCode: publicCode,
       barcodeValue: barcodeValue,
       amountTendered: amountTendered,
@@ -75,6 +77,7 @@ Future<void> printCustomerDocument(
     roomNumber: roomNumber,
     customerName: customerName,
     staffLabel: staffLabel,
+    waiterName: waiterName,
     publicCode: publicCode,
     barcodeValue: barcodeValue,
     amountTendered: amountTendered,
@@ -246,6 +249,7 @@ TemplatePrintData _templateData({
   String? roomNumber,
   String? customerName,
   String? staffLabel,
+  String? waiterName,
   String? publicCode,
   String? barcodeValue,
   num? amountTendered,
@@ -283,6 +287,7 @@ TemplatePrintData _templateData({
   final resolvedRoom = _clean(roomNumber);
   final resolvedStaffLabel = _clean(staffLabel) ?? 'Cashier';
   final resolvedStaffName = _clean(sale.cashierName);
+  final resolvedWaiterName = _clean(waiterName);
   final tendered = amountTendered ?? 0;
   final change = changeGiven ?? 0;
   final drawerCash = tendered > 0 ? tendered - change : 0;
@@ -304,6 +309,11 @@ TemplatePrintData _templateData({
       'room_number': resolvedRoom ?? '',
       'staff_label': resolvedStaffLabel,
       'staff_name': resolvedStaffName ?? '',
+      'cashier_name': resolvedStaffName ?? '',
+      'cashier': resolvedStaffName ?? '',
+      'waiter_name': resolvedWaiterName ?? (resolvedStaffLabel.toLowerCase() == 'waiter' ? (resolvedStaffName ?? '') : ''),
+      'waiter': resolvedWaiterName ?? (resolvedStaffLabel.toLowerCase() == 'waiter' ? (resolvedStaffName ?? '') : ''),
+      'server_name': resolvedWaiterName ?? (resolvedStaffLabel.toLowerCase() == 'waiter' ? (resolvedStaffName ?? '') : ''),
       'payment_method': method.toUpperCase(),
       'subtotal': 'KES ${money.format(subtotal)}',
       'tax': 'KES ${money.format(tax)}',
@@ -341,7 +351,13 @@ TemplatePrintData _templateData({
           resolvedCustomer.trim().isNotEmpty &&
           resolvedCustomer.trim().toLowerCase() != 'walk-in')
         MapEntry('Customer:', resolvedCustomer),
-      if (resolvedStaffName != null)
+      if (resolvedWaiterName != null && resolvedWaiterName.isNotEmpty)
+        MapEntry('Waiter:', resolvedWaiterName),
+      if (resolvedStaffName != null &&
+          resolvedStaffName.isNotEmpty &&
+          (resolvedWaiterName == null ||
+              resolvedWaiterName.toLowerCase() != resolvedStaffName.toLowerCase() ||
+              resolvedStaffLabel.toLowerCase() == 'cashier'))
         MapEntry('$resolvedStaffLabel:', resolvedStaffName),
       if (tendered > 0)
         MapEntry('Cash tendered:', 'KES ${money.format(tendered)}'),

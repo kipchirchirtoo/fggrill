@@ -52,8 +52,11 @@ const addDays = (days: number): string => {
 };
 
 const resolveBranchId = (req: Request): number | null => {
-  const requested = req.query.branch_id ?? req.query.branchId;
-  const raw = isGlobalRole(req.user?.role) ? requested ?? req.user?.branch_id : req.user?.branch_id;
+  const requested = req.query.branch_id ?? req.query.branchId ?? req.headers['x-branch-id'] ?? (req.body && (req.body.branch_id ?? req.body.branchId));
+  const userBranch = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+  const raw = isGlobalRole((req as any).user?.role)
+    ? (requested ?? userBranch)
+    : (userBranch ?? requested);
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
@@ -1580,7 +1583,24 @@ export const getChannelPackages = async (
     const { data: packages, error } = await query;
     if (error) throw error;
 
-    const definitions = (packages || []) as ChannelPackageDefinitionRow[];
+    let definitions = (packages || []) as ChannelPackageDefinitionRow[];
+    if (!definitions.length && branchId !== 1) {
+      let fallbackQuery = supabase
+        .from('channel_package_definitions')
+        .select('*')
+        .eq('branch_id', 1)
+        .eq('is_active', true)
+        .order('channel')
+        .order('package_name');
+      if (channel) {
+        fallbackQuery = fallbackQuery.eq('channel', channel);
+      }
+      const { data: fallbackPackages } = await fallbackQuery;
+      if (fallbackPackages && fallbackPackages.length > 0) {
+        definitions = fallbackPackages as ChannelPackageDefinitionRow[];
+      }
+    }
+
     if (!definitions.length) {
       res.status(200).json({ success: true, data: [] });
       return;

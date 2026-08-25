@@ -237,6 +237,20 @@ class _AppWindowCloseListener extends WindowListener {
 class FamousGatesApp extends ConsumerWidget {
   const FamousGatesApp({super.key});
 
+  static bool _imagesPrecached = false;
+
+  void _precacheCoreAssets(BuildContext context) {
+    if (_imagesPrecached) return;
+    _imagesPrecached = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        precacheImage(const AssetImage('assets/frontend_public/fglogo.png'), context);
+        precacheImage(const AssetImage('assets/frontend_public/IMG_8704.JPG'), context);
+        precacheImage(const AssetImage('assets/frontend_public/fggallery/294216767_538857271357927_3834486940661836835_n.jpeg'), context);
+      } catch (_) {}
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
@@ -248,6 +262,7 @@ class FamousGatesApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         if (child == null) return const SizedBox.shrink();
+        _precacheCoreAssets(context);
 
         // App-wide keyboard shortcuts. CallbackShortcuts is additive — it does
         // NOT replace Flutter's default text shortcuts, so copy/paste/cut/

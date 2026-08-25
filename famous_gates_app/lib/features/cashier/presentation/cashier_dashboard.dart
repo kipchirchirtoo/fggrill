@@ -2388,6 +2388,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           ? _text(billData, ['outlet_id', 'outletId'])
           : nav.user?.outletId;
 
+      final waiter = _waiterName(billData);
       await printCustomerDocument(
         ref,
         templateKey: 'customer_receipt',
@@ -2398,11 +2399,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           transactionId: refCode.isEmpty ? DateTime.now().toString() : refCode,
           createdAt: DateTime.now(),
           receiptNumber: refCode.isEmpty ? null : refCode,
-          // Show the WAITER who made the bill, not the reprinting cashier. Fall
-          // back to the cashier only if the bill carries no waiter at all.
-          cashierName: _waiterName(billData).isNotEmpty
-              ? _waiterName(billData)
-              : nav.user?.name,
+          cashierName: nav.user?.name,
           total: total.toDouble(),
           paymentMethod: _text(billData, ['payment_method', 'method']).isNotEmpty
               ? _text(billData, ['payment_method', 'method'])
@@ -2411,7 +2408,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         items: receiptItems,
         branchName: nav.branchName,
         customerName: _customerName(billData),
-        staffLabel: 'Waiter',
+        waiterName: waiter.isNotEmpty ? waiter : null,
         publicCode: _billShortCode(billData).isNotEmpty
             ? _billShortCode(billData)
             : lookupRef,
@@ -3110,6 +3107,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         // from the station. Done before clearing the bill so its items/code are
         // still available.
         try {
+          final waiter = _waiterName(bill);
           await printCustomerDocument(
             ref,
             templateKey: 'room_charge',
@@ -3131,6 +3129,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
             branchName: nav.branchName,
             roomNumber: roomNumber,
             customerName: guestName,
+            waiterName: waiter.isNotEmpty ? waiter : null,
             publicCode: _billShortCode(bill).isNotEmpty
                 ? _billShortCode(bill)
                 : displayBillNo,
@@ -3320,6 +3319,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final outletId = _text(bill, ['outlet_id', 'outletId']).isNotEmpty
           ? _text(bill, ['outlet_id', 'outletId'])
           : nav.user?.outletId;
+      final waiter = _waiterName(bill);
       await printCustomerDocument(
         ref,
         templateKey: 'customer_receipt',
@@ -3338,6 +3338,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         items: receiptItems,
         branchName: nav.branchName,
         customerName: _customerName(bill),
+        waiterName: waiter.isNotEmpty ? waiter : null,
         // The bill's own alphanumeric short_code must win over whatever the
         // cashier typed/scanned to look it up (which may be a plain numeric
         // order/booking id) — otherwise the receipt prints that raw number
@@ -3397,6 +3398,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final code = _billShortCode(bill).isNotEmpty
           ? _billShortCode(bill)
           : _billLookupReference(bill);
+      final waiter = _waiterName(bill);
       await printCustomerDocument(
         ref,
         templateKey: 'customer_bill',
@@ -3409,13 +3411,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           transactionId: code.isEmpty ? DateTime.now().toString() : code,
           createdAt: DateTime.now(),
           receiptNumber: code.isEmpty ? null : code,
-          // The customer bill must credit the WAITER who created it — never the
-          // cashier doing the reprint. Cashier is only a last-resort fallback.
-          cashierName: _waiterName(bill).isNotEmpty
-              ? _waiterName(bill)
-              : _text(bill, ['staff_name', 'waiter']).isNotEmpty
-                  ? _text(bill, ['staff_name', 'waiter'])
-                  : nav.user?.name,
+          cashierName: nav.user?.name,
           total: total.toDouble(),
           paymentMethod: 'pending',
         ),
@@ -3423,6 +3419,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         branchName: nav.branchName,
         customerName: _customerName(bill),
         staffLabel: 'Waiter',
+        waiterName: waiter.isNotEmpty ? waiter : null,
         publicCode: code,
         barcodeValue: code,
         duplicateLabel: 'REPRINT',
@@ -9729,6 +9726,7 @@ Future<void> _printCashierBillReceipt({
   final outletId = _text(bill, ['outlet_id', 'outletId']).isNotEmpty
       ? _text(bill, ['outlet_id', 'outletId'])
       : nav.user?.outletId;
+  final waiter = _waiterName(bill);
   await printCustomerDocument(
     ref,
     templateKey: 'customer_receipt',
@@ -9746,6 +9744,7 @@ Future<void> _printCashierBillReceipt({
     items: _receiptItemsFromBill(bill, amount),
     branchName: nav.branchName,
     customerName: _customerName(bill),
+    waiterName: waiter.isNotEmpty ? waiter : null,
     publicCode: _text(bill, [
       'short_code',
       'shortCode',
@@ -10521,11 +10520,38 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
 
 // nests it (top-level for credit bills, `order`/`booking` for POS/hotel).
 String _waiterName(Map<String, dynamic> bill) {
-  final direct = _text(bill, ['waiter_name']);
+  final direct = _text(bill, [
+    'waiter_name',
+    'waiter',
+    'server_name',
+    'staff_name',
+    'created_by_name',
+    'served_by',
+    'staff',
+    'creator',
+  ]);
   if (direct.isNotEmpty) return direct;
-  for (final nestedKey in ['order', 'booking', 'invoice', 'bill']) {
+  for (final nestedKey in [
+    'order',
+    'booking',
+    'invoice',
+    'bill',
+    'source',
+    'data',
+    'transaction',
+    'financials',
+  ]) {
     final nested = _asMap(bill[nestedKey]);
-    final value = _text(nested, ['waiter_name']);
+    final value = _text(nested, [
+      'waiter_name',
+      'waiter',
+      'server_name',
+      'staff_name',
+      'created_by_name',
+      'served_by',
+      'staff',
+      'creator',
+    ]);
     if (value.isNotEmpty) return value;
   }
   return '';

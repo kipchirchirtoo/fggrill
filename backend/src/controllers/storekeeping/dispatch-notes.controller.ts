@@ -936,12 +936,12 @@ export const confirmDelivery = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { received_items, items_received, delivery_notes, discrepancy_notes, notes: bodyNotes } = req.body;
-        const items = items_received || received_items || [];
+        const { items: bodyItems, received_items, items_received, delivery_notes, discrepancy_notes, notes: bodyNotes } = req.body;
+        const items = bodyItems || items_received || received_items || [];
         const notes = discrepancy_notes || delivery_notes || bodyNotes;
 
-        if (!items || !Array.isArray(items)) {
-            throw new AppError('items_received or received_items array is required', 400);
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            throw new AppError('Received items array is required', 400);
         }
 
         const result = await BranchInventoryService.confirmDelivery(

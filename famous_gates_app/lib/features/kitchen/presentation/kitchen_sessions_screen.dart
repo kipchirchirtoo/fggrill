@@ -3136,6 +3136,19 @@ class _KitchenIssueStockScreenState
     });
   }
 
+  List<String> _getDishesForSku(String sku) {
+    if (sku.trim().isEmpty) return const [];
+    final lowerSku = sku.trim().toLowerCase();
+    final dishes = <String>{};
+    for (final r in _recipes) {
+      if (r.rawItemSku.trim().toLowerCase() == lowerSku) {
+        final name = r.producedItemName.isNotEmpty ? r.producedItemName : r.recipeName;
+        if (name.isNotEmpty) dishes.add(name);
+      }
+    }
+    return dishes.toList();
+  }
+
   Set<String> _selectedSkusExcluding(int index) {
     final skus = <String>{};
     for (var i = 0; i < _lines.length; i++) {
@@ -3247,7 +3260,6 @@ class _KitchenIssueStockScreenState
         'responsible_staff_ids': responsibleStaffIds,
         'purpose_channel': widget.channelCode,
         if (_selectedReferenceId != null) 'reference_id': _selectedReferenceId,
-        if (line.selectedRecipeId != null) 'recipe_id': line.selectedRecipeId,
       });
     }
 
@@ -3496,6 +3508,48 @@ class _KitchenIssueStockScreenState
                     _BreakfastStatusCard(snapshot: _breakfastSnapshot),
                     const SizedBox(height: 16),
                   ],
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F7FF),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.hub_outlined,
+                            color: Color(0xFF1D4ED8), size: 22),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Universal Raw Stock Issuance',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E3A8A),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Issue raw inventory items once for the entire session. All active Food Control standards and recipes configured in Branch Accountant (BOM, yield pools, sub-assemblies) will automatically draw and convert consumption from this raw stock when dishes are ordered at POS.',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.blueGrey.shade800,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   Card(
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -3591,87 +3645,71 @@ class _KitchenIssueStockScreenState
                                               ),
                                             ),
                                           ),
-                                          Row(
-                                            children: [
-                                              SizedBox(
-                                                width: 360,
-                                                child: _InventoryAutocompleteField(
-                                                  line: line,
-                                                  items: _inventoryItems,
-                                                  selectedSkus:
-                                                      _selectedSkusExcluding(index),
-                                                  onSelected: (item) {
-                                                    final itemSku = item['sku']?.toString() ?? '';
-                                                    line.matchingRecipes = _recipes
-                                                        .where((r) => r.rawItemSku.isNotEmpty && r.rawItemSku == itemSku)
-                                                        .toList();
-                                                    if (line.matchingRecipes.isNotEmpty) {
-                                                      line.selectedRecipeId =
-                                                          line.matchingRecipes.first.id;
-                                                    } else {
-                                                      line.selectedRecipeId = null;
-                                                    }
-                                                    setState(() {});
-                                                  },
-                                                ),
-                                              ),
-                                              if (line.matchingRecipes.isNotEmpty) ...[
-                                                const SizedBox(width: 12),
-                                                SizedBox(
-                                                  width: 240,
-                                                  child: DropdownButtonFormField<String>(
-                                                    value: line.selectedRecipeId,
-                                                    // Fill the 240px slot so the
-                                                    // item's ellipsis engages
-                                                    // instead of overflowing the
-                                                    // Row (text + arrow) by a
-                                                    // sub-pixel.
-                                                    isExpanded: true,
-                                                    decoration: const InputDecoration(
-                                                      labelText: 'Link to Recipe Standard',
-                                                      isDense: true,
-                                                      border: OutlineInputBorder(),
-                                                      contentPadding: EdgeInsets.symmetric(
-                                                          horizontal: 10, vertical: 12),
-                                                    ),
-                                                    style: const TextStyle(
-                                                        fontSize: 13, color: Colors.black87),
-                                                    items: line.matchingRecipes.map((r) {
-                                                      return DropdownMenuItem(
-                                                        value: r.id,
-                                                        child: Text(r.recipeName,
-                                                            overflow: TextOverflow.ellipsis),
-                                                      );
-                                                    }).toList(),
-                                                    onChanged: (val) {
-                                                      setState(() {
-                                                        line.selectedRecipeId = val;
-                                                      });
-                                                    },
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
+                                          SizedBox(
+                                            width: 360,
+                                            child: _InventoryAutocompleteField(
+                                              line: line,
+                                              items: _inventoryItems,
+                                              recipes: _recipes,
+                                              selectedSkus:
+                                                  _selectedSkusExcluding(index),
+                                              onSelected: (item) {
+                                                setState(() {});
+                                              },
+                                            ),
                                           ),
                                           const SizedBox(width: 18),
-                                          SizedBox(
+                                                                                    SizedBox(
                                             width: 300,
-                                            child: Text(
-                                              itemName == 'â€“' ||
-                                                      itemName.isEmpty
-                                                  ? 'Select an item from search'
-                                                  : itemName,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 15,
-                                                color: (itemName == 'â€“' ||
-                                                        itemName.isEmpty)
-                                                    ? const Color(0xFF64748B)
-                                                    : const Color(0xFF0F172A),
-                                              ),
-                                            ),
+                                            child: Builder(builder: (_) {
+                                              final linkedDishes = _getDishesForSku(
+                                                  selectedItem?['sku']?.toString() ?? '');
+                                              return Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    itemName == '–' ||
+                                                            itemName.isEmpty
+                                                        ? 'Select an item from search'
+                                                        : itemName,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 15,
+                                                      color: (itemName == '–' ||
+                                                              itemName.isEmpty)
+                                                          ? const Color(0xFF64748B)
+                                                          : const Color(0xFF0F172A),
+                                                    ),
+                                                  ),
+                                                  if (linkedDishes.isNotEmpty) ...[
+                                                    const SizedBox(height: 4),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(
+                                                          horizontal: 8, vertical: 3),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFE8F5E9),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(
+                                                            color: const Color(0xFFA5D6A7)),
+                                                      ),
+                                                      child: Text(
+                                                        'Auto-links to ${linkedDishes.length} standards: ${linkedDishes.take(3).join(', ')}${linkedDishes.length > 3 ? '...' : ''}',
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Color(0xFF2E7D32),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              );
+                                            }),
                                           ),
                                           const SizedBox(width: 18),
                                           SizedBox(
@@ -4130,12 +4168,14 @@ class _InventoryAutocompleteField extends StatelessWidget {
   const _InventoryAutocompleteField({
     required this.line,
     required this.items,
+    this.recipes = const [],
     required this.selectedSkus,
     this.onSelected,
   });
 
   final _KitchenIssueLine line;
   final List<Map<String, dynamic>> items;
+  final List<KitchenProductionRecipe> recipes;
   final Set<String> selectedSkus;
   final ValueChanged<Map<String, dynamic>>? onSelected;
 
@@ -4222,15 +4262,34 @@ class _InventoryAutocompleteField extends StatelessWidget {
                   final qty =
                       NumberFormat('#,##0.###').format(item['quantity'] ?? 0);
                   final unit = item['unit_of_measure'] ?? item['unit'] ?? '';
+                  final itemSku = (item['sku'] ?? '').toString().trim().toLowerCase();
+                  final dishes = recipes
+                      .where((r) => r.rawItemSku.trim().toLowerCase() == itemSku)
+                      .map((r) => r.producedItemName.isNotEmpty ? r.producedItemName : r.recipeName)
+                      .toSet()
+                      .toList();
+                  final subtitleParts = <String>[
+                    '${item['sku']}',
+                    if ((item['category'] ?? '').toString().isNotEmpty) item['category'].toString(),
+                    'Available: $qty $unit',
+                  ];
+                  if (dishes.isNotEmpty) {
+                    subtitleParts.add('Supplies: ${dishes.take(3).join(', ')}${dishes.length > 3 ? '...' : ''}');
+                  }
                   return ListTile(
                     dense: true,
                     title: Text(
                       '${item['item_name'] ?? item['description'] ?? item['sku']}',
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
-                      '${item['sku']}  |  ${item['category'] ?? 'Uncategorised'}  |  $qty $unit',
+                      subtitleParts.join('  •  '),
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: dishes.isNotEmpty ? const Color(0xFF1B5E20) : Colors.grey.shade700,
+                      ),
                     ),
                     onTap: () => onSelected(item),
                   );
@@ -5105,6 +5164,7 @@ class _KitchenProductionLogSectionState
   List<Map<String, dynamic>> _recipes = [];
   List<Map<String, dynamic>> _staff = [];
   List<Map<String, dynamic>> _recentIssuances = [];
+  Map<String, double> _storeStockBySku = {};
   Map<String, dynamic>? _selectedRecipe;
   Map<String, dynamic>? _selectedStaff;
   final Map<String, TextEditingController> _inputCtrl = {};
@@ -5129,9 +5189,10 @@ class _KitchenProductionLogSectionState
       final storekeeperRepo = ref.read(branchStorekeeperRepositoryProvider);
       final kitchenRepo = ref.read(kitchenRepositoryProvider);
       final results = await Future.wait([
-        storekeeperRepo.getProductionRecipes(),
+        storekeeperRepo.getProductionRecipes(yieldType: 'PRODUCTION'),
         kitchenRepo.getStaffProfiles(),
         storekeeperRepo.getShiftAdditions(widget.shift.id),
+        kitchenRepo.getStoreInventoryItems(limit: 500),
       ]);
 
       final allRecipes =
@@ -5139,34 +5200,78 @@ class _KitchenProductionLogSectionState
       // SUB_ASSEMBLY (prep) recipes are handled by the Prep Batch section
       final eligible = allRecipes.where((r) {
         final yt = (r['yield_type_code'] ?? '').toString().toUpperCase();
-        return yt == 'PRODUCTION' || yt == 'COMPLEX';
+        return yt == 'PRODUCTION';
       }).toList()
         ..sort((a, b) => _recipeName(a).compareTo(_recipeName(b)));
 
-      final staffList =
+      final rawStaffList =
           List<Map<String, dynamic>>.from(results[1] as List<dynamic>);
       final issuances =
           List<Map<String, dynamic>>.from(results[2] as List<dynamic>);
+      final storeInv =
+          List<Map<String, dynamic>>.from(results[3] as List<dynamic>);
+
+      final stockMap = <String, double>{};
+      for (final it in storeInv) {
+        final sku = (it['sku'] ?? '').toString().trim();
+        final q = (it['quantity'] as num?)?.toDouble() ?? 0;
+        if (sku.isNotEmpty) stockMap[sku] = q;
+      }
+
+      // Filter staff strictly for the active branch and prioritize storekeepers
+      final branchId = widget.shift.branchId;
+      final branchStaff = rawStaffList.where((s) {
+        final bId = s['branch_id'];
+        if (bId == null) return false;
+        return bId.toString() == branchId.toString();
+      }).toList();
+
+      final staffList = branchStaff.isNotEmpty ? branchStaff : rawStaffList;
+      staffList.sort((a, b) {
+        final aRole = (a['role'] ?? '').toString().toLowerCase();
+        final bRole = (b['role'] ?? '').toString().toLowerCase();
+        final aIsStore = aRole.contains('storekeeper') || aRole.contains('store');
+        final bIsStore = bRole.contains('storekeeper') || bRole.contains('store');
+        if (aIsStore && !bIsStore) return -1;
+        if (!aIsStore && bIsStore) return 1;
+        return _staffName(a).compareTo(_staffName(b));
+      });
 
       if (!mounted) return;
       setState(() {
         _recipes = eligible;
         _staff = staffList;
         _recentIssuances = issuances;
+        _storeStockBySku = stockMap;
         _loading = false;
       });
 
-      // Pre-select first assigned chef
+      // Pre-select the logged-in branch storekeeper (or first branch storekeeper)
       if (_selectedStaff == null && staffList.isNotEmpty) {
-        final preferred = {
-          ...widget.shift.assignedChefIds,
-          ...widget.shift.assignedDispenseIds,
-        };
-        final chef = staffList.firstWhere(
-          (s) => preferred.contains(s['id']?.toString()),
-          orElse: () => staffList.first,
-        );
-        if (mounted) setState(() => _selectedStaff = chef);
+        final currentUser = ref.read(authNotifierProvider).value;
+        Map<String, dynamic>? defaultIssuer;
+
+        if (currentUser != null) {
+          defaultIssuer = staffList.where((s) {
+            final sUserId = s['user_id']?.toString();
+            final sId = s['id']?.toString();
+            final sEmail = s['email']?.toString().toLowerCase();
+            return (sUserId != null && sUserId == currentUser.id) ||
+                   (sId != null && sId == currentUser.id) ||
+                   (sEmail != null && sEmail == currentUser.email.toLowerCase());
+          }).firstOrNull;
+        }
+
+        defaultIssuer ??= staffList.where((s) {
+          final role = (s['role'] ?? '').toString().toLowerCase();
+          return role.contains('storekeeper') || role.contains('store');
+        }).firstOrNull;
+
+        defaultIssuer ??= staffList.firstOrNull;
+
+        if (defaultIssuer != null && mounted) {
+          setState(() => _selectedStaff = defaultIssuer);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -5207,6 +5312,10 @@ class _KitchenProductionLogSectionState
           .toList();
 
   double _available(String sku) {
+    final storeQty = _storeStockBySku[sku];
+    if (storeQty != null && storeQty > 0) {
+      return storeQty;
+    }
     final item = widget.shiftItems
         .where((i) => i.itemSku == sku)
         .firstOrNull;
@@ -5316,6 +5425,10 @@ class _KitchenProductionLogSectionState
       );
     }
 
+    if (_recipes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final recipe = _selectedRecipe;
     final inps = recipe != null ? _inputs(recipe) : <Map<String, dynamic>>[];
     final producedUnit =
@@ -5394,10 +5507,14 @@ class _KitchenProductionLogSectionState
                     optionsBuilder: (textEditingValue) {
                       final query =
                           textEditingValue.text.trim().toLowerCase();
+                      final productionOnly = _recipes.where((r) {
+                        final yt = (r['yield_type_code'] ?? '').toString().toUpperCase();
+                        return yt == 'PRODUCTION';
+                      }).toList();
                       if (query.isEmpty) {
-                        return _recipes.take(50);
+                        return productionOnly.take(50);
                       }
-                      return _recipes.where((r) {
+                      return productionOnly.where((r) {
                         final name = _recipeName(r).toLowerCase();
                         final code = '${r['recipe_code'] ?? ''}'.toLowerCase();
                         final rawName =
@@ -6411,6 +6528,10 @@ class _PrepBatchSectionState extends ConsumerState<_PrepBatchSection> {
         padding: EdgeInsets.symmetric(vertical: 32),
         child: Center(child: CircularProgressIndicator()),
       );
+    }
+
+    if (_recipes.isEmpty) {
+      return const SizedBox.shrink();
     }
 
     final recipe = _selectedRecipe;

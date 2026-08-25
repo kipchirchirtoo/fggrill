@@ -338,12 +338,13 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
     }
 
     const calculated = await buildBreakfastPaxSnapshot(branchId, date);
+    const calculatedPax = control?.calculated_pax ?? calculated.calculatedPax;
 
     return {
         branch_id: branchId,
         breakfast_date: date,
-        calculated_pax: calculated.calculatedPax,
-        confirmed_pax: Number(control?.confirmed_pax ?? calculated.calculatedPax),
+        calculated_pax: calculatedPax,
+        confirmed_pax: Number(control?.confirmed_pax ?? calculatedPax),
         status: control?.status ?? 'unconfirmed',
         adjustment_reason: control?.adjustment_reason ?? null,
         confirmed_at: control?.confirmed_at ?? null
@@ -916,9 +917,6 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
         const foodControlType: string = typeResult || 'UNREGISTERED';
 
         let recipeId: string | null = it.recipe_id || null;
-        if (foodControlType === 'A_RECIPE_BOM' && !recipeId) {
-            throw new AppError(`BOM_DECLARATION_REQUIRED: ${it.name || it.sku} is a recipe item — select which recipe this batch is for`, 400);
-        }
         if (foodControlType !== 'A_RECIPE_BOM') {
             recipeId = null; // never persist a recipe_id for non-recipe types, even if the client sent one
         }
@@ -4714,6 +4712,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             }
         } else if (channel === 'accommodation_breakfast') {
             pax = n(shift.breakfast_pax);
+            revenue = pax * 1000;
         } else if (channel === 'staff_meal') {
             pax = n(shift.staff_meal_pax);
         }

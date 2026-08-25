@@ -923,14 +923,16 @@ export const getDailyBreakfastPax = async (
       ? record.source_snapshot
       : {};
 
+    const calculatedPax = record?.calculated_pax ?? calculated.calculatedPax;
+
     res.status(200).json({
       success: true,
       data: {
         id: record?.id ?? null,
         branch_id: branchId,
         breakfast_date: date,
-        calculated_pax: calculated.calculatedPax,
-        confirmed_pax: record?.confirmed_pax ?? calculated.calculatedPax,
+        calculated_pax: calculatedPax,
+        confirmed_pax: record?.confirmed_pax ?? calculatedPax,
         status: record?.status ?? 'unconfirmed',
         adjustment_reason: record?.adjustment_reason ?? null,
         confirmed_at: record?.confirmed_at ?? null,

@@ -146,9 +146,7 @@ class _ProductionLoggingLedgerState
             (recipe['yield_type_code'] ?? '').toString().toUpperCase();
         final outputId = _resolveOutputItemId(recipe);
         final recipeId = (recipe['id'] ?? '').toString().trim();
-        return (yieldType == 'PRODUCTION' ||
-                yieldType == 'SUB_ASSEMBLY' ||
-                yieldType == 'COMPLEX') &&
+        return (yieldType == 'PRODUCTION' || yieldType == 'SUB_ASSEMBLY') &&
             outputId != null &&
             outputId.isNotEmpty &&
             issuedRecipeIds.contains(recipeId);
