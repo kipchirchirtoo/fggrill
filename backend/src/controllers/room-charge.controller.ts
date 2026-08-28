@@ -160,11 +160,8 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
     })
     .filter((row) => {
       const folio = folioMap.get(String(row.booking_id));
-      // Exclude closed or settled folios
-      if (folio && (folio.status === 'closed' || folio.settled === true || (folio.balance_due <= 0 && folio.status === 'closed'))) {
-        return false;
-      }
-      if (row.folio_balance <= 0 && !row.overstay) {
+      // Exclude closed folios only; in-house guests with paid-up room balances can still charge food/drinks/services to their room
+      if (folio && folio.status === 'closed') {
         return false;
       }
       return true;

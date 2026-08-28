@@ -66,13 +66,14 @@ export const getRooms = async (
       req.query.branch_id ||
       (isGlobal ? 0 : req.user?.branch_id || 0)
     );
-    const staySnapshots = scopedBranchId
-      ? await loadStaySnapshots(scopedBranchId, {
-          asOfDate: todayInNairobi(),
-          includeConfirmed: true,
-          limit: 400,
-        })
-      : [];
+    const staySnapshots = await loadStaySnapshots(
+      scopedBranchId > 0 ? scopedBranchId : undefined,
+      {
+        asOfDate: todayInNairobi(),
+        includeConfirmed: true,
+        limit: 500,
+      }
+    );
     const checkedInByRoomId = new Map<string, any>();
     const confirmedByRoomId = new Map<string, any>();
     staySnapshots.forEach((stay) => {

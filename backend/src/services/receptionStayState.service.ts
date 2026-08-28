@@ -157,11 +157,16 @@ export function isConfirmedLikeStatus(status: unknown): boolean {
 }
 
 export function isInHouseStay(row: ReservationStayRow, asOfDate: string = todayInNairobi()): boolean {
-  if (!isCheckedInLikeStatus(row?.status)) return false;
   if (row?.checked_out_at) return false;
-  const checkInDate = nairobiDateOf(row?.check_in_date);
-  if (!checkInDate) return false;
-  return checkInDate <= asOfDate;
+  const s = normalizeLower(row?.status);
+  if (['checked_out', 'cancelled', 'canceled', 'no_show'].includes(s)) return false;
+  if (isCheckedInLikeStatus(s) || s === 'occupied' || s === 'in_house') return true;
+  if (isConfirmedLikeStatus(s)) {
+    const checkInDate = nairobiDateOf(row?.check_in_date);
+    if (!checkInDate) return false;
+    return checkInDate <= asOfDate;
+  }
+  return false;
 }
 
 function breakfastInclusionReason(
@@ -226,10 +231,10 @@ export function buildStaySnapshot(row: ReservationStayRow, asOfDate: string = to
     effective_checkout_date: effectiveCheckoutDate,
     checked_in_at: row?.checked_in_at ? String(row.checked_in_at) : null,
     checked_out_at: row?.checked_out_at ? String(row.checked_out_at) : null,
-    adults: Number(row?.adults || 0),
+    adults: Number(row?.adults || 1),
     children: Number(row?.children || 0),
-    pax: Number(row?.adults || 0) + Number(row?.children || 0),
-    meal_plan: directMealPlan || ratePlanMealPlan || 'room_only',
+    pax: Math.max(1, Number(row?.adults || 1) + Number(row?.children || 0)),
+    meal_plan: directMealPlan || 'room_only',
     rate_plan_meal_plan: ratePlanMealPlan,
     breakfast_eligible: breakfastEligible,
     breakfast_inclusion_reason: breakfastInclusionReason(
@@ -250,7 +255,7 @@ export function buildStaySnapshot(row: ReservationStayRow, asOfDate: string = to
 }
 
 export async function loadStaySnapshots(
-  branchId: number,
+  branchId?: number | null,
   options?: {
     asOfDate?: string;
     includeConfirmed?: boolean;
@@ -260,13 +265,15 @@ export async function loadStaySnapshots(
 ): Promise<StaySnapshot[]> {
   const asOfDate = options?.asOfDate || todayInNairobi();
   const includeConfirmed = Boolean(options?.includeConfirmed);
-  const limit = options?.limit ?? 250;
-  await automationService.syncOverdueInHouseStays({ branchId });
+  const limit = options?.limit ?? 500;
+  if (branchId && Number(branchId) > 0) {
+    await automationService.syncOverdueInHouseStays({ branchId: Number(branchId) }).catch(() => {});
+  }
   const statuses = includeConfirmed
-    ? Array.from(new Set([...CHECKED_IN_STATUSES, ...CONFIRMED_STATUSES]))
-    : Array.from(CHECKED_IN_STATUSES);
+    ? Array.from(new Set([...CHECKED_IN_STATUSES, ...CONFIRMED_STATUSES, 'occupied']))
+    : Array.from(new Set([...CHECKED_IN_STATUSES, 'occupied']));
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('reservations')
     .select(`
       id,
@@ -300,10 +307,15 @@ export async function loadStaySnapshots(
       ),
       rate_plan:rate_plans!rate_plan_id(id, name, meal_plan, metadata)
     `)
-    .eq('branch_id', branchId)
     .in('status', statuses)
     .order('check_in_date', { ascending: false })
     .limit(limit);
+
+  if (branchId && Number(branchId) > 0) {
+    query = query.eq('branch_id', Number(branchId));
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -367,7 +379,7 @@ export function resolveEffectiveRoomState(
     effectiveStatus = physicalStatus === 'out_of_order' || hkStatus === 'out_of_order'
       ? 'out_of_order'
       : 'maintenance';
-  } else if (activeStay?.in_house) {
+  } else if (activeStay?.in_house || physicalStatus === 'occupied') {
     effectiveStatus = 'occupied';
   } else if (CLEANING_HK_STATUSES.has(hkStatus) || physicalStatus === 'cleaning' || hkStatus === 'late_checkout') {
     effectiveStatus = 'cleaning';
