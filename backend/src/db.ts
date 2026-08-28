@@ -14,12 +14,17 @@ const mockQuery = async (): Promise<QueryResult<any>> => {
   return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
 };
 
-// Configure PostgreSQL connection pool (only if not skipped)
+// Configure PostgreSQL connection pool
 let pool: Pool | null = null;
 
-if (!SKIP_PG && process.env.DATABASE_URL) {
+function getPool(): Pool | null {
+  if (pool) return pool;
+  
+  const connStr = process.env.DATABASE_URL || process.env.DATABASE_URL_DEV_DEMO;
+  if (!connStr) return null;
+
   pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: connStr,
     ssl: { rejectUnauthorized: false },
     max: 10, // Strict pool cap for Supabase pooler
     idleTimeoutMillis: 5000, // Return idle connections to Supavisor quickly
@@ -27,7 +32,6 @@ if (!SKIP_PG && process.env.DATABASE_URL) {
     maxUses: 1000, // Recycle connections periodically to prevent stale state
   });
 
-  // Automatically enforce strict query and session timeouts on every checked-out connection
   pool.on('connect', (client) => {
     client.query(`
       SET statement_timeout = '30000';
@@ -38,13 +42,11 @@ if (!SKIP_PG && process.env.DATABASE_URL) {
     });
   });
 
-  // Handle pool errors gracefully
   pool.on('error', (err) => {
     console.error('Database pool error:', err.message);
     dbAvailable = false;
   });
 
-  // Test database connection (non-blocking)
   pool.connect()
     .then(client => {
       console.log('Database connection established');
@@ -55,13 +57,19 @@ if (!SKIP_PG && process.env.DATABASE_URL) {
       console.warn('Database connection failed - some features may be unavailable:', err.message);
       dbAvailable = false;
     });
+
+  return pool;
 }
+
+// Eager initialization if connection string is present
+getPool();
 
 // Export query function for use in routes
 export default {
   query: async (text: string, params?: any[]): Promise<QueryResult<any>> => {
-    if (!pool) {
-      throw new Error('Database pool not initialized');
+    const activePool = getPool();
+    if (!activePool) {
+      throw new Error('Database pool not initialized - check DATABASE_URL');
     }
 
     const timeoutPromise = new Promise((_, reject) => {
@@ -69,7 +77,7 @@ export default {
     });
 
     try {
-      const queryPromise = pool.query(text, params);
+      const queryPromise = activePool.query(text, params);
       const result = await Promise.race([queryPromise, timeoutPromise]) as QueryResult<any>;
 
       dbAvailable = true;
@@ -86,10 +94,11 @@ export default {
     }
   },
   getClient: async () => {
-    if (!pool) {
-      throw new Error('Database not available');
+    const activePool = getPool();
+    if (!activePool) {
+      throw new Error('Database not available - check DATABASE_URL');
     }
-    const client = await pool.connect();
+    const client = await activePool.connect();
     
     // Safety tracker: warn if client is checked out and not released within 25 seconds
     const stack = new Error().stack;

@@ -376,7 +376,10 @@ export const createConferenceBooking = async (
             : `__METADATA__:${JSON.stringify(metadata)}`;
 
         const depositAmount = Number(req.body.deposit_amount || req.body.amount_paid || 0);
-        const totalAmount = Number(calculatedTotal || req.body.total_amount || 0);
+        const explicitTotal = req.body.total_amount ?? req.body.amount;
+        const totalAmount = explicitTotal != null && Number(explicitTotal) > 0
+            ? Number(explicitTotal)
+            : Number(calculatedTotal || 0);
         const balanceAmount = Math.max(0, totalAmount - depositAmount);
         const dateFrom = String(start_date || '').slice(0, 10);
         const dateTo = String(end_date || '').slice(0, 10);

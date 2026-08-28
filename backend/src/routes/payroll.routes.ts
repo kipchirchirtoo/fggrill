@@ -24,7 +24,8 @@ import {
   getCreditBillContents,
   transferCreditBill,
   rejectCreditBill,
-  editCreditBill
+  editCreditBill,
+  recordPaidBillByStaff
 } from '../controllers/credit-bills.controller';
 import { getLoans, createLoan, approveLoan, rejectLoan, recordLoanPayment } from '../controllers/loans.controller';
 import { getAdvances, createAdvance, approveAdvance, rejectAdvance } from '../controllers/advances.controller';
@@ -151,6 +152,12 @@ router.patch(
   '/credit-bills/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   updateCreditBillStatus
+);
+
+router.post(
+  '/credit-bills/record-paid-bill',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  recordPaidBillByStaff
 );
 
 router.post(

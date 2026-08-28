@@ -3,6 +3,9 @@ import { supabase } from '../config/supabase';
 import { applyBranchFilter } from '../utils/branchIsolation';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { recordHotelCashierPayment } from '../services/receptionCashierPayment.service';
+import { recordConferenceCashierPayment } from '../services/receptionEventCashierPayment.service';
+import { billCache } from '../utils/bill-cache';
 
 // Auto-process corporate bills whose credit term days have matured.
 // Single-flight + throttle: this is a heavy WRITE batch (it inserts invoices)
@@ -211,7 +214,15 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
     try {
         const branchId = (req as any).user.branch_id;
         const cashierId = (req as any).user.id;
-        const { pos_bill_id, corporate_customer_id, amount, shift_id } = req.body;
+        const cashierName =
+            `${(req as any).user.first_name || ''} ${(req as any).user.last_name || ''}`.trim() || null;
+        const { pos_bill_id, corporate_customer_id, amount, shift_id, reference_id } = req.body;
+        // Which kind of bill is being charged: POS bill (default), a room folio
+        // (reservation), or a conference booking.
+        const billType = String(req.body.bill_type || 'pos').toLowerCase();
+
+        const chargeAmount = Number(amount);
+        if (!(chargeAmount > 0)) throw new AppError('A positive amount is required', 400);
 
         // Verify Customer and Credit Limit
         const { data: customer, error: customerErr } = await supabase
@@ -219,7 +230,7 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
             .select('*')
             .eq('id', corporate_customer_id)
             .single();
-        
+
         if (customerErr || !customer) throw new AppError('Corporate customer not found', 404);
         if (!customer.is_active) throw new AppError('Corporate account is inactive', 400);
 
@@ -229,21 +240,106 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
             .select('amount')
             .eq('corporate_customer_id', corporate_customer_id)
             .in('status', ['UNINVOICED', 'INVOICED']);
-        
+
         const currentBalance = (uninvBills || []).reduce((sum, bill) => sum + Number(bill.amount), 0);
-        
-        if ((currentBalance + Number(amount)) > Number(customer.credit_limit)) {
+
+        if ((currentBalance + chargeAmount) > Number(customer.credit_limit)) {
             throw new AppError(`Credit limit exceeded. Limit: KES ${customer.credit_limit}, Current Balance: KES ${currentBalance}`, 400);
         }
 
-        // 1. Record Corporate Credit Bill
+        // 1. Settle the underlying bill (mark it settled-by-corporate) FIRST, so a
+        //    settlement failure never leaves an orphan receivable. Each bill type
+        //    is cleared the same way its cash settlement clears it.
+        let referenceType: 'pos' | 'room_folio' | 'conference' = 'pos';
+        let referenceId: string | null = null;
+
+        if (billType === 'room_folio' || billType === 'room') {
+            const reservationId = String(reference_id || '').trim();
+            if (!reservationId) throw new AppError('reference_id (reservation) is required for a room bill', 400);
+            // Clears the guest folio via the vetted hotel settlement path using
+            // the Credit Bill (non-cash) method — the corporate account, not the
+            // guest, now owes it (tracked as the corporate_credit_bill below).
+            await recordHotelCashierPayment({
+                reservationId,
+                amount: chargeAmount,
+                paymentMethod: 'credit_bill',
+                cashierUserId: cashierId,
+                cashierName,
+                reference: `CORP-${customer.name}`,
+            });
+            referenceType = 'room_folio';
+            referenceId = reservationId;
+        } else if (billType === 'conference') {
+            const bookingId = String(reference_id || '').trim();
+            if (!bookingId) throw new AppError('reference_id (conference booking) is required', 400);
+            await recordConferenceCashierPayment({
+                bookingId,
+                amount: chargeAmount,
+                paymentMethod: 'credit_bill',
+                cashierUserId: cashierId,
+                cashierName,
+                reference: `CORP-${customer.name}`,
+            });
+            referenceType = 'conference';
+            referenceId = bookingId;
+        } else {
+            // POS (default): mark the bill credit_bill + CORPORATE_CREDIT so it
+            // leaves the cashier's unpaid queue. The id can be either a master
+            // bill or a standalone shift order, so update whichever it is.
+            // .select('id') lets us detect a 0-row update — a bare update reports
+            // success even when nothing matched, which previously left a
+            // shift-order bill sitting unpaid because the fallback only ran on an
+            // actual error, never on "no row matched".
+            referenceType = 'pos';
+            referenceId = pos_bill_id || null;
+            // Fail loudly instead of booking an orphan receivable that settles
+            // nothing. A hotel/conference bill sent without its bill_type (e.g.
+            // an un-rebuilt client) lands here with no pos_bill_id — that used to
+            // return 200 while clearing no bill and printing no receipt.
+            if (!pos_bill_id) {
+                throw new AppError(
+                    'pos_bill_id is required for a POS corporate charge (send bill_type=room_folio/conference with reference_id for hotel/conference bills)',
+                    400
+                );
+            }
+            {
+                const CORPORATE_SETTLEMENT = {
+                    payment_status: 'credit_bill',
+                    status: 'credit_bill',
+                    payment_method: 'CORPORATE_CREDIT'
+                };
+                const { data: masterUpdated, error: updateMasterErr } = await supabase
+                    .from('pos_master_bills')
+                    .update(CORPORATE_SETTLEMENT)
+                    .eq('id', pos_bill_id)
+                    .select('id');
+                if (updateMasterErr) {
+                    logger.warn('Failed updating pos_master_bills for corporate charge:', updateMasterErr.message);
+                }
+                if (updateMasterErr || !masterUpdated || masterUpdated.length === 0) {
+                    const { error: updateOrderErr } = await supabase
+                        .from('pos_shift_orders')
+                        .update(CORPORATE_SETTLEMENT)
+                        .eq('id', pos_bill_id);
+                    if (updateOrderErr) {
+                        logger.warn('Failed updating pos_shift_orders for corporate charge:', updateOrderErr.message);
+                    }
+                }
+            }
+        }
+
+        // 2. Record the Corporate Credit Bill (the receivable the corporate
+        //    account will be invoiced for). pos_bill_id keeps its master_bills FK,
+        //    so it is only set for POS charges; room/conference use reference_id.
         const { data: creditBill, error: creditErr } = await supabase
             .from('corporate_credit_bills')
             .insert({
                 branch_id: branchId,
                 corporate_customer_id,
-                pos_bill_id,
-                amount,
+                pos_bill_id: referenceType === 'pos' ? (pos_bill_id || null) : null,
+                reference_type: referenceType,
+                reference_id: referenceId,
+                amount: chargeAmount,
                 cashier_id: cashierId,
                 shift_id,
                 status: 'UNINVOICED'
@@ -253,28 +349,11 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
 
         if (creditErr) throw new AppError(creditErr.message, 400);
 
-        // 2. Update Master Bill to credit_bill and PAYMENT_METHOD to CORPORATE_CREDIT
-        if (pos_bill_id) {
-            const { error: updateMasterErr } = await supabase
-                .from('pos_master_bills')
-                .update({
-                    payment_status: 'credit_bill',
-                    status: 'credit_bill',
-                    payment_method: 'CORPORATE_CREDIT'
-                })
-                .eq('id', pos_bill_id);
-            if (updateMasterErr) {
-                logger.warn('Failed updating pos_master_bills, trying pos_shift_orders:', updateMasterErr.message);
-                await supabase
-                    .from('pos_shift_orders')
-                    .update({
-                        payment_status: 'credit_bill',
-                        status: 'credit_bill',
-                        payment_method: 'CORPORATE_CREDIT'
-                    })
-                    .eq('id', pos_bill_id);
-            }
-        }
+        // The cashier bill lookup caches results for up to 2 min. Without this,
+        // a hotel/POS bill just settled to corporate keeps showing as unpaid on
+        // the next lookup until the cache expires. Other settlement paths already
+        // clear it; the corporate charge did not.
+        billCache.clear();
 
         res.json({ success: true, data: creditBill, message: 'Charged to Corporate Credit' });
     } catch (error: any) {

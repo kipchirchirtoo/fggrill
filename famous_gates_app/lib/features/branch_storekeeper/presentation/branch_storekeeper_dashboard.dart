@@ -32,6 +32,7 @@ import 'record_spoilage_screen.dart';
 import 'wastage_report_screen.dart';
 import '../../kitchen/presentation/kitchen_sessions_screen.dart';
 import '../../kitchen_operations/data/repository.dart';
+import 'supplier_folio_screen.dart';
 
 enum BranchStorekeeperSection {
   overview,
@@ -4762,7 +4763,14 @@ class _BranchStorekeeperDashboardState
   }
 
   void _showSupplierFolio(Map<String, dynamic> supplier) {
-    _showJsonDetail('Supplier Folio - ${supplier['name']}', supplier);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SupplierFolioScreen(
+          supplier: supplier,
+          initialPurchaseOrders: _purchaseOrders,
+        ),
+      ),
+    );
   }
 
   Future<void> _openPoCreateScreen() async {

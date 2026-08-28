@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { FloatHistoryService } from '../../services/kyogong/float-history.service';
 import { logger } from '../../utils/logger';
+import { autoCloseOpenKitchenShiftsForBranch } from '../../services/kitchen-shift-auto-close.service';
 
 // Helper to map shift object to what frontend expects
 const mapShiftResponse = (shift: any) => {
@@ -352,6 +353,21 @@ export const closeShift = async (req: Request, res: Response) => {
       .single();
 
     if (updateError) throw updateError;
+
+    // Auto-close open kitchen shift sessions for this branch on cashier shift close
+    try {
+      await autoCloseOpenKitchenShiftsForBranch({
+        branchId: shift.branch_id,
+        cashierShiftId: id,
+        userId: cashier_id,
+        closingNotes: `Auto-closed on Kyogong Cashier Shift #${shift.shift_number || id} close`
+      });
+    } catch (kitchenCloseErr) {
+      logger.warn('Failed to auto-close kitchen shift sessions on kyogong cashier close', {
+        shiftId: id,
+        error: (kitchenCloseErr as any)?.message
+      });
+    }
 
     res.json({
       success: true,

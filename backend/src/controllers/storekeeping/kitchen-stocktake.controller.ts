@@ -659,6 +659,7 @@ const fetchKitchenStandardsCatalog = async (
     { data: recipeRows, error: recipeErr },
     { data: recipeInputs, error: recipeInputsErr },
     { data: channelStandards, error: standardsErr },
+    { data: foodstuffRows, error: foodstuffsErr },
   ] = await Promise.all([
     supabase
       .from('kitchen_production_recipes')
@@ -674,10 +675,17 @@ const fetchKitchenStandardsCatalog = async (
       .from('channel_food_standards')
       .select('channel, raw_item_sku, raw_item_name, unit')
       .eq('branch_id', branchId),
+    supabase
+      .from('inventory_items')
+      .select('id, sku, item_name, unit, category')
+      .or('store_type.eq.foodstuffs,category.ilike.%food%,category.ilike.%produce%,category.ilike.%meat%,category.ilike.%poultry%,category.ilike.%vegetable%,category.ilike.%dairy%')
+      .eq('is_active', true)
+      .or(`branch_id.is.null,branch_id.eq.${branchId}`),
   ]);
   if (recipeErr) throw recipeErr;
   if (recipeInputsErr) throw recipeInputsErr;
   if (standardsErr) throw standardsErr;
+  if (foodstuffsErr) logger.warn('Kitchen stocktake foodstuffs query warning:', foodstuffsErr.message);
 
   const rawEntries: StandardsCatalogRow[] = [];
   for (const row of (recipeRows || []) as any[]) {
@@ -734,6 +742,17 @@ const fetchKitchenStandardsCatalog = async (
       category: null,
       standard_type: 'CHANNEL_STANDARD',
       default_channel: formatStandardChannel(String(row.channel || ''), 'CHANNEL_STANDARD'),
+    });
+  }
+  for (const row of ((foodstuffRows || []) as any[])) {
+    rawEntries.push({
+      item_id: row.id || null,
+      item_name: String(row.item_name || '').trim(),
+      item_sku: row.sku || null,
+      unit: row.unit || null,
+      category: row.category || 'Foodstuffs',
+      standard_type: 'RECIPE_STANDARD',
+      default_channel: 'Kitchen Store',
     });
   }
 
@@ -2098,6 +2117,28 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       };
     });
     await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.shift, shiftRow.status, itemsForSync);
+
+    if (submit) {
+      for (const it of itemsForSync) {
+        const source = sourceByName.get(String(it.item_name || '').trim().toLowerCase());
+        const itemSku = source?.item_sku || it.item_sku;
+        const physicalQty = num(it.closing_qty);
+        if (itemSku && physicalQty >= 0) {
+          try {
+            await supabase
+              .from('branch_stock')
+              .upsert({
+                branch_id: branchId,
+                item_sku: itemSku,
+                quantity: physicalQty,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'branch_id,item_sku' });
+          } catch (err) {
+            logger.warn(`Failed to sync branch_stock for ${itemSku} on kitchen stocktake submit:`, err);
+          }
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,

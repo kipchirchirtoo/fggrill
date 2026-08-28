@@ -12,7 +12,8 @@ import {
     getCreditBillContents,
     transferCreditBill,
     rejectCreditBill,
-    editCreditBill
+    editCreditBill,
+    recordPaidBillByStaff
 } from '../controllers/credit-bills.controller';
 import {
     createAdvance,
@@ -69,6 +70,7 @@ router.patch('/credit-bills/:id/reject', authorize(creditAccountants as any), re
 router.put('/credit-bills/:id', authorize(creditAccountants as any), editCreditBill);
 router.patch('/credit-bills/:id/approve', authorize(creditAccountants as any), approveCreditBill);
 router.patch('/credit-bills/:id', authorize(creditAccountants as any), updateCreditBillStatus);
+router.post('/credit-bills/record-paid-bill', authorize(creditAccountants as any), recordPaidBillByStaff);
 router.post('/credit-bills/:id/partial-payment', authorize(creditAccountants as any), partialPayCreditBill);
 router.get('/credit-bills/:id/payments', authorize(creditAccountants as any), getCreditBillPayments);
 

@@ -189,13 +189,13 @@ export const getItems = async (
         if (locIds.length > 0) {
           const { data: balances, error: balErr } = await supabase
             .from('inventory_balances')
-            .select('item_id, current_quantity, inventory_item_catalog(sku)')
+            .select('item_id, current_quantity, inventory_items:item_id(sku)')
             .in('location_id', locIds);
           if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
           for (const b of (balances || [])) {
             const qty = Number(b.current_quantity);
             balMapById.set(b.item_id, qty);
-            const sku = (b as any).inventory_item_catalog?.sku;
+            const sku = (b as any).inventory_items?.sku;
             if (sku) balMapBySku.set(sku, qty);
           }
         }

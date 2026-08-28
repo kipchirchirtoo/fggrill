@@ -57,23 +57,29 @@ async function ensureTable(): Promise<boolean> {
     await db.query('SELECT 1 FROM request_idempotency_keys LIMIT 1');
     tableAvailable = true;
   } catch (error: any) {
-    if (error?.code === MISSING_RELATION) {
-      tableAvailable = false;
-      logger.warn('request_idempotency_keys table not available yet; idempotency middleware running in compatibility mode');
-      return false;
-    }
-    throw error;
+    tableAvailable = false;
+    logger.warn('request_idempotency_keys table not available or database connection failed; idempotency middleware running in compatibility mode');
+    return false;
   }
   return true;
 }
 
 export async function beginIdempotentRequest(input: BeginRequestInput): Promise<BeginRequestResult> {
-  if (!(await ensureTable())) {
+  try {
+    if (!(await ensureTable())) {
+      return { mode: 'disabled' };
+    }
+  } catch (e) {
     return { mode: 'disabled' };
   }
 
   const requestHash = digestRequest(input);
-  const client = await db.getClient();
+  let client: any;
+  try {
+    client = await db.getClient();
+  } catch (e) {
+    return { mode: 'disabled' };
+  }
 
   try {
     await client.query('BEGIN');

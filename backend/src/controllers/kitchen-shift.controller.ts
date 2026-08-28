@@ -138,6 +138,34 @@ async function resolveRecipeProducedInventoryItem(recipe: any, branchId: number)
     return created;
 }
 
+export async function getCashierShiftStartTimestamp(branchId: number, cashierShiftId?: string | null, shiftDate?: string): Promise<string> {
+    const businessDate = shiftDate || todayInNairobi();
+    const defaultSince = `${businessDate}T00:00:00.000Z`;
+
+    if (cashierShiftId) {
+        const { data: cShift } = await supabase
+            .from('cashier_shift_logs')
+            .select('shift_start, created_at')
+            .eq('id', cashierShiftId)
+            .maybeSingle();
+        if (cShift?.shift_start) return cShift.shift_start;
+        if (cShift?.created_at) return cShift.created_at;
+    }
+
+    const { data: activeCashier } = await supabase
+        .from('cashier_shift_logs')
+        .select('shift_start, created_at')
+        .eq('branch_id', branchId)
+        .order('shift_start', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (activeCashier?.shift_start) return activeCashier.shift_start;
+    if (activeCashier?.created_at) return activeCashier.created_at;
+
+    return defaultSince;
+}
+
 type OpeningSeedItem = {
     sku: string;
     name: string;
@@ -190,7 +218,60 @@ async function createKitchenShiftFromOpeningSeed(params: {
         throw new AppError(shiftError.message, 500);
     }
 
-    const items = params.openingItems.map((it: any) => ({
+    // Gather all configured Food Control Standards items for this branch
+    // so they are seeded into the kitchen shift items from the start
+    const openingSkuSet = new Set(params.openingItems.map((it: any) => String(it.sku || '').trim().toUpperCase()));
+    const additionalStandardsItems: OpeningSeedItem[] = [];
+
+    try {
+        const [
+            { data: stds },
+            { data: directs },
+            { data: recs }
+        ] = await Promise.all([
+            supabase.from('channel_food_standards').select('raw_item_sku, raw_item_name, unit').eq('branch_id', params.branchId),
+            supabase.from('food_control_direct_items').select('stock_item_sku, stock_item_name').eq('branch_id', params.branchId).eq('is_active', true),
+            supabase.from('kitchen_production_recipes').select('raw_item_sku, raw_item_name, raw_unit, cost_per_output').eq('branch_id', params.branchId).eq('is_active', true)
+        ]);
+
+        const candidateSkus = new Map<string, { name: string; unit: string; cost: number }>();
+        for (const s of stds || []) {
+            const sku = String(s.raw_item_sku || '').trim();
+            if (sku && !candidateSkus.has(sku.toUpperCase())) {
+                candidateSkus.set(sku.toUpperCase(), { name: s.raw_item_name || sku, unit: s.unit || 'portion', cost: 0 });
+            }
+        }
+        for (const d of directs || []) {
+            const sku = String(d.stock_item_sku || '').trim();
+            if (sku && !candidateSkus.has(sku.toUpperCase())) {
+                candidateSkus.set(sku.toUpperCase(), { name: d.stock_item_name || sku, unit: 'portion', cost: 0 });
+            }
+        }
+        for (const r of recs || []) {
+            const sku = String(r.raw_item_sku || '').trim();
+            if (sku && sku.toUpperCase() !== 'MULTI' && !candidateSkus.has(sku.toUpperCase())) {
+                candidateSkus.set(sku.toUpperCase(), { name: r.raw_item_name || sku, unit: r.raw_unit || 'portion', cost: n(r.cost_per_output) });
+            }
+        }
+
+        for (const [skuUpper, info] of candidateSkus.entries()) {
+            if (!openingSkuSet.has(skuUpper)) {
+                additionalStandardsItems.push({
+                    sku: skuUpper,
+                    name: info.name,
+                    unit: info.unit,
+                    cost_price: info.cost,
+                    quantity: 0
+                });
+            }
+        }
+    } catch (stdErr) {
+        logger.warn('[createKitchenShiftFromOpeningSeed] Error fetching food control standards for seeding:', stdErr);
+    }
+
+    const allShiftItems = [...params.openingItems, ...additionalStandardsItems];
+
+    const items = allShiftItems.map((it: any) => ({
         shift_id: shift.id,
         branch_id: params.branchId,
         item_sku: it.sku,
@@ -200,7 +281,8 @@ async function createKitchenShiftFromOpeningSeed(params: {
         opening_stock: n(it.quantity),
         additions: 0,
         sold_quantity: 0,
-        spoilage_quantity: 0
+        spoilage_quantity: 0,
+        system_closing_stock: n(it.quantity)
     }));
     const { error: itemsError } = await supabase.from('kitchen_shift_items').insert(items);
     if (itemsError) logger.error('shift items insert', itemsError);
@@ -215,20 +297,46 @@ async function createKitchenShiftFromOpeningSeed(params: {
             .eq('id', params.handoverRecordId);
     }
 
-    // Recover POS sales that completed before this kitchen shift opened, so
-    // their consumption isn't lost from food control (recordKitchenConsumption
-    // skips sales made while no kitchen shift is open). Best-effort and
-    // idempotent; dynamic import avoids a circular dependency with the POS
-    // controller.
+    // Recover all POS sales completed since the START of the cashier main shift
+    // (or beginning of the commercial business date), so that food control standards
+    // immediately reflect all sold items from the moment the kitchen session is opened.
     try {
+        const sinceTimestamp = await getCashierShiftStartTimestamp(
+            params.branchId,
+            params.cashierShiftId,
+            params.businessDate
+        );
+
         const { backfillKitchenConsumptionForOpenShift } = await import('./outlet-pos.controller');
         await backfillKitchenConsumptionForOpenShift(
             params.branchId,
             String(shift.id),
-            `${params.businessDate}T00:00:00.000Z`,
+            sinceTimestamp,
         );
     } catch (err) {
         logger.warn('kitchen-shift open: consumption backfill failed', err as any);
+    }
+
+    // Finalize system_closing_stock calculation after backfill
+    try {
+        const { data: currentItems } = await supabase
+            .from('kitchen_shift_items')
+            .select('id, opening_stock, additions, sold_quantity, spoilage_quantity')
+            .eq('shift_id', shift.id);
+
+        for (const ci of currentItems || []) {
+            const open = n(ci.opening_stock);
+            const adds = n(ci.additions);
+            const sold = n(ci.sold_quantity);
+            const spoil = n(ci.spoilage_quantity);
+            const sysClose = open + adds - sold - spoil;
+            await supabase
+                .from('kitchen_shift_items')
+                .update({ system_closing_stock: sysClose, updated_at: new Date().toISOString() })
+                .eq('id', ci.id);
+        }
+    } catch (syncErr) {
+        logger.warn('kitchen-shift open: system closing stock recalculation failed', syncErr as any);
     }
 
     return shift;
@@ -382,17 +490,32 @@ async function getSubmittedKitchenOpeningStocktake(
         }
 
         const invIds = rawItems.map((item: any) => item.inventory_item_id).filter(Boolean);
-        const { data: invItems, error: invErr } = invIds.length > 0
-            ? await supabase
-                .from('inventory_items')
-                .select('id,sku,item_name,unit,default_unit_cost')
-                .in('id', invIds)
-            : { data: [], error: null as any };
-        if (invErr) throw new AppError(invErr.message, 500);
+        const missingNames = rawItems.filter((item: any) => !item.inventory_item_id && item.item_name).map((item: any) => item.item_name);
 
-        const invMap = new Map((invItems || []).map((item: any) => [item.id, item]));
+        const [{ data: invItems, error: invErr }, { data: byNames, error: byNamesErr }] = await Promise.all([
+            invIds.length > 0
+                ? supabase
+                    .from('inventory_items')
+                    .select('id,sku,item_name,unit,default_unit_cost')
+                    .in('id', invIds)
+                : Promise.resolve({ data: [], error: null as any }),
+            missingNames.length > 0
+                ? supabase
+                    .from('inventory_items')
+                    .select('id,sku,item_name,unit,default_unit_cost')
+                    .in('item_name', missingNames)
+                : Promise.resolve({ data: [], error: null as any })
+        ]);
+        if (invErr) throw new AppError(invErr.message, 500);
+        if (byNamesErr) logger.warn('Opening stocktake byNames query warning:', byNamesErr.message);
+
+        const invMap = new Map((invItems || []).map((item: any) => [String(item.id), item]));
+        const nameMap = new Map((byNames || []).map((item: any) => [String(item.item_name).toLowerCase().trim(), item]));
+
         const openingItems = rawItems.map((item: any) => {
-            const inv = item.inventory_item_id ? invMap.get(item.inventory_item_id) : null;
+            const inv = item.inventory_item_id
+                ? invMap.get(String(item.inventory_item_id))
+                : nameMap.get(String(item.item_name || '').toLowerCase().trim());
             return {
                 sku: inv?.sku || item.item_name,
                 name: inv?.item_name || item.item_name,
@@ -812,11 +935,12 @@ export const openKitchenShift = asyncWrap(async (req: Request, res: Response) =>
             .select('id, status')
             .eq('branch_id', branch_id)
             .eq('cashier_shift_id', cashierShiftId)
+            .in('status', ['open', 'in_progress'])
             .is('sub_shift_type', null)
             .eq('department', dept)
             .maybeSingle();
         if (existingSingleShift) {
-            throw new AppError(`KITCHEN_SHIFT_ALREADY_OPEN: A single kitchen session (${dept}) has already been opened for this commercial day`, 409);
+            throw new AppError(`KITCHEN_SHIFT_ALREADY_OPEN: A single kitchen session (${dept}) is already open for this commercial day`, 409);
         }
 
         const openingStocktake = await getSubmittedKitchenOpeningStocktake(Number(branch_id), businessDate, 'A');
@@ -914,10 +1038,12 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
         const { data: typeResult } = await supabase.rpc('get_stock_item_food_control_type', {
             p_branch_id: Number(shift.branch_id), p_item_sku: it.sku
         });
-        const foodControlType: string = typeResult || 'UNREGISTERED';
+        let foodControlType: string = typeResult || 'UNREGISTERED';
 
         let recipeId: string | null = it.recipe_id || null;
-        if (foodControlType !== 'A_RECIPE_BOM') {
+        if (foodControlType === 'A_RECIPE_BOM' && !recipeId) {
+            foodControlType = 'C_DIRECT';
+        } else if (foodControlType !== 'A_RECIPE_BOM') {
             recipeId = null; // never persist a recipe_id for non-recipe types, even if the client sent one
         }
 
@@ -963,11 +1089,47 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
         } else {
             const { data: cr } = await supabase.from('kitchen_shift_items').insert({
                 shift_id, branch_id: shift.branch_id, item_sku: it.sku, item_name: it.name,
-                unit_of_measure: baseUnit, cost_price: n(it.cost_price), opening_stock: 0, additions: normalizedQty, sold_quantity: 0, spoilage_quantity: 0
+                unit_of_measure: baseUnit, cost_price: n(it.cost_price), opening_stock: 0, additions: normalizedQty, sold_quantity: 0, spoilage_quantity: 0,
+                system_closing_stock: normalizedQty
             }).select().single();
             results.push({ ...cr, food_control_type: foodControlType });
         }
     }
+
+    // Recover all POS sales since the start of the cashier main shift for issued items
+    try {
+        const sinceTimestamp = await getCashierShiftStartTimestamp(
+            Number(shift.branch_id),
+            (shift as any).cashier_shift_id,
+            shift.shift_date
+        );
+        const { backfillKitchenConsumptionForOpenShift } = await import('./outlet-pos.controller');
+        await backfillKitchenConsumptionForOpenShift(
+            Number(shift.branch_id),
+            shift_id,
+            sinceTimestamp
+        );
+
+        const { data: updatedItems } = await supabase
+            .from('kitchen_shift_items')
+            .select('id, opening_stock, additions, sold_quantity, spoilage_quantity')
+            .eq('shift_id', shift_id);
+
+        for (const ci of updatedItems || []) {
+            const open = n(ci.opening_stock);
+            const adds = n(ci.additions);
+            const sold = n(ci.sold_quantity);
+            const spoil = n(ci.spoilage_quantity);
+            const sysClose = open + adds - sold - spoil;
+            await supabase
+                .from('kitchen_shift_items')
+                .update({ system_closing_stock: sysClose, updated_at: new Date().toISOString() })
+                .eq('id', ci.id);
+        }
+    } catch (syncErr) {
+        logger.warn('addShiftStock: POS backfill / system closing stock update failed', syncErr as any);
+    }
+
     res.json({ success: true, data: results });
 });
 
@@ -1678,17 +1840,9 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
     // until both the outgoing and incoming teams are named as witnesses to
     // the closing physical counts. Legacy/ad-hoc shifts (no sub_shift_type)
     // predate this requirement and are unaffected.
-    const requiresHandover = shift.sub_shift_type === 'A';
+    const requiresHandover = false;
     const outgoingWitnesses: string[] = Array.isArray(outgoing_witness_ids) ? outgoing_witness_ids : [];
     const incomingWitnesses: string[] = Array.isArray(incoming_witness_ids) ? incoming_witness_ids : [];
-    if (requiresHandover && (outgoingWitnesses.length === 0 || incomingWitnesses.length === 0)) {
-        res.status(400).json({
-            success: false,
-            code: 'HANDOVER_WITNESSES_REQUIRED',
-            message: 'Both the outgoing shift team and the incoming shift team must be named as witnesses before this shift can close.'
-        });
-        return;
-    }
 
     const pendingLogs = await getPendingProductionLogs(shift_id as string);
     if (pendingLogs.length > 0) {
@@ -1982,6 +2136,26 @@ export const getKitchenShift = asyncWrap(async (req: Request, res: Response) => 
     const { shift_id } = req.params;
     const { data: shift } = await supabase.from('kitchen_shifts').select(`*, store_keeper:users!store_keeper_id(first_name,last_name)`).eq('id', shift_id).single();
     if (!shift) throw new AppError('Shift not found', 404);
+
+    // If shift is open, sync any pending POS sales completed since the cashier shift started
+    if (shift.status === 'open') {
+        try {
+            const sinceTimestamp = await getCashierShiftStartTimestamp(
+                Number(shift.branch_id),
+                (shift as any).cashier_shift_id,
+                shift.shift_date
+            );
+            const { backfillKitchenConsumptionForOpenShift } = await import('./outlet-pos.controller');
+            await backfillKitchenConsumptionForOpenShift(
+                Number(shift.branch_id),
+                shift_id,
+                sinceTimestamp
+            );
+        } catch (err) {
+            logger.warn('getKitchenShift: live POS backfill check failed', err as any);
+        }
+    }
+
     const [{ data: items }, { data: prods }, { data: prodInputs }, { data: st }, { data: aprv }, { data: liabilityCases }] = await Promise.all([
         supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).order('item_name'),
         supabase.from('kitchen_shift_production').select('*').eq('shift_id', shift_id).order('produced_at', { ascending: false }),

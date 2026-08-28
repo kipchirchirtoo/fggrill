@@ -1128,7 +1128,7 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                         FilledButton.icon(
                           onPressed: () => _showCloseShiftDialog(shift, items),
                           icon: const Icon(Icons.close_rounded),
-                          label: const Text('Close shift / Handover'),
+                          label: const Text('Close Session'),
                           style: FilledButton.styleFrom(
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
@@ -2604,8 +2604,6 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
       builder: (ctx) {
         final countsMap = <String, double>{};
         final notesMap = <String, String>{};
-        List<String> outgoingWitnesses = [];
-        List<String> incomingWitnesses = [];
         final notesController = TextEditingController();
         final breakfastPaxController = TextEditingController(text: '0');
         final staffMealPaxController = TextEditingController(text: '0');
@@ -2615,14 +2613,12 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
           breakfastPaxController.text = pax.toString();
         }).catchError((_) {});
 
-        final staffAsync = ref.watch(staffProfilesProvider);
-
         for (final it in items) {
           final balance = it.openingStock +
               it.additions -
               it.soldQuantity -
               it.spoilageQuantity;
-          countsMap[it.itemSku] = balance;
+          countsMap[it.itemSku] = balance > 0 ? balance : 0.0;
         }
 
         return StatefulBuilder(
@@ -2633,8 +2629,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                 width: 600,
                 child: SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Active items stocktake fields
                       const Text(
                         'Confirm physical stock counts to evaluate variances. Large/extreme variances will be highlighted.',
                         style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -2645,43 +2641,62 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                             it.additions -
                             it.soldQuantity -
                             it.spoilageQuantity;
-                        return Row(
-                          children: [
-                            Expanded(
+                        final displayVal = sysClose > 0 ? sysClose : 0.0;
+                        final displayStr = displayVal == displayVal.roundToDouble()
+                            ? displayVal.toInt().toString()
+                            : displayVal.toStringAsFixed(1);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
                                 child: Text(
-                                    '${it.itemName} ($sysClose ${it.unitOfMeasure})')),
-                            const SizedBox(width: 12),
-                            SizedBox(
-                              width: 80,
-                              child: TextFormField(
-                                initialValue: sysClose.toString(),
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                    labelText: 'Physical'),
-                                onChanged: (val) {
-                                  countsMap[it.itemSku] =
-                                      double.tryParse(val) ?? 0.0;
-                                },
+                                  '${it.itemName} ($displayStr ${it.unitOfMeasure})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            SizedBox(
-                              width: 120,
-                              child: TextFormField(
-                                decoration:
-                                    const InputDecoration(labelText: 'Notes'),
-                                onChanged: (val) {
-                                  notesMap[it.itemSku] = val;
-                                },
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 90,
+                                child: TextFormField(
+                                  initialValue: displayStr,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Physical',
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  ),
+                                  onChanged: (val) {
+                                    final numVal = double.tryParse(val) ?? 0.0;
+                                    countsMap[it.itemSku] = numVal < 0 ? 0.0 : numVal;
+                                  },
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 120,
+                                child: TextFormField(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Notes',
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  ),
+                                  onChanged: (val) {
+                                    notesMap[it.itemSku] = val;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       }),
                       const Divider(height: 32),
 
                       // Pax Inputs
-                      const Text('Shift Pax Counts',
+                      const Text('Session Pax Counts',
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
                       Row(
@@ -2713,73 +2728,14 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-
-                      // Witness Selectors
-                      const Text('Shift Handover Witnesses',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      staffAsync.when(
-                        loading: () => const CircularProgressIndicator(),
-                        error: (err, _) =>
-                            Text('Error loading witnesses: $err'),
-                        data: (staffList) {
-                          return Column(
-                            children: [
-                              // Outgoing Witnesses
-                              DropdownButtonFormField<String>(
-                                hint: const Text('Select Outgoing Witness'),
-                                items: staffList.map((s) {
-                                  final name =
-                                      '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                                          .trim();
-                                  return DropdownMenuItem(
-                                    value: s['id']?.toString(),
-                                    child: Text(name.isNotEmpty
-                                        ? name
-                                        : (s['id']?.toString() ?? '')),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setLocalState(() {
-                                      outgoingWitnesses = [val];
-                                    });
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              // Incoming Witnesses
-                              DropdownButtonFormField<String>(
-                                hint: const Text('Select Incoming Witness'),
-                                items: staffList.map((s) {
-                                  final name =
-                                      '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                                          .trim();
-                                  return DropdownMenuItem(
-                                    value: s['id']?.toString(),
-                                    child: Text(name.isNotEmpty
-                                        ? name
-                                        : (s['id']?.toString() ?? '')),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setLocalState(() {
-                                      incomingWitnesses = [val];
-                                    });
-                                  }
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: notesController,
                         decoration: const InputDecoration(
-                            labelText: 'Closing summary notes'),
+                          labelText: 'Closing summary notes',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
                       ),
                     ],
                   ),
@@ -2793,17 +2749,6 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                   onPressed: isSubmitting
                       ? null
                       : () async {
-                          if (shift.subShiftType != null &&
-                              (outgoingWitnesses.isEmpty ||
-                                  incomingWitnesses.isEmpty)) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Both outgoing and incoming witnesses are required.')),
-                            );
-                            return;
-                          }
-
                           setLocalState(() => isSubmitting = true);
                           try {
                             final physicalCounts = countsMap.entries
@@ -2818,15 +2763,13 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                             await repo.closeShift(
                               shiftId: shift.id,
                               physicalCounts: physicalCounts,
-                              outgoingWitnessIds: outgoingWitnesses,
-                              incomingWitnessIds: incomingWitnesses,
+                              outgoingWitnessIds: const [],
+                              incomingWitnessIds: const [],
                               closingNotes: notesController.text,
                               breakfastPax:
-                                  int.tryParse(breakfastPaxController.text) ??
-                                      0,
+                                  int.tryParse(breakfastPaxController.text) ?? 0,
                               staffMealPax:
-                                  int.tryParse(staffMealPaxController.text) ??
-                                      0,
+                                  int.tryParse(staffMealPaxController.text) ?? 0,
                             );
                             await ref
                                 .read(activeKitchenShiftProvider.notifier)
@@ -2835,30 +2778,37 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                             if (!context.mounted) return;
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(shift.subShiftType == 'A'
-                                      ? 'Shift A closed. Shift B has been opened automatically.'
-                                      : 'Kitchen shift closed successfully.')),
+                              const SnackBar(
+                                  content: Text('Kitchen session closed successfully.')),
                             );
                           } catch (e) {
                             if (!context.mounted) return;
                             showDialog(
                               context: context,
-                              builder: (c) => AlertDialog(
-                                title: const Text('Closure Failed'),
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Error Closing Session'),
                                 content: Text(e.toString()),
                                 actions: [
                                   TextButton(
-                                      onPressed: () => Navigator.pop(c),
-                                      child: const Text('OK')),
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('OK'),
+                                  ),
                                 ],
                               ),
                             );
                           } finally {
-                            setLocalState(() => isSubmitting = false);
+                            if (context.mounted) {
+                              setLocalState(() => isSubmitting = false);
+                            }
                           }
                         },
-                  child: const Text('SUBMIT STOCKTAKE & CLOSE'),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('SUBMIT STOCKTAKE & CLOSE'),
                 ),
               ],
             );
@@ -3070,6 +3020,14 @@ class _KitchenIssueStockScreenState
         // Also fetch kitchen ledger items — produced sub-assembly items from
         // PRODUCTION and COMPLEX yield-type food control recipes.
         repo.getKitchenLedgerItems(limit: 500),
+        // Active shift's kitchen stock ledger — its opening_stock is seeded by
+        // the kitchen stocktake done at shift open. Used to override "Available"
+        // with the live KITCHEN balance instead of the store perpetual balance.
+        // Resilient: getShiftDetails throws on failure, so fall back to {} to
+        // avoid breaking the whole item load (items then keep store balances).
+        repo
+            .getShiftDetails(widget.shift.id)
+            .catchError((_) => <String, dynamic>{}),
       ]);
 
       if (!mounted) return;
@@ -3082,7 +3040,12 @@ class _KitchenIssueStockScreenState
       for (final item in storeItems) {
         final sku = (item['sku'] ?? '').toString().trim();
         if (sku.isNotEmpty) {
-          merged[sku] = item;
+          final rawQty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+          merged[sku] = {
+            ...item,
+            'quantity': rawQty < 0 ? 0.0 : rawQty,
+            'store_quantity': rawQty < 0 ? 0.0 : rawQty,
+          };
         }
       }
       for (final item in menuItems) {
@@ -3104,6 +3067,26 @@ class _KitchenIssueStockScreenState
             ...item,
           };
         }
+      }
+
+      // Preserve the store on-hand available stock (which reduces on issuance
+      // and increases on PO / GRN / Central Dispatches) as the available amount.
+      final shiftDetails = futures[6] as Map<String, dynamic>;
+      final shiftItemsRaw = (shiftDetails['items'] as List? ?? const []);
+      for (final raw in shiftItemsRaw) {
+        if (raw is! Map) continue;
+        final sku = (raw['item_sku'] ?? '').toString().trim();
+        if (sku.isEmpty) continue;
+        final existing = merged[sku];
+        merged[sku] = {
+          ...existing ?? {},
+          'sku': sku,
+          'item_name': raw['item_name'] ?? existing?['item_name'] ?? sku,
+          'unit': raw['unit_of_measure'] ?? existing?['unit'] ?? 'pcs',
+          'cost_price': raw['cost_price'] ?? existing?['cost_price'] ?? 0,
+          'quantity': existing?['quantity'] ?? (raw['opening_stock'] as num?)?.toDouble() ?? 0.0,
+          'store_quantity': existing?['store_quantity'] ?? existing?['quantity'] ?? (raw['opening_stock'] as num?)?.toDouble() ?? 0.0,
+        };
       }
 
       setState(() {
@@ -3231,11 +3214,11 @@ class _KitchenIssueStockScreenState
         );
         return;
       }
-      if (qty > available) {
+      if (available > 0 && qty > available) {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-                'Issue quantity cannot exceed available stock for ${item['item_name'] ?? item['sku']}.'),
+                'Issue quantity ($qty) cannot exceed available stock ($available) for ${item['item_name'] ?? item['sku']}.'),
           ),
         );
         return;
@@ -3600,24 +3583,19 @@ class _KitchenIssueStockScreenState
                                                 selectedItem?['description'] ??
                                                 '–')
                                             .toString();
+                                    final double availableNum = selectedItem == null
+                                        ? 0.0
+                                        : (((selectedItem['quantity'] as num?) ?? (selectedItem['store_quantity'] as num?) ?? 0.0).toDouble());
                                     final unit = (selectedItem?[
                                                     'unit_of_measure'] ??
                                                 selectedItem?['unit'] ??
-                                                '–')
+                                                '-')
                                             .toString()
                                             .isEmpty
-                                        ? '–'
+                                        ? '-'
                                         : (selectedItem?['unit_of_measure'] ??
                                                 selectedItem?['unit'])
                                             .toString();
-                                    final availableQty = selectedItem == null
-                                        ? '–'
-                                        : NumberFormat('#,##0.00').format(
-                                            ((selectedItem['quantity']
-                                                        as num?) ??
-                                                    0)
-                                                .toDouble(),
-                                          );
                                     return Container(
                                       decoration: BoxDecoration(
                                         color: index.isEven
@@ -3745,11 +3723,11 @@ class _KitchenIssueStockScreenState
                                           SizedBox(
                                             width: 200,
                                             child: Text(
-                                              availableQty == 'â€“'
+                                              selectedItem == null
                                                   ? '-'
-                                                  : availableQty,
+                                                  : '${NumberFormat('#,##0.00').format(availableNum > 0 ? availableNum : 0.0)} $unit',
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight: FontWeight.w800,
                                                 fontSize: 15,
                                                 color: Color(0xFF0F172A),
                                               ),
@@ -4189,7 +4167,12 @@ class _InventoryAutocompleteField extends StatelessWidget {
       optionsBuilder: (textEditingValue) {
         final query = textEditingValue.text.trim().toLowerCase();
         if (query.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-        return items.where((item) {
+        // SKUs that are wired into an active Food Control recipe (the "green" items).
+        final recipeSkus = recipes
+            .map((r) => r.rawItemSku.trim().toLowerCase())
+            .where((s) => s.isNotEmpty)
+            .toSet();
+        final matches = items.where((item) {
           final sku = item['sku']?.toString() ?? '';
           if (selectedSkus.contains(sku)) return false;
           final haystack = [
@@ -4199,7 +4182,16 @@ class _InventoryAutocompleteField extends StatelessWidget {
             item['category']?.toString() ?? '',
           ].join(' ').toLowerCase();
           return haystack.contains(query);
-        }).take(12);
+        }).toList();
+        // Recipe-linked (green) items pop up first; everything else below.
+        // Stable partition preserves original order within each group.
+        final linked = <Map<String, dynamic>>[];
+        final others = <Map<String, dynamic>>[];
+        for (final item in matches) {
+          final sku = (item['sku']?.toString() ?? '').trim().toLowerCase();
+          (recipeSkus.contains(sku) ? linked : others).add(item);
+        }
+        return <Map<String, dynamic>>[...linked, ...others].take(12);
       },
       onSelected: (item) {
         line.selectedItem = item;

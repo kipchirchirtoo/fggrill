@@ -2459,20 +2459,67 @@ class _StationTabState extends ConsumerState<_StationTab> {
       if (_selectedCorporateCustomerId == null) {
         return _snack('Select a corporate account to charge');
       }
-      await ref.read(cashierRepositoryProvider).chargeCorporateCredit({
-        'pos_bill_id': bill['id'],
-        'corporate_customer_id': _selectedCorporateCustomerId,
-        'amount': amount,
-      });
-      ref.invalidate(cashierUnpaidBillsProvider);
-      if (mounted) {
-        AppNotifier.showSnackBar(
-            context,
-            const SnackBar(
-                content: Text('Charged to Corporate Credit'),
-                backgroundColor: AppColors.kSuccess));
-        _applyOptimisticBillSettlement(amount);
+      // Corporate credit posts the WHOLE bill to the corporate account — a
+      // partial charge would settle the entire bill server-side while only
+      // posting part of it to corporate, losing the remainder. So always charge
+      // the full outstanding balance regardless of what's in the amount field.
+      final corpAmount = _balanceFromBill(bill);
+      if (corpAmount <= 0) {
+        return _snack('This bill has no outstanding balance to charge');
+      }
+      // A room bill reaches the cashier via the checkout "pay at cashier"
+      // handoff / an HTL lookup and comes back as type 'hotel' with the
+      // reservation nested under `booking`. Charge it against the guest folio
+      // (bill_type room_folio) instead of as a POS bill, so it settles the room
+      // bill on the corporate account. Everything else is a POS bill.
+      final billKind = _text(bill, ['type', 'source', 'bill_type']).toLowerCase();
+      final isHotelBill = billKind == 'hotel' || billKind == 'reservations';
+      final reservationId = isHotelBill
+          ? _text(_asMap(bill['booking']), ['id', 'reservation_id'])
+          : '';
+      // Corporate credit was the only settlement path that (a) ran outside the
+      // try/catch — so a credit-limit / inactive-account error surfaced
+      // nowhere — and (b) returned before any receipt was printed. Give it the
+      // same loading guard, error surfacing, invalidations and receipt print as
+      // every other method.
+      setState(() => _loading = true);
+      try {
+        final corpResponse = await ref
+            .read(cashierRepositoryProvider)
+            .chargeCorporateCredit(isHotelBill && reservationId.isNotEmpty
+                ? {
+                    'bill_type': 'room_folio',
+                    'reference_id': reservationId,
+                    'corporate_customer_id': _selectedCorporateCustomerId,
+                    'amount': corpAmount,
+                  }
+                : {
+                    'pos_bill_id': _billId(bill),
+                    'corporate_customer_id': _selectedCorporateCustomerId,
+                    'amount': corpAmount,
+                  });
+        ref.invalidate(cashierStatsProvider);
+        ref.invalidate(cashierUnpaidBillsProvider);
+        ref.invalidate(cashierCreditBillsProvider);
+        ref.invalidate(cashierShiftsProvider);
+        ref.invalidate(cashierCurrentShiftProvider);
+        _applyOptimisticBillSettlement(corpAmount);
         _amountController.clear();
+        // Print the station receipt for the corporate settlement.
+        // _printStationReceipt swallows its own print errors (with a backend
+        // fallback), so this never blocks the successful charge.
+        await _printStationReceipt(
+          bill: bill,
+          amount: corpAmount,
+          method: 'corporate_credit',
+          response: corpResponse,
+          fallbackReference: _text(bill, ['bill_number', 'order_number', 'id']),
+        );
+        _snack('Charged to Corporate Credit');
+      } catch (error) {
+        _snack('Corporate charge failed: ${apiErrorMessage(error)}');
+      } finally {
+        if (mounted) setState(() => _loading = false);
       }
       return;
     }

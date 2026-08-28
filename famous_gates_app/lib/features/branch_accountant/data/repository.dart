@@ -213,9 +213,7 @@ class BranchAccountantRepository {
         normalized['item_name'],
         normalized['product_name'],
         normalized['category'],
-      ]
-          .map((value) => '$value'.trim())
-          .firstWhere(
+      ].map((value) => '$value'.trim()).firstWhere(
             (value) =>
                 value.isNotEmpty &&
                 value.toLowerCase() != 'unnamed' &&
@@ -303,11 +301,11 @@ class BranchAccountantRepository {
     final branchId = await getBranchId();
     return _getList('/accounting/food-control/channel-package-menu-items',
         query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (channel != null && channel.isNotEmpty) 'channel': channel,
-      if (packageName != null && packageName.isNotEmpty)
-        'package_name': packageName,
-    });
+          if (branchId.isNotEmpty) 'branch_id': branchId,
+          if (channel != null && channel.isNotEmpty) 'channel': channel,
+          if (packageName != null && packageName.isNotEmpty)
+            'package_name': packageName,
+        });
   }
 
   Future<List<Map<String, dynamic>>> getChannelPackages({
@@ -378,9 +376,7 @@ class BranchAccountantRepository {
         normalized['name'],
         normalized['description'],
         normalized['product_name'],
-      ]
-          .map((value) => '$value'.trim())
-          .firstWhere(
+      ].map((value) => '$value'.trim()).firstWhere(
             (value) =>
                 value.isNotEmpty &&
                 value.toLowerCase() != 'unnamed' &&
@@ -805,8 +801,10 @@ class BranchAccountantRepository {
     pw.Font fontRegular;
     pw.Font fontBold;
     try {
-      final regData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
-      final boldData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
+      final regData = await rootBundle
+          .load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
+      final boldData = await rootBundle
+          .load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
       fontRegular = pw.Font.ttf(regData);
       fontBold = pw.Font.ttf(boldData);
     } catch (_) {
@@ -817,7 +815,10 @@ class BranchAccountantRepository {
     final title = _cleanTxt(payload['title']?.toString() ?? 'STATEMENT');
     final branch = _cleanTxt(payload['branch']?.toString() ?? 'All Branches');
     final period = _cleanTxt(payload['period']?.toString() ?? '');
-    final cols = (payload['columns'] as List?)?.map((e) => _cleanTxt(e.toString())).toList() ?? [];
+    final cols = (payload['columns'] as List?)
+            ?.map((e) => _cleanTxt(e.toString()))
+            .toList() ??
+        [];
     final rawRows = (payload['rows'] as List?) ?? [];
 
     pdf.addPage(
@@ -831,12 +832,15 @@ class BranchAccountantRepository {
           if (cols.isNotEmpty) tableData.add(cols);
           for (final row in rawRows) {
             if (row is List) {
-              tableData.add(row.map((cell) => _cleanTxt(cell?.toString() ?? '')).toList());
+              tableData.add(row
+                  .map((cell) => _cleanTxt(cell?.toString() ?? ''))
+                  .toList());
             }
           }
 
           final headers = tableData.isNotEmpty ? tableData.first : <String>[];
-          final dataRows = tableData.length > 1 ? tableData.sublist(1) : <List<String>>[];
+          final dataRows =
+              tableData.length > 1 ? tableData.sublist(1) : <List<String>>[];
 
           return [
             pw.Row(
@@ -845,15 +849,26 @@ class BranchAccountantRepository {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('FamousGate Hotels', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                    pw.Text('Branch: $branch', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text('FamousGate Hotels',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                    pw.Text('Branch: $branch',
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                   ],
                 ),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColors.blue800)),
-                    if (period.isNotEmpty) pw.Text('Period: $period', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text(title,
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 13,
+                            color: PdfColors.blue800)),
+                    if (period.isNotEmpty)
+                      pw.Text('Period: $period',
+                          style: const pw.TextStyle(
+                              fontSize: 9, color: PdfColors.grey700)),
                   ],
                 ),
               ],
@@ -861,21 +876,28 @@ class BranchAccountantRepository {
             pw.SizedBox(height: 6),
             pw.Divider(thickness: 1, color: PdfColors.grey400),
             pw.SizedBox(height: 10),
-
             if (headers.isNotEmpty)
               pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                border:
+                    pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                 children: [
                   pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.blue900),
-                    children: headers.map((h) => pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                      child: pw.Text(
-                        h,
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5, color: PdfColors.white),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                    )).toList(),
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.blue900),
+                    children: headers
+                        .map((h) => pw.Padding(
+                              padding: const pw.EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 4),
+                              child: pw.Text(
+                                h,
+                                style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 7.5,
+                                    color: PdfColors.white),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ))
+                        .toList(),
                   ),
                   ...dataRows.asMap().entries.map((entry) {
                     final rowIndex = entry.key;
@@ -884,18 +906,27 @@ class BranchAccountantRepository {
                     bool isRedRow = false;
                     if (row.isNotEmpty) {
                       final lastCell = row.last.trim();
-                      if (lastCell == '-' || lastCell == '0' || lastCell == '0.00' || lastCell.startsWith('-')) {
+                      if (lastCell == '-' ||
+                          lastCell == '0' ||
+                          lastCell == '0.00' ||
+                          lastCell.startsWith('-')) {
                         isRedRow = true;
-                      } else if (row.length >= 4 && (row[3].trim() == '-' || row[3].trim() == 'Not set')) {
+                      } else if (row.length >= 4 &&
+                          (row[3].trim() == '-' ||
+                              row[3].trim() == 'Not set')) {
                         isRedRow = true;
                       }
                     }
 
                     final bgColor = isRedRow
                         ? PdfColors.red50
-                        : (rowIndex % 2 == 1 ? PdfColors.grey100 : PdfColors.white);
-                    final textColor = isRedRow ? PdfColors.red900 : PdfColors.black;
-                    final fontW = isRedRow ? pw.FontWeight.bold : pw.FontWeight.normal;
+                        : (rowIndex % 2 == 1
+                            ? PdfColors.grey100
+                            : PdfColors.white);
+                    final textColor =
+                        isRedRow ? PdfColors.red900 : PdfColors.black;
+                    final fontW =
+                        isRedRow ? pw.FontWeight.bold : pw.FontWeight.normal;
 
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(color: bgColor),
@@ -904,13 +935,19 @@ class BranchAccountantRepository {
                         final cellTxt = cellEntry.value;
                         final align = colIdx == 0 || colIdx == 2
                             ? pw.TextAlign.left
-                            : (colIdx == 1 ? pw.TextAlign.center : pw.TextAlign.right);
+                            : (colIdx == 1
+                                ? pw.TextAlign.center
+                                : pw.TextAlign.right);
 
                         return pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 3),
                           child: pw.Text(
                             cellTxt,
-                            style: pw.TextStyle(fontSize: 7.5, color: textColor, fontWeight: fontW),
+                            style: pw.TextStyle(
+                                fontSize: 7.5,
+                                color: textColor,
+                                fontWeight: fontW),
                             textAlign: align,
                           ),
                         );
@@ -923,8 +960,10 @@ class BranchAccountantRepository {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text('Prepared By: Branch Accountant ________________', style: const pw.TextStyle(fontSize: 8.5)),
-                pw.Text('Approved By: Internal Auditor ________________', style: const pw.TextStyle(fontSize: 8.5)),
+                pw.Text('Prepared By: Branch Accountant ________________',
+                    style: const pw.TextStyle(fontSize: 8.5)),
+                pw.Text('Approved By: Internal Auditor ________________',
+                    style: const pw.TextStyle(fontSize: 8.5)),
               ],
             ),
           ];
@@ -1616,6 +1655,12 @@ class BranchAccountantRepository {
     await _dio.post('/payroll/credit-bills/$id/partial-payment', data: data);
   }
 
+  Future<void> recordPaidBillByStaff(
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post('/payroll/credit-bills/record-paid-bill', data: data);
+  }
+
   Future<void> approvePayrollCreditBill(String id, {String notes = ''}) async {
     await _dio.patch('/payroll/credit-bills/$id/approve', data: {
       if (notes.trim().isNotEmpty) 'notes': notes.trim(),
@@ -1817,8 +1862,8 @@ class BranchAccountantRepository {
   }
 
   /// Bill more to a customer credit account/tab (grows the running balance).
-  Future<Map<String, dynamic>> addChargeToCustomerBill(
-      String id, {required num amount, String? description}) async {
+  Future<Map<String, dynamic>> addChargeToCustomerBill(String id,
+      {required num amount, String? description}) async {
     final res = await _dio.post('/cashier/unpaid-bills/$id/charge', data: {
       'amount': amount,
       if (description != null && description.trim().isNotEmpty)
@@ -2525,7 +2570,8 @@ class BranchAccountantRepository {
     return _asList(res.data);
   }
 
-  Future<Map<String, dynamic>> createCorporateCustomer(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createCorporateCustomer(
+      Map<String, dynamic> data) async {
     final res = await _dio.post('/corporate/customers', data: data);
     return _asMap(res.data);
   }
@@ -2545,7 +2591,8 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
-  Future<Map<String, dynamic>> updateCorporateCustomer(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateCorporateCustomer(
+      String id, Map<String, dynamic> data) async {
     final res = await _dio.put('/corporate/customers/$id', data: data);
     return _asMap(res.data);
   }
@@ -2555,14 +2602,17 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
-  Future<List<Map<String, dynamic>>> getAllCorporateBills({String? customerId}) async {
+  Future<List<Map<String, dynamic>>> getAllCorporateBills(
+      {String? customerId}) async {
     final res = await _dio.get('/corporate/bills', queryParameters: {
-      if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
+      if (customerId != null && customerId.isNotEmpty)
+        'customer_id': customerId,
     });
     return _asList(res.data);
   }
 
-  Future<Map<String, dynamic>> getCorporateCustomerFolio(String customerId) async {
+  Future<Map<String, dynamic>> getCorporateCustomerFolio(
+      String customerId) async {
     final res = await _dio.get('/corporate/customers/$customerId/folio');
     return _asMap(res.data);
   }
@@ -2577,12 +2627,14 @@ class BranchAccountantRepository {
     return _asList(res.data);
   }
 
-  Future<Map<String, dynamic>> generateCorporateInvoice(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> generateCorporateInvoice(
+      Map<String, dynamic> data) async {
     final res = await _dio.post('/corporate/invoices/generate', data: data);
     return _asMap(res.data);
   }
 
-  Future<Map<String, dynamic>> payCorporateInvoice(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> payCorporateInvoice(
+      String id, Map<String, dynamic> data) async {
     final res = await _dio.post('/corporate/invoices/$id/pay', data: data);
     return _asMap(res.data);
   }

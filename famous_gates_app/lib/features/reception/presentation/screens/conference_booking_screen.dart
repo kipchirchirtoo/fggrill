@@ -11,6 +11,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -200,11 +201,36 @@ class _ConferenceBookingScreenState
   Future<void> _openPaymentDialog(Map<String, dynamic> booking) async {
     final id = _t(booking, ['id']);
     if (id == null) return;
+    // Corporate accounts this conference bill can be charged to (same option
+    // the cashier station offers on POS bills).
+    List<Map<String, dynamic>> corporateCustomers = const [];
+    try {
+      corporateCustomers = await _repo.getCorporateCustomers();
+    } catch (_) {
+      corporateCustomers = const [];
+    }
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (ctx) => _PaymentDialog(
         booking: booking,
-        onSubmit: (amount, method) async {
+        corporateCustomers: corporateCustomers,
+        onSubmit: (amount, method, corporateCustomerId) async {
+          if (method == 'corporate_credit') {
+            // Charging to corporate clears the whole conference bill and books
+            // the amount as a receivable on the corporate account.
+            await _repo.chargeCorporateCredit({
+              'bill_type': 'conference',
+              'reference_id': id,
+              'corporate_customer_id': corporateCustomerId,
+              'amount': amount,
+            });
+            if (mounted) {
+              _load();
+              _snack('Charged to corporate account');
+            }
+            return;
+          }
           await _repo.addConferencePayment(id, {
             'payment_amount': amount,
             'payment_method': method,
@@ -790,7 +816,22 @@ class _BookingCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  if (balance > 0)
+                  if (balance > 0) ...[
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final billRef = invoice.isNotEmpty ? invoice : id;
+                        context.push('/reception/cashier?billId=${Uri.encodeComponent(billRef)}');
+                      },
+                      icon: const Icon(Icons.point_of_sale, size: 15),
+                      label: const Text('Pay at Cashier',
+                          style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.kPrimary,
+                          side: BorderSide(color: AppColors.kPrimary),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          visualDensity: VisualDensity.compact),
+                    ),
                     OutlinedButton.icon(
                       onPressed: onPay,
                       icon: const Icon(Icons.payments_outlined, size: 15),
@@ -803,6 +844,7 @@ class _BookingCard extends StatelessWidget {
                               horizontal: 12, vertical: 6),
                           visualDensity: VisualDensity.compact),
                     ),
+                  ],
                   if (status == 'pending' && id.isNotEmpty)
                     OutlinedButton.icon(
                       onPressed: () => onStatusChange(id, 'confirmed'),
@@ -2250,9 +2292,15 @@ class _SummaryLine extends StatelessWidget {
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
 
 class _PaymentDialog extends StatefulWidget {
-  const _PaymentDialog({required this.booking, required this.onSubmit});
+  const _PaymentDialog({
+    required this.booking,
+    required this.onSubmit,
+    this.corporateCustomers = const [],
+  });
   final Map<String, dynamic> booking;
-  final Future<void> Function(num amount, String method) onSubmit;
+  final List<Map<String, dynamic>> corporateCustomers;
+  final Future<void> Function(
+      num amount, String method, String? corporateCustomerId) onSubmit;
 
   @override
   State<_PaymentDialog> createState() => _PaymentDialogState();
@@ -2261,15 +2309,22 @@ class _PaymentDialog extends StatefulWidget {
 class _PaymentDialogState extends State<_PaymentDialog> {
   final _ctrl = TextEditingController();
   String _method = 'cash';
+  String? _corporateCustomerId;
   bool _loading = false;
+
+  bool get _isCorporate => _method == 'corporate_credit';
+
+  num get _balance {
+    final total = _n(widget.booking, ['total_amount']);
+    final paid = _n(widget.booking, ['paid_amount', 'amount_paid']);
+    return total - paid;
+  }
 
   @override
   void initState() {
     super.initState();
     // Pre-fill with balance
-    final total = _n(widget.booking, ['total_amount']);
-    final paid = _n(widget.booking, ['paid_amount', 'amount_paid']);
-    final balance = total - paid;
+    final balance = _balance;
     if (balance > 0) _ctrl.text = balance.round().toString();
   }
 
@@ -2317,44 +2372,99 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           const SizedBox(height: 16),
           TextField(
             controller: _ctrl,
-            autofocus: true,
+            autofocus: !_isCorporate,
+            enabled: !_isCorporate,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
-            decoration: _inputDec('Amount (KES) *'),
+            decoration: _inputDec(
+                _isCorporate ? 'Amount (full balance)' : 'Amount (KES) *'),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _method,
             decoration: _inputDec('Payment method'),
-            items: const [
-              DropdownMenuItem(value: 'cash', child: Text('Cash')),
-              DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-              DropdownMenuItem(value: 'card', child: Text('Card / Bank')),
+            items: [
+              const DropdownMenuItem(value: 'cash', child: Text('Cash')),
+              const DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+              const DropdownMenuItem(
+                  value: 'card', child: Text('Card / Bank')),
+              if (widget.corporateCustomers.isNotEmpty)
+                const DropdownMenuItem(
+                    value: 'corporate_credit',
+                    child: Text('Corporate Credit')),
             ],
-            onChanged: (v) => setState(() => _method = v ?? 'cash'),
+            onChanged: (v) => setState(() {
+              _method = v ?? 'cash';
+              // Corporate always charges the whole outstanding balance.
+              if (_isCorporate && _balance > 0) {
+                _ctrl.text = _balance.round().toString();
+              }
+            }),
           ),
+          if (_isCorporate) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _corporateCustomerId,
+              isExpanded: true,
+              decoration: _inputDec('Corporate account *'),
+              items: widget.corporateCustomers.map((c) {
+                final id = _t(c, ['id']) ?? '';
+                final name = _t(c, ['name', 'company_name']) ?? id;
+                return DropdownMenuItem(value: id, child: Text(name));
+              }).toList(),
+              onChanged: (v) => setState(() => _corporateCustomerId = v),
+            ),
+          ],
         ],
       ),
       actions: [
         TextButton(
             onPressed: _loading ? null : () => Navigator.pop(context),
             child: const Text('Cancel')),
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () {
+                  Navigator.pop(context);
+                  final invoice = _t(widget.booking, ['invoice_number']) ?? _t(widget.booking, ['id']) ?? '';
+                  if (invoice.isNotEmpty) {
+                    context.push('/reception/cashier?billId=${Uri.encodeComponent(invoice)}');
+                  }
+                },
+          icon: const Icon(Icons.point_of_sale, size: 14),
+          label: const Text('Pay at Cashier Station'),
+        ),
         FilledButton(
           onPressed: _loading
               ? null
               : () async {
-                  final v = num.tryParse(_ctrl.text.trim()) ?? 0;
-                  if (v <= 0) {
+                  // Corporate charges the whole outstanding balance; other
+                  // methods use whatever was typed.
+                  final amount =
+                      _isCorporate ? _balance : (num.tryParse(_ctrl.text.trim()) ?? 0);
+                  if (amount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content: const Text('Enter a valid amount'),
+                          content: Text(_isCorporate
+                              ? 'No outstanding balance to charge'
+                              : 'Enter a valid amount'),
+                          backgroundColor: AppColors.kError),
+                    );
+                    return;
+                  }
+                  if (_isCorporate &&
+                      (_corporateCustomerId == null ||
+                          _corporateCustomerId!.isEmpty)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Select a corporate account'),
                           backgroundColor: AppColors.kError),
                     );
                     return;
                   }
                   setState(() => _loading = true);
                   try {
-                    await widget.onSubmit(v, _method);
+                    await widget.onSubmit(amount, _method, _corporateCustomerId);
                     if (mounted) Navigator.pop(context);
                   } catch (e) {
                     if (mounted) {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/api_error_message.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../data/repository.dart';
 import 'branch_payroll_screen.dart';
@@ -44,7 +45,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   bool _loading = true;
   bool _busy = false;
-  String _tab = 'overview'; // overview | credit | advances | loans | salaries | payroll
+  String _tab =
+      'overview'; // overview | credit | advances | loans | salaries | payroll
   String _payrollSubTab = 'batch'; // batch | deductions | adjustments
   String _status = 'all';
   String _staff = 'all';
@@ -53,7 +55,11 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   DateTime _to = DateTime.now();
 
   static const _creditDateKeys = ['bill_date', 'date', 'created_at'];
-  static const _advanceDateKeys = ['advance_date', 'request_date', 'created_at'];
+  static const _advanceDateKeys = [
+    'advance_date',
+    'request_date',
+    'created_at'
+  ];
   static const _loanDateKeys = ['start_date', 'created_at'];
 
   List<Map<String, dynamic>> _credit = [];
@@ -74,7 +80,14 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   void _buildStaffIndex() {
     final map = <String, Map<String, dynamic>>{};
     for (final s in _staffList) {
-      for (final idKey in ['id', 'staff_id', 'user_id', 'employee_id', 'employee_number', 'national_id']) {
+      for (final idKey in [
+        'id',
+        'staff_id',
+        'user_id',
+        'employee_id',
+        'employee_number',
+        'national_id'
+      ]) {
         final id = _t(s, [idKey]);
         if (id.isNotEmpty) map[id] = s;
       }
@@ -130,7 +143,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      _snack('Failed to load staff accounts: $error');
+      _snack(apiErrorMessage(error, fallback: 'Failed to load staff accounts'));
     }
   }
 
@@ -148,7 +161,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       await _load();
       if (ok != null) _snack(ok);
     } catch (error) {
-      _snack('$error');
+      _snack(apiErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -185,18 +198,29 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   String _staffName(Map m) {
     // 1. Direct top-level name keys
-    final direct = _t(m, ['staff_name', 'full_name', 'name', 'employee_name', 'customer_name']);
-    if (direct.isNotEmpty && direct.toLowerCase() != 'staff' && direct.toLowerCase() != 'null') {
+    final direct = _t(m,
+        ['staff_name', 'full_name', 'name', 'employee_name', 'customer_name']);
+    if (direct.isNotEmpty &&
+        direct.toLowerCase() != 'staff' &&
+        direct.toLowerCase() != 'null') {
       return direct;
     }
 
     // 2. Nested staff/user/profile objects
-    for (final parentKey in ['staff', 'staff_profile', 'user', 'employee', 'created_by_user']) {
+    for (final parentKey in [
+      'staff',
+      'staff_profile',
+      'user',
+      'employee',
+      'created_by_user'
+    ]) {
       final parent = m[parentKey];
       if (parent is Map) {
-        final nestedName = _t(parent, ['full_name', 'staff_name', 'name', 'username']);
+        final nestedName =
+            _t(parent, ['full_name', 'staff_name', 'name', 'username']);
         if (nestedName.isNotEmpty) return nestedName;
-        final joinedNested = '${_t(parent, ['first_name'])} ${_t(parent, ['last_name'])}'.trim();
+        final joinedNested =
+            '${_t(parent, ['first_name'])} ${_t(parent, ['last_name'])}'.trim();
         if (joinedNested.isNotEmpty) return joinedNested;
       }
     }
@@ -206,14 +230,17 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     if (joined.isNotEmpty) return joined;
 
     // 4. Lookup via staff index using all possible ID keys
-    final id = _t(m, ['staff_id', 'staff_profile_id', 'user_id', 'employee_id']);
+    final id =
+        _t(m, ['staff_id', 'staff_profile_id', 'user_id', 'employee_id']);
     if (id.isNotEmpty) {
       final s = _staffIndex[id];
       if (s != null) {
         final sName = _t(s, ['full_name', 'staff_name', 'name', 'first_name']);
         if (sName.isNotEmpty) {
           final sLast = _t(s, ['last_name']);
-          return sLast.isNotEmpty && !sName.contains(sLast) ? '$sName $sLast'.trim() : sName;
+          return sLast.isNotEmpty && !sName.contains(sLast)
+              ? '$sName $sLast'.trim()
+              : sName;
         }
       }
     }
@@ -224,7 +251,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       final parts = desc.split('-');
       if (parts.length > 1 && parts.last.trim().isNotEmpty) {
         final potentialName = parts.last.trim();
-        if (!potentialName.toUpperCase().startsWith('CRD') && !potentialName.toUpperCase().startsWith('FG')) {
+        if (!potentialName.toUpperCase().startsWith('CRD') &&
+            !potentialName.toUpperCase().startsWith('FG')) {
           return potentialName;
         }
       }
@@ -299,6 +327,46 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     return bal > 0 ? bal : _n(m, ['amount']) - _n(m, ['paid_amount']);
   }
 
+  String _creditBillLabel(Map<String, dynamic> bill) => '${_t(bill, [
+            'description',
+            'reason'
+          ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(bill))}';
+
+  String _creditTargetLabel(Map<String, dynamic> target) {
+    if (target['id'] == 'unlinked') {
+      return '${target['description'] ?? 'General Staff Salary Credit'}';
+    }
+    return _creditBillLabel(target);
+  }
+
+  List<Widget> _buildSelectedDropdownItems(
+    List<Map<String, dynamic>> values, {
+    bool highlightUnlinked = false,
+  }) {
+    return values
+        .map(
+          (value) => Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              highlightUnlinked
+                  ? _creditTargetLabel(value)
+                  : _creditBillLabel(value),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: highlightUnlinked
+                  ? TextStyle(
+                      fontWeight: value['id'] == 'unlinked'
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: value['id'] == 'unlinked' ? _success : _text,
+                    )
+                  : null,
+            ),
+          ),
+        )
+        .toList();
+  }
+
   bool _inRange(Map m, List<String> keys) {
     final d = DateTime.tryParse(_t(m, keys));
     if (d == null) return true;
@@ -309,7 +377,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   List<Map<String, dynamic>> get _fCredit => _credit
       .where((m) =>
-          _rowMatch(m, '${_staffName(m)} ${_t(m, ['description', 'reason'])}') &&
+          _rowMatch(
+              m, '${_staffName(m)} ${_t(m, ['description', 'reason'])}') &&
           _inRange(m, _creditDateKeys))
       .toList();
 
@@ -326,21 +395,23 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       .toList();
 
   List<Map<String, dynamic>> get _fStaffList => _staffList.where((s) {
-    if (_staff != 'all' && _t(s, ['id', 'staff_id']) != _staff) return false;
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return true;
-    final hay = '${_staffName(s)} '
-        '${_t(s, ['employee_id', 'employee_number', 'national_id'])} '
-        '${_t(s, ['department', 'role'])}';
-    return hay.toLowerCase().contains(q);
-  }).toList();
+        if (_staff != 'all' && _t(s, ['id', 'staff_id']) != _staff)
+          return false;
+        final q = _query.trim().toLowerCase();
+        if (q.isEmpty) return true;
+        final hay = '${_staffName(s)} '
+            '${_t(s, ['employee_id', 'employee_number', 'national_id'])} '
+            '${_t(s, ['department', 'role'])}';
+        return hay.toLowerCase().contains(q);
+      }).toList();
 
   /// Per-staff roll-up combining the three ledgers (respects staff/search/date
   /// filters). Shared by the Overview grid and its PDF export.
   List<Map<String, dynamic>> _overviewData() {
     final byStaff = <String, Map<String, num>>{};
     void add(String id, String key, num v) {
-      final m = byStaff.putIfAbsent(id, () => {'credit': 0, 'adv': 0, 'loan': 0});
+      final m =
+          byStaff.putIfAbsent(id, () => {'credit': 0, 'adv': 0, 'loan': 0});
       m[key] = (m[key] ?? 0) + v;
     }
 
@@ -428,7 +499,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.account_balance_wallet, color: Colors.white, size: 20),
+          const Icon(Icons.account_balance_wallet,
+              color: Colors.white, size: 20),
           const SizedBox(width: 10),
           const Text('STAFF ACCOUNTS',
               style: TextStyle(
@@ -466,19 +538,31 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       child: Row(
         children: [
           _fieldLabel('Status'),
-          _dropdown(_status, const {
-            'all': 'All',
-            'pending': 'Pending',
-            'approved': 'Approved',
-            'settled': 'Settled',
-            'cancelled': 'Cancelled',
-          }, (v) => setState(() { _status = v; _page = 1; })),
+          _dropdown(
+              _status,
+              const {
+                'all': 'All',
+                'pending': 'Pending',
+                'approved': 'Approved',
+                'settled': 'Settled',
+                'cancelled': 'Cancelled',
+              },
+              (v) => setState(() {
+                    _status = v;
+                    _page = 1;
+                  })),
           const SizedBox(width: 14),
           _fieldLabel('Staff'),
-          _dropdown(_staff, {
-            'all': 'All Staff',
-            for (final e in staffNames.entries) e.key: e.value,
-          }, (v) => setState(() { _staff = v; _page = 1; })),
+          _dropdown(
+              _staff,
+              {
+                'all': 'All Staff',
+                for (final e in staffNames.entries) e.key: e.value,
+              },
+              (v) => setState(() {
+                    _staff = v;
+                    _page = 1;
+                  })),
           const SizedBox(width: 14),
           SizedBox(
             width: 220,
@@ -562,8 +646,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                 fontSize: 11, fontWeight: FontWeight.w700, color: _muted)),
       );
 
-  Widget _dropdown(
-      String value, Map<String, String> options, ValueChanged<String> onChanged) {
+  Widget _dropdown(String value, Map<String, String> options,
+      ValueChanged<String> onChanged) {
     return Container(
       height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -602,7 +686,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     for (final m in _loans) {
       if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
       if (!_inRange(m, _loanDateKeys)) continue;
-      if (_isActiveLoan(m)) loanOut += _n(m, ['remaining_balance', 'total_amount']);
+      if (_isActiveLoan(m))
+        loanOut += _n(m, ['remaining_balance', 'total_amount']);
     }
     final total = creditOut + advOut + loanOut;
     return Container(
@@ -688,7 +773,10 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   Widget _tab2(String id, String label, IconData icon, {int badge = 0}) {
     final selected = _tab == id;
     return InkWell(
-      onTap: () => setState(() { _tab = id; _page = 1; }),
+      onTap: () => setState(() {
+        _tab = id;
+        _page = 1;
+      }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
@@ -702,8 +790,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         ),
         child: Row(
           children: [
-            Icon(icon,
-                size: 15, color: selected ? _accent : _muted),
+            Icon(icon, size: 15, color: selected ? _accent : _muted),
             const SizedBox(width: 6),
             Text(label,
                 style: TextStyle(
@@ -713,8 +800,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             if (badge > 0) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: _warning,
                   borderRadius: BorderRadius.circular(10),
@@ -775,10 +861,11 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
+                _payrollSubTabBtn('batch', 'Payroll Batch', Icons.receipt_long),
                 _payrollSubTabBtn(
-                    'batch', 'Payroll Batch', Icons.receipt_long),
-                _payrollSubTabBtn('deductions',
-                    'Deductions (NSSF / SHIF / Housing)', Icons.toggle_on_outlined),
+                    'deductions',
+                    'Deductions (NSSF / SHIF / Housing)',
+                    Icons.toggle_on_outlined),
                 _payrollSubTabBtn('adjustments', 'Adjustments', Icons.tune),
               ],
             ),
@@ -808,8 +895,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             Text(label,
                 style: TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        selected ? FontWeight.w900 : FontWeight.w600,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                     color: selected ? _accent : _muted)),
           ],
         ),
@@ -870,11 +956,13 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _c(_money(bal), bold: true, color: bal > 0 ? _danger : _success),
         _chip(status),
         Row(mainAxisSize: MainAxisSize.min, children: [
-          _act(Icons.receipt_long, 'Contents', _muted,
-              () => _viewContents(m)),
+          _act(Icons.receipt_long, 'Contents', _muted, () => _viewContents(m)),
           if (status.toLowerCase().contains('pending') ||
               status.toLowerCase() == 'accountant_confirmed')
-            _act(Icons.check_circle, 'Approve', _success,
+            _act(
+                Icons.check_circle,
+                'Approve',
+                _success,
                 () => _run(
                     () => _isCashierSourced(m)
                         ? _repo.approveCashierCreditBill('${m['id']}')
@@ -1003,11 +1091,17 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         Row(mainAxisSize: MainAxisSize.min, children: [
           if (status.toLowerCase().contains('pending') ||
               status.toLowerCase() == 'accountant_confirmed')
-            _act(Icons.check_circle, 'Approve', _success,
+            _act(
+                Icons.check_circle,
+                'Approve',
+                _success,
                 () => _run(() => _repo.approvePayrollAdvance('${m['id']}'),
                     ok: 'Advance approved')),
           if (_isOpenAdvance(m))
-            _act(Icons.cancel, 'Reject', _danger,
+            _act(
+                Icons.cancel,
+                'Reject',
+                _danger,
                 () => _run(() => _repo.rejectPayrollAdvance('${m['id']}'),
                     ok: 'Advance rejected')),
         ]),
@@ -1044,14 +1138,20 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _chip(status),
         Row(mainAxisSize: MainAxisSize.min, children: [
           if (status.toLowerCase().contains('pending'))
-            _act(Icons.check_circle, 'Approve', _success,
+            _act(
+                Icons.check_circle,
+                'Approve',
+                _success,
                 () => _run(() => _repo.approvePayrollLoan('${m['id']}'),
                     ok: 'Loan approved')),
           if (_isActiveLoan(m) && remaining > 0)
             _act(Icons.payments, 'Record repayment', _accent,
                 () => _payDialog('loan', m, remaining)),
           if (_isActiveLoan(m))
-            _act(Icons.cancel, 'Reject', _danger,
+            _act(
+                Icons.cancel,
+                'Reject',
+                _danger,
                 () => _run(() => _repo.rejectPayrollLoan('${m['id']}'),
                     ok: 'Loan rejected')),
         ]),
@@ -1079,7 +1179,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       final salary = _n(s, ['basic_salary', 'salary']);
       rows.add([
         _c(_staffName(s), bold: true),
-        _c(_t(s, ['employee_id', 'employee_number', 'national_id']).ifEmpty('—')),
+        _c(_t(s, ['employee_id', 'employee_number', 'national_id'])
+            .ifEmpty('—')),
         _c(_t(s, ['department', 'role']).ifEmpty('—')),
         _c(salary > 0 ? _money(salary) : 'Not set',
             bold: true, color: salary > 0 ? _text : _warning),
@@ -1127,14 +1228,31 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   Future<void> _adjustDialog(Map s) async {
     const cats = <String, List<String>>{
       'deduction': [
-        'credit_bills', 'absenteeism', 'loan', 'advance', 'shif', 'nssf',
-        'uniform', 'other'
+        'credit_bills',
+        'absenteeism',
+        'loan',
+        'advance',
+        'shif',
+        'nssf',
+        'uniform',
+        'other'
       ],
       'addition': ['bonus', 'overtime', 'allowance', 'extra_day', 'other'],
     };
     const months = [
-      '', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      '',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
     ];
     String type = 'addition';
     String category = 'bonus';
@@ -1151,8 +1269,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           decoration: _dec('Type'),
           items: const [
             DropdownMenuItem(
-                value: 'addition',
-                child: Text('Addition (bonus / allowance)')),
+                value: 'addition', child: Text('Addition (bonus / allowance)')),
             DropdownMenuItem(value: 'deduction', child: Text('Deduction')),
           ],
           onChanged: (v) => setD(() {
@@ -1266,16 +1383,17 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         ),
         if (totalCount > _pageSize)
           Container(
-            color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: const BoxDecoration(
+              color: Colors.white,
               border: Border(top: BorderSide(color: _border, width: 0.6)),
             ),
             child: Row(
               children: [
                 Text(
                   'Showing ${startIndex + 1}–$endIndex of $totalCount records',
-                  style: const TextStyle(fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 12, color: _muted, fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 IconButton(
@@ -1286,7 +1404,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                 ),
                 Text(
                   'Page $currentPage of $totalPages',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _text),
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: _text),
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right, size: 20),
@@ -1314,7 +1433,9 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     Color color;
     if (s.contains('pending')) {
       color = _warning;
-    } else if (s.contains('confirmed') || s.contains('approved') || s == 'active') {
+    } else if (s.contains('confirmed') ||
+        s.contains('approved') ||
+        s == 'active') {
       color = _accent;
     } else if (s == 'paid' || s == 'completed' || s == 'deducted') {
       color = _success;
@@ -1332,8 +1453,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       ),
       child: Text(
         status.replaceAll('_', ' ').toUpperCase(),
-        style: TextStyle(
-            color: color, fontSize: 9.5, fontWeight: FontWeight.w900),
+        style:
+            TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w900),
       ),
     );
   }
@@ -1578,16 +1699,32 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         {'label': 'Total Balance (KES)', 'value': _fmt2.format(bal)},
       ],
       'totals': [
-        'TOTALS', '', '',
-        _fmt2.format(amt), _fmt2.format(paid), _fmt2.format(bal), '',
+        'TOTALS',
+        '',
+        '',
+        _fmt2.format(amt),
+        _fmt2.format(paid),
+        _fmt2.format(bal),
+        '',
       ],
     };
   }
 
   Map<String, dynamic> _advancesPayload() {
     const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     final rows = <List<String>>[];
     num amt = 0;
@@ -1664,7 +1801,13 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         {'label': 'Total Remaining (KES)', 'value': _fmt2.format(rem)},
       ],
       'totals': [
-        'TOTALS', '', '', _fmt2.format(tot), '', _fmt2.format(rem), '',
+        'TOTALS',
+        '',
+        '',
+        _fmt2.format(tot),
+        '',
+        _fmt2.format(rem),
+        '',
       ],
     };
   }
@@ -1714,8 +1857,15 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         {'label': 'Loans (KES)', 'value': _fmt2.format(l)},
       ],
       'totals': [
-        'TOTALS', '', '', '',
-        _fmt2.format(c), _fmt2.format(a), _fmt2.format(l), _fmt2.format(o), '',
+        'TOTALS',
+        '',
+        '',
+        '',
+        _fmt2.format(c),
+        _fmt2.format(a),
+        _fmt2.format(l),
+        _fmt2.format(o),
+        '',
       ],
     };
   }
@@ -1734,7 +1884,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _textField(desc, 'Description *'),
         _dateField('Bill date', date, (d) => setD(() => date = d)),
       ],
-      onValidate: () => staffId.isNotEmpty &&
+      onValidate: () =>
+          staffId.isNotEmpty &&
           (num.tryParse(amount.text.trim()) ?? 0) > 0 &&
           desc.text.trim().isNotEmpty,
     );
@@ -1790,11 +1941,11 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          SizedBox(
-              width: 110, child: _numField(year, 'Year *', integer: true)),
+          SizedBox(width: 110, child: _numField(year, 'Year *', integer: true)),
         ]),
       ],
-      onValidate: () => staffId.isNotEmpty &&
+      onValidate: () =>
+          staffId.isNotEmpty &&
           (num.tryParse(amount.text.trim()) ?? 0) > 0 &&
           reason.text.trim().isNotEmpty &&
           (int.tryParse(year.text.trim()) ?? 0) > 2000,
@@ -1829,7 +1980,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _dateField('Start date', start, (d) => setD(() => start = d)),
         _textField(reason, 'Reason'),
       ],
-      onValidate: () => staffId.isNotEmpty &&
+      onValidate: () =>
+          staffId.isNotEmpty &&
           (num.tryParse(total.text.trim()) ?? 0) > 0 &&
           (num.tryParse(monthly.text.trim()) ?? 0) > 0,
     );
@@ -1849,10 +2001,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   }
 
   Future<void> _editCreditDialog(Map m) async {
-    final amount =
-        TextEditingController(text: '${_n(m, ['amount'])}');
-    final desc =
-        TextEditingController(text: _t(m, ['description', 'reason']));
+    final amount = TextEditingController(text: '${_n(m, ['amount'])}');
+    final desc = TextEditingController(text: _t(m, ['description', 'reason']));
     final ok = await _formDialog(
       title: 'Edit Credit Bill',
       builder: (setD) => [
@@ -1902,8 +2052,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       if (kind == 'loan') {
         await _repo.recordPayrollLoanPayment('${m['id']}', {'amount': value});
       } else if (_isCashierSourced(m)) {
-        await _repo.recordCashierCreditBillPayment('${m['id']}',
-            amount: value);
+        await _repo.recordCashierCreditBillPayment('${m['id']}', amount: value);
       } else {
         await _repo
             .recordPayrollCreditBillPayment('${m['id']}', {'amount': value});
@@ -1950,11 +2099,13 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
     final generalOption = <String, dynamic>{
       'id': 'unlinked',
-      'description': 'General Staff Salary Credit (Credit to Payroll / Future Bills)',
+      'description':
+          'General Staff Salary Credit (Credit to Payroll / Future Bills)',
     };
     final options = [generalOption, ...candidates];
 
-    Map<String, dynamic>? selected = candidates.isNotEmpty ? candidates.first : generalOption;
+    Map<String, dynamic>? selected =
+        candidates.isNotEmpty ? candidates.first : generalOption;
     final amount = TextEditingController(text: remaining.toStringAsFixed(0));
 
     final ok = await showDialog<bool>(
@@ -1969,24 +2120,36 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_t(entry, ['staff_name']).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  '${_t(entry, [
+                        'staff_name'
+                      ]).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Map<String, dynamic>>(
                   value: selected,
                   decoration: _dec('Credit bill or account target *'),
+                  isExpanded: true,
+                  selectedItemBuilder: (_) => _buildSelectedDropdownItems(
+                      options,
+                      highlightUnlinked: true),
                   items: options
                       .map((c) => DropdownMenuItem(
                             value: c,
                             child: Text(
                               c['id'] == 'unlinked'
                                   ? c['description']
-                                  : '${_t(c, ['description', 'reason']).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                                  : '${_t(c, [
+                                          'description',
+                                          'reason'
+                                        ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: c['id'] == 'unlinked' ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: c['id'] == 'unlinked'
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: c['id'] == 'unlinked' ? _success : _text,
                               ),
                             ),
@@ -2032,22 +2195,15 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   /// Directly record a staff member settling money toward their credit bill
   /// — for when the branch accountant collects/hears about the payment
   /// themselves rather than reviewing one a cashier already logged in a
-  /// shift. Picks the staff, then their open credit bill, then applies the
-  /// same record-payment endpoint the Credit Bills tab's "Record payment"
-  /// action uses (source-table aware, so it works whether the bill was
-  /// raised by payroll or the cashier station).
+  /// shift. This works like the cashier station "paid bills" flow:
+  /// the accountant records a payment for the staff member and the backend
+  /// auto-applies it FIFO across that staff member's open credit bills.
   Future<void> _recordPaidBillDialog() async {
     String staffId = '';
-    Map<String, dynamic>? selectedBill;
     String paymentMethod = 'cash';
+    final reference = TextEditingController();
     final amount = TextEditingController();
 
-    // Matches the Credit Bills tab's own single-row "Record payment" action
-    // (_isOpenCredit only) — a still-Pending bill can already take a direct
-    // payment there, so this dialog shouldn't be stricter about it. The
-    // 'must already be approved' rule only applies to the separate flow of
-    // applying an existing cashier-shift paid-bill entry (see
-    // _applyPaidEntryDialog), not to recording a payment directly.
     List<Map<String, dynamic>> candidatesFor(String id) => _credit
         .where((c) => _isOpenCredit(c) && '${c['staff_id'] ?? ''}' == id)
         .toList();
@@ -2056,7 +2212,14 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) {
-          final candidates = staffId.isEmpty ? <Map<String, dynamic>>[] : candidatesFor(staffId);
+          final candidates = staffId.isEmpty
+              ? <Map<String, dynamic>>[]
+              : candidatesFor(staffId);
+          final outstandingTotal = candidates.fold<num>(
+            0,
+            (sum, bill) => sum + _creditBalance(bill),
+          );
+          final needsReference = paymentMethod != 'cash';
           return AlertDialog(
             title: const Text('Record Paid Bill'),
             content: SizedBox(
@@ -2066,34 +2229,32 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _staffField(staffId, (v) => setD(() {
-                          staffId = v;
-                          selectedBill = null;
-                        })),
+                    _staffField(
+                        staffId,
+                        (v) => setD(() {
+                              staffId = v;
+                            })),
                     const SizedBox(height: 10),
                     if (staffId.isNotEmpty && candidates.isEmpty)
                       const Text(
                         'This staff member has no open credit bill to '
-                        'record a payment against.',
+                        'reduce right now.',
                         style: TextStyle(color: _danger, fontSize: 12),
                       ),
                     if (candidates.isNotEmpty)
-                      DropdownButtonFormField<Map<String, dynamic>>(
-                        value: selectedBill,
-                        decoration: _dec('Credit bill to pay *'),
-                        items: candidates
-                            .map((c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    '${_t(c, [
-                                          'description',
-                                          'reason'
-                                        ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ))
-                            .toList(),
-                        onChanged: (v) => setD(() => selectedBill = v),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _success.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: _success.withValues(alpha: .18)),
+                        ),
+                        child: Text(
+                          '${candidates.length} open credit bill(s) found • Total outstanding ${_money(outstandingTotal)}',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
                       ),
                     const SizedBox(height: 10),
                     _numField(amount, 'Amount paid (KES) *'),
@@ -2109,6 +2270,19 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                       ],
                       onChanged: (v) => setD(() => paymentMethod = v ?? 'cash'),
                     ),
+                    if (needsReference) ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: reference,
+                        decoration: _dec(
+                          paymentMethod == 'mpesa'
+                              ? 'M-Pesa reference *'
+                              : paymentMethod == 'card'
+                                  ? 'Card reference *'
+                                  : 'Payment reference *',
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -2120,14 +2294,22 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
               ElevatedButton(
                 onPressed: () {
                   final v = num.tryParse(amount.text.trim()) ?? 0;
-                  if (selectedBill == null) {
-                    _snack('Select the credit bill this payment clears');
+                  if (staffId.isEmpty) {
+                    _snack('Select the staff member who paid');
                     return;
                   }
-                  final maxAmount = _creditBalance(selectedBill!);
-                  if (v <= 0 || v > maxAmount + 0.01) {
-                    _snack('Enter an amount up to the bill balance '
-                        '(${_money(maxAmount)})');
+                  if (candidates.isEmpty) {
+                    _snack(
+                        'This staff member has no open credit bill to reduce');
+                    return;
+                  }
+                  if (v <= 0 || v > outstandingTotal + 0.01) {
+                    _snack('Enter an amount up to the total outstanding '
+                        '(${_money(outstandingTotal)})');
+                    return;
+                  }
+                  if (needsReference && reference.text.trim().isEmpty) {
+                    _snack('Enter the payment reference');
                     return;
                   }
                   Navigator.pop(ctx, true);
@@ -2140,18 +2322,18 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       ),
     );
     final value = num.tryParse(amount.text.trim()) ?? 0;
+    final ref = reference.text.trim();
     amount.dispose();
-    if (ok != true || selectedBill == null) return;
-    final bill = selectedBill!;
+    reference.dispose();
+    if (ok != true || staffId.isEmpty) return;
     await _run(
-        () => _isCashierSourced(bill)
-            ? _repo.recordCashierCreditBillPayment('${bill['id']}',
-                amount: value, paymentMethod: paymentMethod)
-            : _repo.recordPayrollCreditBillPayment('${bill['id']}', {
-                'amount': value,
-                'payment_method': paymentMethod,
-              }),
-        ok: 'Paid bill recorded and applied to credit bill');
+        () => _repo.recordPaidBillByStaff({
+              'staff_id': staffId,
+              'amount': value,
+              'payment_method': paymentMethod,
+              if (ref.isNotEmpty) 'reference': ref,
+            }),
+        ok: 'Paid bill recorded and applied to staff credit balance');
   }
 
   Future<void> _viewContents(Map m) async {
@@ -2160,30 +2342,71 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       contents = await _repo.getPayrollCreditBillContents('${m['id']}');
     } catch (_) {}
     if (!mounted) return;
-    final items = (contents['items'] ?? contents['contents'] ?? contents['data']);
-    final list = items is List ? items : const [];
+    final items =
+        (contents['items'] ?? contents['contents'] ?? contents['data']);
+    final list =
+        items is List ? items.whereType<Map>().toList() : const <Map>[];
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${_staffName(m)} — Credit Bill'),
         content: SizedBox(
-          width: 460,
+          width: 480,
+          height: (MediaQuery.of(ctx).size.height * 0.55).clamp(240.0, 440.0),
           child: list.isEmpty
-              ? Text('Amount: ${_money(_n(m, ['amount']))}\n'
-                  'Balance: ${_money(_creditBalance(m))}\n'
-                  '${_t(m, ['description', 'reason'])}')
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final it in list.whereType<Map>())
-                      ListTile(
-                        dense: true,
-                        title: Text('${it['name'] ?? it['description'] ?? 'Item'}'),
-                        trailing: Text(_money(_n(
-                            Map<String, dynamic>.from(it),
-                            ['amount', 'total', 'price']))),
+              ? SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text('Amount: ${_money(_n(m, ['amount']))}\n'
+                        'Balance: ${_money(_creditBalance(m))}\n'
+                        '${_t(m, ['description', 'reason'])}'),
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, index) {
+                    final it = Map<String, dynamic>.from(list[index]);
+                    final qty = _n(it, ['quantity', 'qty']);
+                    final unitPrice = _n(it, [
+                      'unit_price',
+                      'selling_price',
+                      'price',
+                      'menu_price',
+                      'retail_price',
+                    ]);
+                    final totalPrice = _n(it, [
+                      'total_price',
+                      'line_total',
+                      'total_amount',
+                      'subtotal',
+                      'total',
+                      'amount',
+                    ]);
+                    final num finalTotal = totalPrice > 0
+                        ? totalPrice
+                        : (qty > 0 && unitPrice > 0 ? qty * unitPrice : unitPrice);
+
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${it['name'] ?? it['item_name'] ?? it['description'] ?? 'Item'}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                  ],
+                      subtitle: qty > 0 || unitPrice > 0
+                          ? Text(
+                              'Qty ${qty > 0 ? qty : 1}${unitPrice > 0 ? ' • Unit ${_money(unitPrice)}' : ''}',
+                              style: const TextStyle(fontSize: 12),
+                            )
+                          : null,
+                      trailing: Text(
+                        _money(finalTotal),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    );
+                  },
                 ),
         ),
         actions: [
@@ -2212,7 +2435,10 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final w in builder(setD)) ...[w, const SizedBox(height: 10)],
+                  for (final w in builder(setD)) ...[
+                    w,
+                    const SizedBox(height: 10)
+                  ],
                 ],
               ),
             ),
@@ -2282,7 +2508,11 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           final filtered = _staffList.where((s) {
             if (q.isEmpty) return true;
             final hay = '${_staffName(s)} '
-                    '${_t(s, ['employee_id', 'employee_number', 'national_id'])} '
+                    '${_t(s, [
+                  'employee_id',
+                  'employee_number',
+                  'national_id'
+                ])} '
                     '${_t(s, ['department', 'role'])}'
                 .toLowerCase();
             return hay.contains(q);
@@ -2291,7 +2521,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             title: const Text('Select staff member'),
             content: SizedBox(
               width: 480,
-              height: 460,
+              height:
+                  (MediaQuery.of(ctx).size.height * 0.55).clamp(240.0, 440.0),
               child: Column(
                 children: [
                   TextField(
@@ -2361,15 +2592,15 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           {bool integer = false}) =>
       TextField(
         controller: c,
-        keyboardType:
-            TextInputType.numberWithOptions(decimal: !integer),
+        keyboardType: TextInputType.numberWithOptions(decimal: !integer),
         inputFormatters: integer
             ? [FilteringTextInputFormatter.digitsOnly]
             : [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
         decoration: _dec(label),
       );
 
-  Widget _dateField(String label, DateTime value, ValueChanged<DateTime> onPick) {
+  Widget _dateField(
+      String label, DateTime value, ValueChanged<DateTime> onPick) {
     return InkWell(
       onTap: () async {
         final picked = await showDatePicker(

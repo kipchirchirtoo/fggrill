@@ -998,12 +998,26 @@ export const recordConsumptionForOrder = async (
       continue;
     }
 
-    const { data: recipe } = await supabase
+    let recipe = null;
+    const { data: recipeById } = await supabase
       .from('kitchen_production_recipes')
       .select('*')
       .eq('pos_outlet_item_id', outletItemId)
       .eq('is_active', true)
       .maybeSingle();
+    recipe = recipeById;
+
+    if (!recipe && outletItem?.sku) {
+      const { data: recipeBySku } = await supabase
+        .from('kitchen_production_recipes')
+        .select('*')
+        .eq('branch_id', branchId)
+        .eq('produced_item_sku', outletItem.sku)
+        .eq('is_active', true)
+        .maybeSingle();
+      recipe = recipeBySku;
+    }
+
     if (recipe && numberValue(recipe.produced_quantity) > 0) {
       const producedQty = numberValue(recipe.produced_quantity);
 
@@ -1052,15 +1066,40 @@ export const recordConsumptionForOrder = async (
 
         const { data: shiftItem } = await supabase
           .from('kitchen_shift_items')
-          .select('id, sold_quantity')
+          .select('id, sold_quantity, opening_stock, additions, spoilage_quantity')
           .eq('shift_id', shiftId)
           .eq('item_sku', input.raw_item_sku)
           .maybeSingle();
         if (shiftItem) {
+          const newSold = numberValue(shiftItem.sold_quantity) + rawQtyConsumed;
+          const open = numberValue(shiftItem.opening_stock);
+          const adds = numberValue(shiftItem.additions);
+          const spoil = numberValue(shiftItem.spoilage_quantity);
           await supabase
             .from('kitchen_shift_items')
-            .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
+            .update({
+              sold_quantity: newSold,
+              system_closing_stock: open + adds - newSold - spoil,
+              updated_at: new Date().toISOString()
+            })
             .eq('id', shiftItem.id);
+        } else {
+          await supabase
+            .from('kitchen_shift_items')
+            .insert({
+              shift_id: shiftId,
+              branch_id: branchId,
+              item_sku: input.raw_item_sku,
+              item_name: input.raw_item_name || input.raw_item_sku,
+              unit_of_measure: input.unit || 'unit',
+              cost_price: numberValue(recipe.cost_per_output),
+              opening_stock: 0,
+              additions: 0,
+              sold_quantity: rawQtyConsumed,
+              spoilage_quantity: 0,
+              system_closing_stock: -rawQtyConsumed,
+              updated_at: new Date().toISOString()
+            });
         }
       }
 
@@ -1125,19 +1164,12 @@ export const recordConsumptionForOrder = async (
 
     const { data: shiftItem, error: shiftItemError } = await supabase
       .from('kitchen_shift_items')
-      .select('id, sold_quantity')
+      .select('id, sold_quantity, opening_stock, additions, spoilage_quantity')
       .eq('shift_id', shiftId)
       .eq('item_sku', inventoryItem.sku)
       .maybeSingle();
 
     if (shiftItemError) throw shiftItemError;
-    if (!shiftItem) {
-      // No matching issued-stock row (e.g. a pastry sold before the storekeeper
-      // issued it to this shift) — still record the sale below so it is never
-      // silently lost from the food-control ledger; it just can't be matched
-      // against issued stock for variance until it is issued.
-      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shiftId} — recording sale as unmatched`);
-    }
 
     await supabase.from('kitchen_shift_pos_consumption').insert({
       shift_id: shiftId,
@@ -1157,10 +1189,35 @@ export const recordConsumptionForOrder = async (
     });
 
     if (shiftItem) {
+      const newSold = numberValue(shiftItem.sold_quantity) + consumedQuantity;
+      const open = numberValue(shiftItem.opening_stock);
+      const adds = numberValue(shiftItem.additions);
+      const spoil = numberValue(shiftItem.spoilage_quantity);
       await supabase
         .from('kitchen_shift_items')
-        .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + consumedQuantity, updated_at: new Date().toISOString() })
+        .update({
+          sold_quantity: newSold,
+          system_closing_stock: open + adds - newSold - spoil,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', shiftItem.id);
+    } else {
+      await supabase
+        .from('kitchen_shift_items')
+        .insert({
+          shift_id: shiftId,
+          branch_id: branchId,
+          item_sku: inventoryItem.sku,
+          item_name: inventoryItem.item_name || menuItem.name || inventoryItem.sku,
+          unit_of_measure: inventoryItem.unit || menuItem.unit || 'unit',
+          cost_price: numberValue(inventoryItem.cost_price ?? inventoryItem.default_unit_cost),
+          opening_stock: 0,
+          additions: 0,
+          sold_quantity: consumedQuantity,
+          spoilage_quantity: 0,
+          system_closing_stock: -consumedQuantity,
+          updated_at: new Date().toISOString()
+        });
     }
   }
 };
@@ -1237,26 +1294,47 @@ export const backfillKitchenConsumptionForOpenShift = async (
 
   const since = sinceIso || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
+  // 1. Fetch all outlet shifts for this branch
   const { data: outletShifts } = await supabase
     .from('pos_outlet_shifts')
     .select('id')
-    .eq('branch_id', branchId)
-    .or(`status.eq.open,opened_at.gte.${since}`)
-    .limit(250);
+    .eq('branch_id', branchId);
   const shiftIds = (outletShifts || []).map((s: any) => String(s.id)).filter(Boolean);
-  if (!shiftIds.length) return;
 
-  const { data: orders } = await supabase
-    .from('pos_shift_orders')
-    .select('id, shift_id, items, created_at, status, payment_status')
-    .in('shift_id', shiftIds)
+  const candidateOrders: any[] = [];
+
+  // 2. Fetch POS orders created since the start timestamp
+  if (shiftIds.length > 0) {
+    const { data: orders } = await supabase
+      .from('pos_shift_orders')
+      .select('id, shift_id, items, created_at, status, payment_status')
+      .in('shift_id', shiftIds)
+      .gte('created_at', since)
+      .limit(1000);
+
+    const validPosOrders = (orders || []).filter((o: any) =>
+      Array.isArray(o.items) && o.items.length > 0 &&
+      String(o.status || '').toLowerCase() !== 'voided' &&
+      String(o.payment_status || '').toLowerCase() !== 'voided'
+    );
+    candidateOrders.push(...validPosOrders);
+  }
+
+  // 3. Fetch Restaurant orders created since the start timestamp
+  const { data: restOrders } = await supabase
+    .from('restaurant_orders')
+    .select('id, items, created_at, status, payment_status')
+    .eq('branch_id', branchId)
     .gte('created_at', since)
-    .limit(500);
-  const candidateOrders = (orders || []).filter((o: any) =>
+    .limit(1000);
+
+  const validRestOrders = (restOrders || []).filter((o: any) =>
     Array.isArray(o.items) && o.items.length > 0 &&
-    String(o.status || '').toLowerCase() !== 'voided' &&
-    String(o.payment_status || '').toLowerCase() !== 'voided'
+    String(o.status || '').toLowerCase() !== 'cancelled' &&
+    String(o.payment_status || '').toLowerCase() !== 'cancelled'
   );
+  candidateOrders.push(...validRestOrders);
+
   if (!candidateOrders.length) return;
 
   // Skip orders that already have consumption rows (idempotent — no double count).
@@ -1273,7 +1351,7 @@ export const backfillKitchenConsumptionForOpenShift = async (
       await recordConsumptionForOrder(
         order.items as any[],
         branchId,
-        String(order.shift_id || ''),
+        String(order.shift_id || 'RESTAURANT_ORDER'),
         String(order.id),
         kitchenShiftId,
       );

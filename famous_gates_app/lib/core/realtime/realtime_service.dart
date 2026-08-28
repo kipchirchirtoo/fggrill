@@ -137,7 +137,8 @@ class RealtimeService {
     await _ref.read(supabaseDirectServiceProvider).ensureReady();
     final client = _supabaseClient;
     if (client == null) {
-      debugPrint('⚠️ RealtimeService: Supabase client is not available. Realtime disabled.');
+      debugPrint(
+          '⚠️ RealtimeService: Supabase client is not available. Realtime disabled.');
       _statusController.add(RealtimeConnectionStatus.disconnected);
       controller.addError(StateError('Direct Supabase client unavailable'));
       return;
@@ -234,14 +235,17 @@ class RealtimeService {
 
         // Extra client-side safeguard verification
         final recordBranch = record['branch_id'];
-        if (recordBranch != null && recordBranch.toString() != branchId.toString()) {
+        if (recordBranch != null &&
+            recordBranch.toString() != branchId.toString()) {
           return;
         }
 
         final event = OrderItemRealtimeEvent(
           orderId: record['id']?.toString() ?? '',
           eventType: eventType,
-          status: record['kitchen_status']?.toString() ?? record['status']?.toString() ?? 'pending',
+          status: record['kitchen_status']?.toString() ??
+              record['status']?.toString() ??
+              'pending',
           waiterId: record['waiter_id']?.toString(),
           waiterName: record['waiter_name']?.toString(),
           orderNumber: record['order_number']?.toString(),
@@ -274,7 +278,8 @@ class RealtimeService {
           orderId: record['id']?.toString() ?? '',
           eventType: eventType,
           status: record['payment_status']?.toString() ?? 'unpaid',
-          orderNumber: record['bill_number']?.toString() ?? record['short_code']?.toString(),
+          orderNumber: record['bill_number']?.toString() ??
+              record['short_code']?.toString(),
           branchId: branchId,
           payload: record,
         );
@@ -410,6 +415,7 @@ class RealtimeService {
     }
 
     final channel = client.channel(channelName);
+    var isDisposed = false;
 
     // No server-side filter: notifications target via user_id OR role
     // (optionally AND branch_id) — see notifyUser/notifyRole/notifyBranch
@@ -436,7 +442,8 @@ class RealtimeService {
             (recordBranchId == null ||
                 branchId == null ||
                 recordBranchId.toString() == branchId.toString());
-        debugPrint('🔔 RealtimeService: matchesUser=$matchesUser matchesRole=$matchesRole '
+        debugPrint(
+            '🔔 RealtimeService: matchesUser=$matchesUser matchesRole=$matchesRole '
             '(recordUserId=$recordUserId userId=$userId recordRole=$recordRole role=$role)');
         if (!matchesUser && !matchesRole) return;
 
@@ -449,18 +456,31 @@ class RealtimeService {
           priority: record['priority']?.toString() ?? 'medium',
           payload: record,
         ));
-        debugPrint('🔔 RealtimeService: added NotificationRealtimeEvent to stream');
+        debugPrint(
+            '🔔 RealtimeService: added NotificationRealtimeEvent to stream');
       },
     );
 
     channel.subscribe((status, [error]) {
-      debugPrint('🔌 RealtimeService Notifications subscription status: $status'
-          '${error != null ? ' error=$error' : ''}');
+      if (isDisposed) return;
+
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        debugPrint(
+            '🔌 RealtimeService Notifications subscription active: $channelName');
+        return;
+      }
+
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        debugPrint('❌ RealtimeService Notifications subscription issue: $status'
+            '${error != null ? ' error=$error' : ''}');
+      }
     });
 
     _activeChannels[channelName] = channel;
 
     controller.onCancel = () {
+      isDisposed = true;
       channel.unsubscribe();
       _activeChannels.remove(channelName);
     };

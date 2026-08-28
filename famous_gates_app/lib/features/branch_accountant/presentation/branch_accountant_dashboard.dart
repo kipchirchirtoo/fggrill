@@ -25892,11 +25892,13 @@ class _BranchOutletItemsSection extends ConsumerStatefulWidget {
 class _BranchOutletItemsSectionState
     extends ConsumerState<_BranchOutletItemsSection> {
   static const _typeLabels = {
+    'restaurant': 'Restaurant POS',
     'non_consumables': 'Non-Consumables',
     'choma_zone': 'Choma Zone',
     'main_bar': 'Main Bar',
     'executive_bar': 'Executive Bar',
     'sports_bar': 'Sports Bar',
+    'spa': 'Spa',
   };
 
   String? _branchId;
@@ -26153,7 +26155,7 @@ class _BranchOutletItemsSectionState
           const SizedBox(height: 4),
           Text(
             'Add, edit and remove the items sold on each POS outlet — '
-            'Non-Consumables, Choma Zone and the bars (stored in pos_outlet_items).',
+            'Restaurant, Non-Consumables, Choma Zone, Spa and the bars (stored in pos_outlet_items).',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
           const SizedBox(height: 14),

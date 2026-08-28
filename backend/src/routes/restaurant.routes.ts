@@ -122,6 +122,21 @@ const isCaptainOrderAlreadyPrinted = (order: any, items: Array<Record<string, an
   return printedAt >= latestRecalledAt;
 };
 
+// A KDS ticket is for the KITCHEN, so it must only ever carry items the
+// kitchen actually prepares. This classifies a single order line as a food
+// item — used both to decide whether a (non-restaurant) order belongs on the
+// kitchen display at all, and to strip bar/drink lines out of orders that do.
+const isFoodItem = (item: any): boolean => {
+  const itemGroup = String(item?.item_group || '').toLowerCase();
+  if (['kitchen', 'restaurant', 'food', 'choma', 'pastry'].includes(itemGroup)) return true;
+  const outletType = String(item?.outlet_type || '').toLowerCase();
+  if (['restaurant', 'choma_zone', 'kitchen'].includes(outletType)) return true;
+  const name = String(item?.name || item?.item_name || '').toLowerCase();
+  const category = String(item?.category || item?.department || '').toLowerCase();
+  return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') || category.includes('snack') || category.includes('accompaniment') || category.includes('breakfast') || category.includes('meal') || category.includes('pastr') || category.includes('hot beverage') ||
+         name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali') || name.includes('samosa') || name.includes('mandazi') || name.includes('chapati') || name.includes('sausage') || name.includes('egg') || name.includes('burger') || name.includes('sandwich');
+};
+
 const isKitchenVisiblePosOrder = (order: any, isRestaurantShift: boolean = true): boolean => {
   const orderStatus = String(order?.status || '').toLowerCase();
   const paymentStatus = String(order?.payment_status || '').toLowerCase();
@@ -130,16 +145,6 @@ const isKitchenVisiblePosOrder = (order: any, isRestaurantShift: boolean = true)
   const voidRequestStatus = String(order?.void_request_status || '').toLowerCase();
 
   const items = Array.isArray(order?.items) ? order.items : [];
-  const isFoodItem = (item: any): boolean => {
-    const itemGroup = String(item?.item_group || '').toLowerCase();
-    if (['kitchen', 'restaurant', 'food', 'choma', 'pastry'].includes(itemGroup)) return true;
-    const outletType = String(item?.outlet_type || '').toLowerCase();
-    if (['restaurant', 'choma_zone', 'kitchen'].includes(outletType)) return true;
-    const name = String(item?.name || item?.item_name || '').toLowerCase();
-    const category = String(item?.category || item?.department || '').toLowerCase();
-    return category.includes('food') || category.includes('kitchen') || category.includes('choma') || category.includes('grill') || category.includes('snack') || category.includes('accompaniment') || category.includes('breakfast') || category.includes('meal') || category.includes('pastr') || category.includes('hot beverage') ||
-           name.includes('chips') || name.includes('meat') || name.includes('chicken') || name.includes('fish') || name.includes('rice') || name.includes('soup') || name.includes('choma') || name.includes('fry') || name.includes('beef') || name.includes('pork') || name.includes('ugali') || name.includes('samosa') || name.includes('mandazi') || name.includes('chapati') || name.includes('sausage') || name.includes('egg') || name.includes('burger') || name.includes('sandwich');
-  };
   const hasRecalledItem = items.some((item: any) => item?.is_recalled_item === true);
   // A recall only needs kitchen attention if what got recalled is actually a
   // food item. Previously ANY recall (or a bare kitchen_status of 'recalled'
@@ -670,6 +675,17 @@ router.get('/kitchen/orders',
             const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
             const itemVoidsForOrder = itemVoidsByOrder[order.id] || {};
+            // Only items the kitchen prepares belong on the KDS. A non-restaurant
+            // (bar/etc.) order may legitimately carry food the kitchen cooks, but
+            // its drink/bar lines must be stripped so they never show on the
+            // kitchen display. Restaurant-shift orders are left intact — their
+            // lines are already restaurant items and name-based filtering there
+            // could hide a real dish. Original indexes are preserved so item-void
+            // requests and posItemKey stay aligned to the untouched order.items.
+            const isRestaurantShift = restaurantShiftSet.has(order.shift_id);
+            const visibleItems: Array<{ item: any; index: number }> = orderItems
+              .map((item: any, index: number) => ({ item, index }))
+              .filter((entry: { item: any; index: number }) => isRestaurantShift || isFoodItem(entry.item));
             return {
               id: `pos:${order.id}`,
               source: 'pos_shift_order',
@@ -698,11 +714,11 @@ router.get('/kitchen/orders',
               exchange_parent_order_id: order.exchange_parent_order_id || null,
               created_at: order.created_at,
               elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
-              items_count: orderItems.length,
+              items_count: visibleItems.length,
               total: order.total_amount,
               total_amount: order.total_amount,
               captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, orderItems),
-              items: orderItems.map((item: any, index: number) => {
+              items: visibleItems.map(({ item, index }: { item: any; index: number }) => {
                 const itemStatus = normalizeKitchenStatus(item.kitchen_status || item.status || order.kitchen_status);
                 const itemVoidRow = itemVoidsForOrder[index];
                 const itemVoidMeta = itemVoidRow ? mapVoidStatus(itemVoidRow.status, ITEM_VOID_STATUS_META) : null;

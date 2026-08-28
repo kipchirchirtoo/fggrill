@@ -7,6 +7,7 @@ import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
 import { calculateCashierShiftLedgerTotals } from '../services/cashier-ledger.service';
+import { autoCloseOpenKitchenShiftsForBranch } from '../services/kitchen-shift-auto-close.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -2439,6 +2440,23 @@ export const closeShift = async (
             logger.warn('Failed to close POS station shifts on cashier close', {
                 shiftId: id,
                 error: (posCloseErr as any)?.message
+            });
+        }
+
+        // AUTO-CLOSE OPEN KITCHEN SESSIONS:
+        // Ensure all active kitchen shift sessions for this branch are closed when the cashier shift closes,
+        // finalizing stock controls and persisting snapshots for Daily Controls in Branch Accountant screen.
+        try {
+            await autoCloseOpenKitchenShiftsForBranch({
+                branchId: shift.branch_id,
+                cashierShiftId: id,
+                userId,
+                closingNotes: `Auto-closed on Cashier Shift #${shift.shift_number || id} close`
+            });
+        } catch (kitchenCloseErr) {
+            logger.warn('Failed to auto-close kitchen shift sessions on cashier close', {
+                shiftId: id,
+                error: (kitchenCloseErr as any)?.message
             });
         }
 

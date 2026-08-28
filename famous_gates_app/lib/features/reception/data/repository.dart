@@ -413,6 +413,22 @@ class ReceptionRepository {
     await _dio.post('/conference/bookings/$id/payments', data: data);
   }
 
+  /// Corporate accounts a bill can be charged to (shared with the cashier flow).
+  Future<List<Map<String, dynamic>>> getCorporateCustomers() async {
+    final response = await _dio.get('/corporate/customers');
+    return _mapList(response.data, preferredKeys: const ['customers', 'rows']);
+  }
+
+  /// Charge a bill to a corporate account. `bill_type` selects the source:
+  /// 'conference' (reference_id = booking id) or 'room_folio' (reference_id =
+  /// reservation id). Clears the underlying bill and records the corporate
+  /// receivable server-side.
+  Future<Map<String, dynamic>> chargeCorporateCredit(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/corporate/charge', data: data);
+    return _payload(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> getCateringBookings(
       {Map<String, dynamic>? params}) async {
     final response = await _dio.get('/catering-bookings',

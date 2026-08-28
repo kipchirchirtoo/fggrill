@@ -139,10 +139,10 @@ async function loadConferenceBooking(client: PgClient, bookingId: string) {
         invoice_number,
         COALESCE(client_name, 'Conference Client') AS customer_name,
         total_amount,
-        COALESCE(deposit_amount, 0) AS paid_amount,
+        GREATEST(COALESCE(amount_paid, 0), COALESCE(deposit_amount, 0)) AS paid_amount,
         COALESCE(
           balance_amount,
-          GREATEST(COALESCE(total_amount, 0) - COALESCE(deposit_amount, 0), 0)
+          GREATEST(COALESCE(total_amount, 0) - GREATEST(COALESCE(amount_paid, 0), COALESCE(deposit_amount, 0)), 0)
         ) AS balance_amount,
         payment_status
       FROM conference_hall_bookings
@@ -308,6 +308,7 @@ async function recordEventCashierPayment(
           UPDATE conference_hall_bookings
           SET
             deposit_amount = $2,
+            amount_paid = $2,
             balance_amount = $3,
             payment_status = $4,
             updated_at = NOW()

@@ -50,14 +50,24 @@ export class InventoryBalanceService {
     }>(
       `
         SELECT id, sku, item_name
-        FROM inventory_item_catalog
-        WHERE sku = $1
+        FROM inventory_items
+        WHERE sku = $1 OR id::text = $1
         LIMIT 1
       `,
       [input.itemSku],
     );
 
     if (existing.rows[0]) {
+      try {
+        await client.query(
+          `
+            INSERT INTO inventory_item_catalog (source_table, source_item_key, sku, item_name, default_unit_cost)
+            VALUES ('inventory_items', $1, $1, $2, $3)
+            ON CONFLICT (source_table, source_item_key) DO NOTHING
+          `,
+          [existing.rows[0].sku, existing.rows[0].item_name, input.unitCost ?? 0],
+        );
+      } catch (_) {}
       return existing.rows[0];
     }
 
@@ -76,50 +86,43 @@ export class InventoryBalanceService {
         LIMIT 1
       `,
       [input.itemSku],
-    ).catch(async () => {
-      return client.query<{
-        item_name: string | null;
-        unit: string | null;
-      }>(
-        `
-          SELECT
-            COALESCE(item_name, $1) AS item_name,
-            COALESCE(unit, 'units') AS unit
-          FROM inventory_items
-          WHERE sku = $1
-          LIMIT 1
-        `,
-        [input.itemSku],
-      );
-    });
+    ).catch(async () => ({ rows: [] as any[] }));
 
     const source = (catalogLookup.rows[0] || {}) as {
       description?: string | null;
       item_name?: string | null;
       unit?: string | null;
     };
+
     const insert = await client.query<{ id: string; sku: string; item_name: string }>(
       `
-        INSERT INTO inventory_item_catalog (
-          source_table,
-          source_item_key,
+        INSERT INTO inventory_items (
           sku,
           item_name,
-          description,
           unit,
-          default_unit_cost
+          cost_price
         )
-        VALUES ('simple_items', $1, $1, $2, $3, COALESCE($4, 'units'), COALESCE($5, 0))
+        VALUES ($1, $2, COALESCE($3, 'units'), COALESCE($4, 0))
         RETURNING id, sku, item_name
       `,
       [
         input.itemSku,
         source.item_name || input.itemName || input.itemSku,
-        source.description || null,
-        source.unit || null,
-        input.unitCost ?? null,
+        source.unit || 'units',
+        input.unitCost ?? 0,
       ],
     );
+
+    try {
+      await client.query(
+        `
+          INSERT INTO inventory_item_catalog (source_table, source_item_key, sku, item_name, default_unit_cost)
+          VALUES ('inventory_items', $1, $1, $2, $3)
+          ON CONFLICT (source_table, source_item_key) DO NOTHING
+        `,
+        [insert.rows[0].sku, insert.rows[0].item_name, input.unitCost ?? 0],
+      );
+    } catch (_) {}
 
     return insert.rows[0];
   }

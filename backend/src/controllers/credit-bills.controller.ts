@@ -1178,10 +1178,36 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         }
 
         // 8. Format line items consistently
+        const firstNumber = (row: any, keys: string[]) => {
+            for (const key of keys) {
+                const value = Number(row?.[key]);
+                if (Number.isFinite(value) && value > 0) return value;
+            }
+            return 0;
+        };
+
         const formattedItems = (rawItems || []).map((item: any, idx: number) => {
-            const qty = Number(item.quantity || item.qty || 1);
-            const price = Number(item.unit_price || item.price || item.amount || 0);
-            const total = Number(item.total_price || item.subtotal || item.line_total || (qty * price));
+            const qty = firstNumber(item, ['quantity', 'qty', 'count']) || 1;
+            const price = firstNumber(item, [
+                'unit_price',
+                'selling_price',
+                'menu_price',
+                'retail_price',
+                'price_each',
+                'price',
+                'rate',
+                'amount'
+            ]);
+            const total = firstNumber(item, [
+                'total_price',
+                'line_total',
+                'total_amount',
+                'extended_price',
+                'active_total',
+                'subtotal',
+                'total',
+                'amount'
+            ]) || (qty * price);
             let rawItemName = item.name || item.item_name || item.description || item.title || 'Food & Beverage Item';
             if (rawItemName.startsWith('Cashier Credit Bill - CRD-')) {
                 rawItemName = item.name || item.item_name || 'Food & Beverage Item';

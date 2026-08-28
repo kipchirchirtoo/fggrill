@@ -603,6 +603,37 @@ class BranchStorekeeperRepository {
     await _dio.delete('/store/suppliers/$id', options: await _authOptions);
   }
 
+  Future<List<Map<String, dynamic>>> grns({
+    String? supplierId,
+    String? poId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/procurement/grn',
+        queryParameters: {
+          if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+          if (poId != null && poId.isNotEmpty) 'po_id': poId,
+        },
+        options: await _authOptions,
+      );
+      return _unwrapList(response.data);
+    } catch (_) {
+      try {
+        final res2 = await _dio.get(
+          '/storekeeping/grn',
+          queryParameters: {
+            if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+            if (poId != null && poId.isNotEmpty) 'po_id': poId,
+          },
+          options: await _authOptions,
+        );
+        return _unwrapList(res2.data);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }
+  }
+
   Future<List<Map<String, dynamic>>> stockTakes({
     String storeType = 'all',
   }) async {

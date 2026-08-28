@@ -31,6 +31,7 @@ import {
     recordConferenceCashierPayment,
     findHotelPaymentOrphans,
 } from '../services/receptionEventCashierPayment.service';
+import { autoCloseOpenKitchenShiftsForBranch } from '../services/kitchen-shift-auto-close.service';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -4753,14 +4754,68 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 })()
                 : Promise.resolve({ data: [], error: null } as any);
 
+            const includeConference = !requestedBillType || requestedBillType === 'conference';
+
+            const conferenceBookingsPromise = includeConference
+                ? (async () => {
+                    try {
+                        let confQuery = supabase
+                            .from('conference_hall_bookings')
+                            .select('*')
+                            .neq('payment_status', 'paid')
+                            .order('created_at', { ascending: false });
+
+                        if (effectiveBranchId) {
+                            confQuery = confQuery.eq('branch_id', effectiveBranchId);
+                        }
+                        if (from && to) {
+                            confQuery = confQuery
+                                .gte('created_at', from.toISOString())
+                                .lte('created_at', to.toISOString());
+                        }
+                        const res = await confQuery;
+                        if (res.error) {
+                            logger.warn('conference_hall_bookings query notice in getUnpaidBills:', res.error.message);
+                            return { data: [], error: null };
+                        }
+                        const mapped = (res.data || []).map((conf: any) => {
+                            const total = Number(conf.total_amount || 0);
+                            const paid = Number(conf.amount_paid || conf.deposit_amount || 0);
+                            const balance = Number(conf.balance_amount ?? (total - paid));
+                            return {
+                                id: conf.id,
+                                bill_number: conf.invoice_number || conf.short_code || conf.id,
+                                short_code: conf.short_code,
+                                branch_id: conf.branch_id,
+                                bill_type: 'conference',
+                                customer_name: conf.company_name || conf.customer_name || conf.client_name || 'Conference Client',
+                                total_amount: total,
+                                paid_amount: paid,
+                                balance_amount: balance,
+                                bill_date: conf.start_date || conf.created_at,
+                                created_at: conf.created_at,
+                                status: conf.payment_status || 'unpaid',
+                                is_conference: true,
+                                notes: conf.notes
+                            };
+                        }).filter((cb: any) => cb.balance_amount > 0);
+                        return { data: mapped, error: null };
+                    } catch (_) {
+                        return { data: [], error: null };
+                    }
+                })()
+                : Promise.resolve({ data: [], error: null } as any);
+
             const [
                 hotelReservationsRes,
                 financeInvoicesRes,
                 arInvoicesRes,
+                conferenceBookingsRes,
             ] = await Promise.all([
                 hotelReservationsPromise,
                 financeInvoicesPromise,
                 arInvoicesPromise,
+                conferenceBookingsPromise,
             ]);
 
             if (hotelReservationsRes.error) throw hotelReservationsRes.error;
@@ -4808,6 +4863,8 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 is_invoice: true
             }));
 
+            const mappedConference = (conferenceBookingsRes.data || []);
+
             // Combine all full access data.
             // Hotel room booking bills are DELIBERATELY excluded from the
             // cashier's general Unpaid Bills list — they now live in the
@@ -4819,7 +4876,8 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 ...mappedUnpaidBills,
                 ...(includeHotel ? mappedHotel : []),
                 ...mappedFinance,
-                ...mappedAR
+                ...mappedAR,
+                ...mappedConference
             ];
         }
 
@@ -7201,6 +7259,21 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
         } catch (migErr) {
             logger.error(`Error triggering pending bills migration on shift close:`, migErr);
             // Don't fail the whole request if migration fails
+        }
+
+        // Auto-close open kitchen shift sessions for this branch on cashier shift close
+        try {
+            await autoCloseOpenKitchenShiftsForBranch({
+                branchId: shift.branch_id,
+                cashierShiftId: id,
+                userId: shift.cashier_id,
+                closingNotes: `Auto-closed on Cashier Shift #${shift.shift_number || id} close`
+            });
+        } catch (kitchenCloseErr) {
+            logger.warn('Failed to auto-close kitchen shift sessions on cashier close', {
+                shiftId: id,
+                error: (kitchenCloseErr as any)?.message
+            });
         }
 
         // Check for unresolved kitchen variances for this shift/date
