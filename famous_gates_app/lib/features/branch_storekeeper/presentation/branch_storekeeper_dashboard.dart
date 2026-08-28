@@ -794,10 +794,12 @@ class _BranchStorekeeperDashboardState
                   0,
             );
             final sku =
-                '${item['item_id'] ?? item['item_sku'] ?? item['sku'] ?? ''}';
+                '${item['sku'] ?? item['item_sku'] ?? item['item_id'] ?? ''}';
+            final itemId = '${item['item_id'] ?? item['id'] ?? sku}';
             return <String, dynamic>{
-              'item_id': sku,
+              'item_id': itemId,
               'item_sku': sku,
+              'sku': sku,
               'item_name':
                   '${item['item_name'] ?? item['name'] ?? item['item']?['name'] ?? sku}',
               'quantity': quantity <= 0 ? 1 : quantity,

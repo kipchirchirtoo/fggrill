@@ -1665,9 +1665,9 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
         final pending = _gnum(m['quantity_pending']);
         final outstanding = pending > 0 ? pending : ordered;
         return <String, dynamic>{
-          'item_id': _text(m, ['item_id', 'sku', 'id']),
+          'item_id': _text(m, ['item_id', 'id', 'sku']),
           'item_name': _text(m, ['item_name', 'name'], 'Item'),
-          'sku': _text(m, ['item_id', 'sku']),
+          'sku': _text(m, ['sku', 'item_sku', 'item_id']),
           'unit_of_measure': _text(m, ['unit_of_measure', 'unit'], 'units'),
           'quantity_received': outstanding,
           'quantity_ordered': ordered,
