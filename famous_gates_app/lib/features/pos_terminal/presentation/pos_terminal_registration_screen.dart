@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,8 +31,45 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
   String? _error;
   Map<String, dynamic>? _verified;
 
+  // If this device is already registered when the screen opens (e.g. someone
+  // taps the "TERMINAL: …" pill by accident), show a confirmation instead of the
+  // code form, and bounce back to the POS terminal automatically.
+  bool _checkingExisting = true;
+  PosTerminalIdentity? _existingIdentity;
+  Timer? _redirectTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExisting();
+  }
+
+  Future<void> _checkExisting() async {
+    final identity = await ref.read(posTerminalServiceProvider).loadIdentity();
+    if (!mounted) return;
+    setState(() {
+      _existingIdentity = identity;
+      _checkingExisting = false;
+    });
+    if (identity != null) {
+      _redirectTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) _goBack();
+      });
+    }
+  }
+
+  void _goBack() {
+    _redirectTimer?.cancel();
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else if (mounted) {
+      context.go('/terminal');
+    }
+  }
+
   @override
   void dispose() {
+    _redirectTimer?.cancel();
     _codeController.dispose();
     super.dispose();
   }
@@ -105,11 +144,18 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(28),
-                child: switch (_step) {
-                  _Step.enterCode => _buildEnterCode(),
-                  _Step.confirm => _buildConfirm(),
-                  _Step.done => _buildDone(),
-                },
+                child: _checkingExisting
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : _existingIdentity != null
+                        ? _buildAlreadyRegistered()
+                        : switch (_step) {
+                            _Step.enterCode => _buildEnterCode(),
+                            _Step.confirm => _buildConfirm(),
+                            _Step.done => _buildDone(),
+                          },
               ),
             ),
           ),
@@ -210,6 +256,30 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
         TextButton(
           onPressed: _busy ? null : () => setState(() => _step = _Step.enterCode),
           child: const Text('Back'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAlreadyRegistered() {
+    final id = _existingIdentity!;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.verified_user, color: Color(0xFF16A34A), size: 48),
+        const SizedBox(height: 12),
+        _buildHeader('Terminal already registered',
+            'This computer is already bound to its branch. Taking you back to the POS terminal…'),
+        _row('Terminal', id.terminalName),
+        _row('Type', id.terminalType),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: FilledButton(
+            onPressed: _goBack,
+            child: const Text('BACK TO POS TERMINAL'),
+          ),
         ),
       ],
     );
