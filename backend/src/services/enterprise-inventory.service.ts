@@ -1799,25 +1799,33 @@ export async function finalizeStockTakeByAuditor(input: {
 
   if (itemsError) throw itemsError;
 
-  for (const item of items || []) {
-    const itemSku = textValue(item.item_sku);
-    if (!itemSku) continue;
-    const physicalQuantity = numberValue(item.physical_quantity);
-    const systemQuantity = numberValue(item.system_closing_stock ?? item.system_quantity);
-    const adjustment = physicalQuantity - systemQuantity;
-    if (adjustment === 0) continue;
+  const countStoreType = String(count.store_type || '').toLowerCase();
+  const countLocation = String(count.location || '').toLowerCase();
+  const isKitchenStockTake = countStoreType === 'kitchen' || countLocation.startsWith('kitchen');
 
-    await BranchInventoryService.updateBranchStock(
-      Number(count.branch_id),
-      itemSku,
-      adjustment,
-      'STOCK_TAKE_ADJUSTMENT',
-      input.actorId,
-      'stock_count',
-      input.stockCountId,
-      count.count_number || input.stockCountId,
-      input.notes || 'Auditor finalized stock take variance adjustment'
-    );
+  // Only store/bar stocktakes should adjust branch_stock (store inventory).
+  // Kitchen stocktakes measure in-session kitchen physical count, not store inventory.
+  if (!isKitchenStockTake) {
+    for (const item of items || []) {
+      const itemSku = textValue(item.item_sku);
+      if (!itemSku) continue;
+      const physicalQuantity = numberValue(item.physical_quantity);
+      const systemQuantity = numberValue(item.system_closing_stock ?? item.system_quantity);
+      const adjustment = physicalQuantity - systemQuantity;
+      if (adjustment === 0) continue;
+
+      await BranchInventoryService.updateBranchStock(
+        Number(count.branch_id),
+        itemSku,
+        adjustment,
+        'STOCK_TAKE_ADJUSTMENT',
+        input.actorId,
+        'stock_count',
+        input.stockCountId,
+        count.count_number || input.stockCountId,
+        input.notes || 'Auditor finalized stock take variance adjustment'
+      );
+    }
   }
 
   const { data: approved, error } = await supabase
