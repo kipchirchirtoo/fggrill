@@ -32,7 +32,7 @@ class PosTerminalAdminRepository {
   }
 
   Future<List<Map<String, dynamic>>> listBranches() async {
-    final res = await _dio.get('/branches');
+    final res = await _dio.get('/system/branches');
     return _list(res.data);
   }
 

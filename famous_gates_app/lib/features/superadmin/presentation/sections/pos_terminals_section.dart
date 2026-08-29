@@ -219,8 +219,17 @@ class PosTerminalsSection extends ConsumerWidget {
   // ---- dialogs ---------------------------------------------------
 
   Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
-    final branches = ref.read(posTerminalBranchesProvider).valueOrNull ??
-        await ref.read(posTerminalAdminRepositoryProvider).listBranches();
+    List<Map<String, dynamic>> branches;
+    try {
+      branches = ref.read(posTerminalBranchesProvider).valueOrNull ??
+          await ref.read(posTerminalAdminRepositoryProvider).listBranches();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load branches: ${_apiError(e)}')));
+      }
+      return;
+    }
     if (!context.mounted) return;
     final nameCtrl = TextEditingController();
     String type = _terminalTypes.first;
@@ -309,8 +318,17 @@ class PosTerminalsSection extends ConsumerWidget {
   }
 
   Future<void> _showTransferDialog(BuildContext context, WidgetRef ref, Map<String, dynamic> t) async {
-    final branches = ref.read(posTerminalBranchesProvider).valueOrNull ??
-        await ref.read(posTerminalAdminRepositoryProvider).listBranches();
+    List<Map<String, dynamic>> branches;
+    try {
+      branches = ref.read(posTerminalBranchesProvider).valueOrNull ??
+          await ref.read(posTerminalAdminRepositoryProvider).listBranches();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load branches: ${_apiError(e)}')));
+      }
+      return;
+    }
     if (!context.mounted) return;
     int? branchId;
     bool busy = false;
