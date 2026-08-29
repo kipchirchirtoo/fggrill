@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/api_error_message.dart';
 import '../../data/admin_repository.dart';
 import '../../data/models/branch.dart';
 import '../../data/models/guest.dart';
@@ -500,10 +501,12 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
       }
     } catch (e) {
       if (mounted) {
+        // Surface the backend message cleanly, e.g. the 409 "PIN R**** is
+        // already assigned to <name>" when the chosen POS PIN is taken.
         AppNotifier.showSnackBar(
             context,
             SnackBar(
-              content: Text('Error: $e'),
+              content: Text(apiErrorMessage(e, fallback: 'Failed to save user')),
               backgroundColor: AppColors.kError,
             ));
       }

@@ -7,6 +7,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../../../core/widgets/safe_avatar.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../auth/domain/models.dart';
@@ -989,7 +990,13 @@ class _ChangePinDialogState extends ConsumerState<_ChangePinDialog> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _errorMsg = 'Failed to update PIN: $e');
+      // Surface the backend message cleanly — e.g. "POS PIN is already assigned
+      // to another user" when the chosen PIN is taken — so the staff member
+      // picks a different one instead of seeing a raw exception dump.
+      if (mounted) {
+        setState(() =>
+            _errorMsg = apiErrorMessage(e, fallback: 'Failed to update PIN'));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

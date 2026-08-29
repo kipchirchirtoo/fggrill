@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/utils/pos_pin_rules.dart';
+import 'package:famous_gates_app/core/utils/api_error_message.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
@@ -3212,7 +3213,7 @@ class _BranchManagerDashboardState
       await action();
       if (success != null) _snack(success);
     } catch (error) {
-      _snack('$error');
+      _snack(apiErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3856,7 +3857,7 @@ class _OffersSectionState extends ConsumerState<_OffersSection> {
       await action();
       if (success != null) _snack(success);
     } catch (error) {
-      _snack('$error');
+      _snack(apiErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
