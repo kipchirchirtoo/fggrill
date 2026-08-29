@@ -70,12 +70,20 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final location = state.matchedLocation;
 
-      // Mandatory first-run: this device cannot be used until it is registered
-      // to a branch. Block every route except the registration screen itself.
-      // Once registered (persisted in secure storage), this never fires again.
+      // Mandatory first-run: this device cannot be used for POS until it is
+      // registered to a branch — the unauthenticated POS PIN hub and operator
+      // routes are blocked and sent to the enrollment screen. Back-office login
+      // (/login) and an authenticated admin are always let through, so an admin
+      // can sign in to create/issue the enrollment code without a bootstrap
+      // lock-out. Once registered (persisted in secure storage), never fires.
       final reg = ref.read(terminalRegistrationStatusProvider);
-      if (kRequireTerminalRegistration && reg.loaded && !reg.registered) {
-        return location == '/terminal-setup' ? null : '/terminal-setup';
+      if (kRequireTerminalRegistration &&
+          reg.loaded &&
+          !reg.registered &&
+          location != '/terminal-setup' &&
+          location != '/login') {
+        final authed = ref.read(authNotifierProvider).valueOrNull != null;
+        if (!authed) return '/terminal-setup';
       }
       final auth = ref.read(authNotifierProvider);
       if (_publicRoutes.contains(location)) {
