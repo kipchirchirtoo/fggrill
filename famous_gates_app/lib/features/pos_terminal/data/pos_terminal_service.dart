@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
@@ -67,9 +68,9 @@ class PosTerminalService {
   static const deviceTokenHeader = 'X-POS-Terminal-Token';
 
   Future<PosTerminalIdentity?> loadIdentity() async {
-    final raw = await _storage.read(key: _kIdentity);
-    if (raw == null || raw.trim().isEmpty) return null;
     try {
+      final raw = await _storage.read(key: _kIdentity);
+      if (raw == null || raw.trim().isEmpty) return null;
       return PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       return null;
@@ -186,4 +187,50 @@ final posTerminalServiceProvider = Provider<PosTerminalService>((ref) {
 /// Resolves this device's registered terminal identity (null = not registered).
 final posTerminalIdentityProvider = FutureProvider<PosTerminalIdentity?>((ref) {
   return ref.read(posTerminalServiceProvider).loadIdentity();
+});
+
+/// When true, the app blocks all use (PIN + back-office) until this device is
+/// registered to a branch. Registration is a one-time first-run step; the bound
+/// identity + key live in OS secure storage (user profile, not the install
+/// folder), so it persists across app updates and is never asked again — only a
+/// full uninstall / credential wipe clears it.
+const bool kRequireTerminalRegistration = true;
+
+class TerminalRegistrationStatus {
+  const TerminalRegistrationStatus({required this.loaded, required this.registered});
+
+  /// false until secure storage has been read once (so the gate never fires on
+  /// a not-yet-known state and bounces a registered terminal).
+  final bool loaded;
+  final bool registered;
+}
+
+/// Synchronously-readable registration status for the router gate. Loaded once
+/// at startup from secure storage; refreshed after a successful registration.
+class TerminalRegistrationStatusNotifier extends StateNotifier<TerminalRegistrationStatus> {
+  TerminalRegistrationStatusNotifier(this._ref)
+      : super(const TerminalRegistrationStatus(loaded: false, registered: false));
+
+  final Ref _ref;
+
+  Future<void> load() async {
+    final service = _ref.read(posTerminalServiceProvider);
+    final identity = await service.loadIdentity();
+    final registered = identity != null;
+    if (mounted) {
+      state = TerminalRegistrationStatus(loaded: true, registered: registered);
+    }
+    // Best-effort: mint/refresh the device token so requests carry branch
+    // context. Never blocks the gate; safe offline.
+    if (registered) {
+      unawaited(service.ensureDeviceToken().catchError((_) => null));
+    }
+  }
+
+  void refresh() => load();
+}
+
+final terminalRegistrationStatusProvider =
+    StateNotifierProvider<TerminalRegistrationStatusNotifier, TerminalRegistrationStatus>((ref) {
+  return TerminalRegistrationStatusNotifier(ref)..load();
 });

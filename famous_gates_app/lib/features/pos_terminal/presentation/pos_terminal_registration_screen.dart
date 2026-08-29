@@ -76,6 +76,8 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
             code: _codeController.text.replaceAll(RegExp(r'\s+'), ''),
           );
       ref.invalidate(posTerminalIdentityProvider);
+      // Refresh the first-run gate so the app now lets this terminal through.
+      ref.read(terminalRegistrationStatusProvider.notifier).refresh();
       if (mounted) setState(() => _step = _Step.done);
     } catch (e) {
       setState(() {

@@ -12,6 +12,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/terminal_screen.dart';
 import '../../features/pos_terminal/presentation/pos_terminal_registration_screen.dart';
+import '../../features/pos_terminal/data/pos_terminal_service.dart';
 import '../../features/bar/presentation/bar_screen.dart';
 import '../../features/branch_health/presentation/branch_health_screen.dart';
 import '../../features/branch_manager/presentation/branch_manager_dashboard.dart';
@@ -61,12 +62,21 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier();
   ref.onDispose(refreshNotifier.dispose);
   ref.listen(authNotifierProvider, (_, __) => refreshNotifier.notify());
+  ref.listen(terminalRegistrationStatusProvider, (_, __) => refreshNotifier.notify());
 
   return GoRouter(
     initialLocation: '/terminal',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final location = state.matchedLocation;
+
+      // Mandatory first-run: this device cannot be used until it is registered
+      // to a branch. Block every route except the registration screen itself.
+      // Once registered (persisted in secure storage), this never fires again.
+      final reg = ref.read(terminalRegistrationStatusProvider);
+      if (kRequireTerminalRegistration && reg.loaded && !reg.registered) {
+        return location == '/terminal-setup' ? null : '/terminal-setup';
+      }
       final auth = ref.read(authNotifierProvider);
       if (_publicRoutes.contains(location)) {
         // Explicit hub navigation (Back button → /terminal?hub=1) lets a
