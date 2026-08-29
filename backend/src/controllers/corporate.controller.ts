@@ -253,8 +253,32 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
         let referenceType: 'pos' | 'room_folio' | 'conference' = 'pos';
         let referenceId: string | null = null;
 
-        if (billType === 'room_folio' || billType === 'room') {
-            const reservationId = String(reference_id || '').trim();
+        const candidateId = String(reference_id || pos_bill_id || '').trim();
+        let effectiveBillType = billType;
+
+        // Auto-detect bill type if not explicitly set or if marked as default pos
+        if ((!effectiveBillType || effectiveBillType === 'pos') && candidateId) {
+            const { data: confCheck } = await supabase
+                .from('conference_hall_bookings')
+                .select('id')
+                .eq('id', candidateId)
+                .maybeSingle();
+            if (confCheck) {
+                effectiveBillType = 'conference';
+            } else {
+                const { data: resCheck } = await supabase
+                    .from('reservations')
+                    .select('id')
+                    .eq('id', candidateId)
+                    .maybeSingle();
+                if (resCheck) {
+                    effectiveBillType = 'room_folio';
+                }
+            }
+        }
+
+        if (effectiveBillType === 'room_folio' || effectiveBillType === 'room') {
+            const reservationId = candidateId;
             if (!reservationId) throw new AppError('reference_id (reservation) is required for a room bill', 400);
             // Clears the guest folio via the vetted hotel settlement path using
             // the Credit Bill (non-cash) method — the corporate account, not the
@@ -269,8 +293,8 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
             });
             referenceType = 'room_folio';
             referenceId = reservationId;
-        } else if (billType === 'conference') {
-            const bookingId = String(reference_id || '').trim();
+        } else if (effectiveBillType === 'conference') {
+            const bookingId = candidateId;
             if (!bookingId) throw new AppError('reference_id (conference booking) is required', 400);
             await recordConferenceCashierPayment({
                 bookingId,
@@ -286,17 +310,9 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
             // POS (default): mark the bill credit_bill + CORPORATE_CREDIT so it
             // leaves the cashier's unpaid queue. The id can be either a master
             // bill or a standalone shift order, so update whichever it is.
-            // .select('id') lets us detect a 0-row update — a bare update reports
-            // success even when nothing matched, which previously left a
-            // shift-order bill sitting unpaid because the fallback only ran on an
-            // actual error, never on "no row matched".
             referenceType = 'pos';
-            referenceId = pos_bill_id || null;
-            // Fail loudly instead of booking an orphan receivable that settles
-            // nothing. A hotel/conference bill sent without its bill_type (e.g.
-            // an un-rebuilt client) lands here with no pos_bill_id — that used to
-            // return 200 while clearing no bill and printing no receipt.
-            if (!pos_bill_id) {
+            referenceId = candidateId || null;
+            if (!candidateId) {
                 throw new AppError(
                     'pos_bill_id is required for a POS corporate charge (send bill_type=room_folio/conference with reference_id for hotel/conference bills)',
                     400
@@ -311,7 +327,7 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
                 const { data: masterUpdated, error: updateMasterErr } = await supabase
                     .from('pos_master_bills')
                     .update(CORPORATE_SETTLEMENT)
-                    .eq('id', pos_bill_id)
+                    .eq('id', candidateId)
                     .select('id');
                 if (updateMasterErr) {
                     logger.warn('Failed updating pos_master_bills for corporate charge:', updateMasterErr.message);
@@ -320,7 +336,7 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
                     const { error: updateOrderErr } = await supabase
                         .from('pos_shift_orders')
                         .update(CORPORATE_SETTLEMENT)
-                        .eq('id', pos_bill_id);
+                        .eq('id', candidateId);
                     if (updateOrderErr) {
                         logger.warn('Failed updating pos_shift_orders for corporate charge:', updateOrderErr.message);
                     }
@@ -329,14 +345,13 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
         }
 
         // 2. Record the Corporate Credit Bill (the receivable the corporate
-        //    account will be invoiced for). pos_bill_id keeps its master_bills FK,
-        //    so it is only set for POS charges; room/conference use reference_id.
+        //    account will be invoiced for).
         const { data: creditBill, error: creditErr } = await supabase
             .from('corporate_credit_bills')
             .insert({
                 branch_id: branchId,
                 corporate_customer_id,
-                pos_bill_id: referenceType === 'pos' ? (pos_bill_id || null) : null,
+                pos_bill_id: referenceType === 'pos' ? referenceId : null,
                 reference_type: referenceType,
                 reference_id: referenceId,
                 amount: chargeAmount,

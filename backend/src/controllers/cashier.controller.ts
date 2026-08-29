@@ -4762,7 +4762,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                         let confQuery = supabase
                             .from('conference_hall_bookings')
                             .select('*')
-                            .neq('payment_status', 'paid')
+                            .not('payment_status', 'in', '("paid","credit_bill","corporate_credit","completed")')
                             .order('created_at', { ascending: false });
 
                         if (effectiveBranchId) {
@@ -4798,7 +4798,10 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                                 is_conference: true,
                                 notes: conf.notes
                             };
-                        }).filter((cb: any) => cb.balance_amount > 0);
+                        }).filter((cb: any) => {
+                            const st = String(cb.status || '').toLowerCase();
+                            return cb.balance_amount > 0 && !['paid', 'credit_bill', 'corporate_credit', 'completed', 'settled'].includes(st);
+                        });
                         return { data: mapped, error: null };
                     } catch (_) {
                         return { data: [], error: null };
@@ -5112,6 +5115,35 @@ async function settleNonManualBill(
             customerName: shiftTx.customer_name,
         });
         return updated || { id, status: 'paid' };
+    }
+
+    // ── 3. Conference Hall Booking ──────────────────────────────────────────
+    const { data: confBooking } = await supabase
+        .from('conference_hall_bookings')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+    if (confBooking) {
+        if (!cashierId) {
+            throw new AppError('Cashier user is required to settle conference bills', 403);
+        }
+        const result = await recordConferenceCashierPayment({
+            bookingId: id,
+            amount: paymentAmount,
+            paymentMethod: payment_method || 'cash',
+            reference: payment_reference,
+            cashierUserId: cashierId,
+            cashierName,
+        });
+
+        return {
+            id,
+            paid_amount: result.paidAmount,
+            balance_amount: result.balance,
+            status: result.paymentStatus,
+            payment_id: result.paymentId,
+        };
     }
 
     return null;

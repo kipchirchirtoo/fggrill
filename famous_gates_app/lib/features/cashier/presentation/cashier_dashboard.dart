@@ -2473,10 +2473,41 @@ class _StationTabState extends ConsumerState<_StationTab> {
       // (bill_type room_folio) instead of as a POS bill, so it settles the room
       // bill on the corporate account. Everything else is a POS bill.
       final billKind = _text(bill, ['type', 'source', 'bill_type']).toLowerCase();
-      final isHotelBill = billKind == 'hotel' || billKind == 'reservations';
+      final isHotelBill = billKind == 'hotel' || billKind == 'reservations' || bill['is_hotel'] == true;
+      final isConferenceBill = billKind == 'conference' || billKind == 'events' || bill['is_conference'] == true;
       final reservationId = isHotelBill
           ? _text(_asMap(bill['booking']), ['id', 'reservation_id'])
           : '';
+      final targetRefId = isHotelBill && reservationId.isNotEmpty
+          ? reservationId
+          : _billId(bill);
+
+      final Map<String, dynamic> chargePayload;
+      if (isHotelBill) {
+        chargePayload = {
+          'bill_type': 'room_folio',
+          'reference_id': targetRefId,
+          'corporate_customer_id': _selectedCorporateCustomerId,
+          'amount': corpAmount,
+        };
+      } else if (isConferenceBill) {
+        chargePayload = {
+          'bill_type': 'conference',
+          'reference_id': targetRefId,
+          'pos_bill_id': targetRefId,
+          'corporate_customer_id': _selectedCorporateCustomerId,
+          'amount': corpAmount,
+        };
+      } else {
+        chargePayload = {
+          'bill_type': 'pos',
+          'pos_bill_id': _billId(bill),
+          'reference_id': _billId(bill),
+          'corporate_customer_id': _selectedCorporateCustomerId,
+          'amount': corpAmount,
+        };
+      }
+
       // Corporate credit was the only settlement path that (a) ran outside the
       // try/catch — so a credit-limit / inactive-account error surfaced
       // nowhere — and (b) returned before any receipt was printed. Give it the
@@ -2486,18 +2517,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       try {
         final corpResponse = await ref
             .read(cashierRepositoryProvider)
-            .chargeCorporateCredit(isHotelBill && reservationId.isNotEmpty
-                ? {
-                    'bill_type': 'room_folio',
-                    'reference_id': reservationId,
-                    'corporate_customer_id': _selectedCorporateCustomerId,
-                    'amount': corpAmount,
-                  }
-                : {
-                    'pos_bill_id': _billId(bill),
-                    'corporate_customer_id': _selectedCorporateCustomerId,
-                    'amount': corpAmount,
-                  });
+            .chargeCorporateCredit(chargePayload);
         ref.invalidate(cashierStatsProvider);
         ref.invalidate(cashierUnpaidBillsProvider);
         ref.invalidate(cashierCreditBillsProvider);
