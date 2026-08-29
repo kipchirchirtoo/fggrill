@@ -80,12 +80,7 @@ class TerminalScreen extends ConsumerWidget {
               'assets/frontend_public/IMG_8704.JPG',
               fit: BoxFit.cover,
             ),
-            // 2 — Backdrop blur
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-              child: const SizedBox.expand(),
-            ),
-            // 3 — Dark gradient overlay
+            // 2 — Dark gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -108,6 +103,30 @@ class TerminalScreen extends ConsumerWidget {
                 child: Padding(
                   padding: EdgeInsets.only(top: 18),
                   child: _BackOfficeButton(),
+                ),
+              ),
+            ),
+            // Terminal registration entry (installers) — discreet, top-left.
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 18, left: 8),
+                  child: TextButton.icon(
+                    onPressed: () => context.go('/terminal-setup'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
+                    icon: const Icon(Icons.point_of_sale, size: 14),
+                    label: const Text('SETUP',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2)),
+                  ),
                 ),
               ),
             ),
