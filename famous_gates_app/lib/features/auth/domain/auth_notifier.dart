@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_repository.dart';
+import '../../pos_terminal/data/pos_terminal_service.dart';
 import 'models.dart';
 
 final authNotifierProvider =
@@ -33,6 +34,14 @@ class AuthNotifier extends AsyncNotifier<User?> {
 
   Future<User> posLogin(String pin) async {
     state = const AsyncValue.loading();
+    // Ensure this terminal's device token is fresh and cached BEFORE the login
+    // request, so the request carries the terminal's branch context and the
+    // backend scopes the PIN to this terminal's branch — a registered Kyogong
+    // terminal must reject another branch's PIN. Best-effort: a token failure
+    // must not block login on an unregistered / grandfathered terminal.
+    try {
+      await ref.read(posTerminalServiceProvider).ensureDeviceToken();
+    } catch (_) {}
     final result = await AsyncValue.guard(() {
       return ref.read(authRepositoryProvider).posLogin(pin);
     });
