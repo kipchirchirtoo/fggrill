@@ -10,6 +10,7 @@ import 'package:famous_gates_app/core/widgets/safe_asset_image.dart';
 import '../domain/auth_notifier.dart';
 import '../domain/models.dart';
 import '../domain/role_routes.dart';
+import '../../pos_terminal/data/pos_terminal_service.dart';
 
 final _terminalPinProvider = StateProvider.autoDispose<String>((ref) => '');
 final _terminalLoadingProvider =
@@ -41,6 +42,7 @@ class TerminalScreen extends ConsumerWidget {
     final selectedPrefix = pin.isNotEmpty ? pin[0] : null;
 
     final focusNode = ref.watch(_terminalFocusNodeProvider);
+    final terminalIdentity = ref.watch(posTerminalIdentityProvider).valueOrNull;
 
     return KeyboardListener(
       focusNode: focusNode,
@@ -106,30 +108,6 @@ class TerminalScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            // Terminal registration entry (installers) — discreet, top-left.
-            Positioned(
-              top: 0,
-              left: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 18, left: 8),
-                  child: TextButton.icon(
-                    onPressed: () => context.go('/terminal-setup'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                    ),
-                    icon: const Icon(Icons.point_of_sale, size: 14),
-                    label: const Text('SETUP',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2)),
-                  ),
-                ),
-              ),
-            ),
             // 4 — UI content
             SafeArea(
               child: Padding(
@@ -174,6 +152,19 @@ class TerminalScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+            // Terminal registration status — LAST child so it always renders on
+            // top (never hidden behind the logo). Prominent when unregistered.
+            Positioned(
+              top: 66,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _RegistrationChip(
+                  identity: terminalIdentity,
+                  onTap: () => context.go('/terminal-setup'),
                 ),
               ),
             ),
@@ -369,6 +360,68 @@ class _BackOfficeButton extends StatelessWidget {
           SizedBox(width: 5),
           Icon(Icons.arrow_forward_rounded, size: 13),
         ],
+      ),
+    );
+  }
+}
+
+// Shows whether this computer is registered to a branch. Amber + prominent when
+// it is NOT yet registered (tap → the enrollment screen); a subtle confirmation
+// pill once it is bound. Rendered on top of everything so it is always findable.
+class _RegistrationChip extends StatelessWidget {
+  const _RegistrationChip({required this.identity, required this.onTap});
+
+  final PosTerminalIdentity? identity;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final registered = identity != null;
+    final Color bg = registered
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFB45309);
+    final Color fg = registered ? Colors.white70 : Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+                color: Colors.white
+                    .withValues(alpha: registered ? 0.22 : 0.45)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                  registered
+                      ? Icons.verified_user
+                      : Icons.warning_amber_rounded,
+                  size: 15,
+                  color: fg),
+              const SizedBox(width: 8),
+              Text(
+                registered
+                    ? 'TERMINAL: ${identity!.terminalName.toUpperCase()}'
+                    : 'REGISTER THIS TERMINAL TO A BRANCH',
+                style: TextStyle(
+                    color: fg,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8),
+              ),
+              if (!registered) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.arrow_forward_rounded, size: 13, color: fg),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
