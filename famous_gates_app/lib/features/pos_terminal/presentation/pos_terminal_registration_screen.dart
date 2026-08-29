@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../data/pos_terminal_service.dart';
 
@@ -165,6 +166,12 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Text('VERIFY CODE'),
             ),
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: _busy ? null : () => context.go('/login'),
+            child: const Text('Administrator? Sign in to back office',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
           ),
         ],
       );
