@@ -11,6 +11,7 @@ import '../../features/auth/presentation/license_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/terminal_screen.dart';
+import '../../features/pos_terminal/presentation/pos_terminal_registration_screen.dart';
 import '../../features/bar/presentation/bar_screen.dart';
 import '../../features/branch_health/presentation/branch_health_screen.dart';
 import '../../features/branch_manager/presentation/branch_manager_dashboard.dart';
@@ -128,6 +129,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/terminal',
           builder: (context, state) => const TerminalScreen()),
+      GoRoute(
+          path: '/terminal-setup',
+          builder: (context, state) => PosTerminalRegistrationScreen(
+                onComplete: () => context.go('/terminal'),
+              )),
       GoRoute(
           path: '/hr-terminal',
           builder: (context, state) => const HRTerminalScreen()),
@@ -1003,6 +1009,7 @@ bool _isCentralStoreUser(User user) =>
 const _publicRoutes = {
   '/splash',
   '/terminal',
+  '/terminal-setup',
   '/hr-terminal',
   '/license',
   '/login'

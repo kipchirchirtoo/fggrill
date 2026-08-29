@@ -30,6 +30,18 @@ class AuthInterceptor extends Interceptor {
       options.headers['X-Branch-ID'] = normalizedBranchId;
     }
 
+    // POS terminal (device/branch) context, when this machine is registered.
+    // Read side-effect-free here — the device-token handshake runs elsewhere;
+    // the interceptor only forwards a cached token so the server can bind the
+    // request to the terminal's branch. Key kept in sync with
+    // PosTerminalService (pos_terminal_device_token).
+    final deviceToken = await storage.read(key: 'pos_terminal_device_token');
+    final normalizedDeviceToken = deviceToken?.trim() ?? '';
+    if (normalizedDeviceToken.isNotEmpty &&
+        normalizedDeviceToken.toLowerCase() != 'null') {
+      options.headers['X-POS-Terminal-Token'] = normalizedDeviceToken;
+    }
+
     return handler.next(options);
   }
 

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import { applyBranchFilter } from '../utils/branchIsolation';
 import { requiresPosPinForLogin } from '../utils/posPinRules';
+import { isBranchScopedPinsEnabled } from '../utils/posTerminalContext';
 
 const GLOBAL_USER_ADMIN_ROLES = new Set(['super_admin', 'general_manager']);
 const BRANCH_MANAGER_BLOCKED_ROLES = new Set([
@@ -322,11 +323,16 @@ export const createUser = async (
         return;
       }
 
-      const { data: pinConflict } = await supabase
+      // Branch-scoped uniqueness only when the feature is enabled; otherwise PINs
+      // stay globally unique so grandfathered (branch-blind) logins remain safe.
+      let pinConflictQuery = supabase
         .from('users')
         .select('id, first_name, last_name')
-        .eq('pos_pin', normalizedPin)
-        .maybeSingle();
+        .eq('pos_pin', normalizedPin);
+      if (isBranchScopedPinsEnabled() && bId) {
+        pinConflictQuery = pinConflictQuery.eq('branch_id', bId);
+      }
+      const { data: pinConflict } = await pinConflictQuery.maybeSingle();
       if (pinConflict) {
         res.status(409).json({
           success: false,
@@ -539,12 +545,26 @@ export const updateUser = async (
           return;
         }
 
-        const { data: pinConflict } = await supabase
+        let updateConflictQuery = supabase
           .from('users')
           .select('id, first_name, last_name')
           .eq('pos_pin', normalizedPin)
-          .neq('id', req.params.id)
-          .maybeSingle();
+          .neq('id', req.params.id);
+        if (isBranchScopedPinsEnabled()) {
+          // Scope to the branch the PIN will live in: the incoming branch if it
+          // is being changed, otherwise the user's current branch.
+          let effBranch = fields.branch_id || fields.branchId;
+          if (!effBranch) {
+            const { data: cur } = await supabase
+              .from('users')
+              .select('branch_id')
+              .eq('id', req.params.id)
+              .maybeSingle();
+            effBranch = cur?.branch_id;
+          }
+          if (effBranch) updateConflictQuery = updateConflictQuery.eq('branch_id', effBranch);
+        }
+        const { data: pinConflict } = await updateConflictQuery.maybeSingle();
         if (pinConflict) {
           res.status(409).json({
             success: false,

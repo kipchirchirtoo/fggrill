@@ -25,6 +25,7 @@ import 'sections/toggle_settings_section.dart';
 import 'sections/non_consumables_catalog_section.dart';
 import 'sections/kitchen_ledger_items_section.dart';
 import 'sections/pos_outlet_menu_section.dart';
+import 'sections/pos_terminals_section.dart';
 import 'sections/announcements_section.dart';
 import 'sections/emergency_controls_section.dart';
 import 'sections/data_override_section.dart';
@@ -153,6 +154,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       SuperAdminSection.nonConsumablesCatalog:
           const NonConsumablesCatalogSection(),
       SuperAdminSection.posOutletMenu: const PosOutletMenuSection(),
+      SuperAdminSection.posTerminals: const PosTerminalsSection(),
 
       // Finance & Inventory
       SuperAdminSection.finance: const FinanceSection(),

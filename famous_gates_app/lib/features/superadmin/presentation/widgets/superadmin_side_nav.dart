@@ -134,6 +134,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.posOutletMenu,
                 label: 'POS Outlet Menu',
                 icon: Icons.storefront),
+            const SuperAdminNavItem(
+                section: SuperAdminSection.posTerminals,
+                label: 'POS Terminals',
+                icon: Icons.point_of_sale),
             SuperAdminNavItem(
                 section: SuperAdminSection.tillNumbers,
                 label: 'POS Till Numbers',

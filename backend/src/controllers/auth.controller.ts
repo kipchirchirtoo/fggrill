@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import db from '../db';
 import { logAuthAttempt, logSecurityEvent } from '../utils/audit';
+import { resolvePosTerminalContext, isBranchScopedPinsEnabled } from '../utils/posTerminalContext';
 import {
   registerManagedSession,
   revokeManagedSession
@@ -1225,32 +1226,63 @@ export const posLogin = async (
       return;
     }
 
-    // Find user by PIN — check direct column first, fall back to metadata->>'pos_pin'
-    // (metadata fallback handles rows migrated from old DB before migration 0011 ran)
+    // Resolve the POS terminal (device/branch) context, if this request came
+    // from a registered terminal. Branch-aware login scopes the PIN lookup to
+    // the terminal's branch, so the same PIN can exist in different branches.
+    // A branch-blind request is only allowed while branch-scoped PINs are
+    // disabled (grandfather mode); once enabled, a registered terminal is
+    // required so the branch is never ambiguous.
+    const terminalCtx = await resolvePosTerminalContext(req);
+    if (isBranchScopedPinsEnabled() && !terminalCtx) {
+      logger.warn('POS PIN login rejected: branch-scoped PINs enabled but no registered terminal', { ip: req.ip });
+      res.status(401).json({
+        success: false,
+        code: 'POS_TERMINAL_REQUIRED',
+        message: 'This device must be registered before POS login. Ask an administrator to register this terminal.'
+      });
+      return;
+    }
+    const scopeBranchId = terminalCtx?.branchId ?? null;
+
+    // Find user by PIN — direct column first, then metadata->>'pos_pin' fallback
+    // (handles rows migrated from the old DB before the pos_pin column existed).
+    // Scoped to the terminal's branch when known; otherwise global, and an
+    // ambiguous (multi-branch) match is rejected rather than guessed.
     let user: any = null;
     {
-      const { data: byCol } = await supabase
-        .from('users')
-        .select('*')
-        .eq('pos_pin', pin)
-        .limit(1)
-        .maybeSingle();
-      if (byCol) {
-        user = byCol;
+      let colQuery = supabase.from('users').select('*').eq('pos_pin', pin);
+      if (scopeBranchId) colQuery = colQuery.eq('branch_id', scopeBranchId);
+      const { data: colMatches } = await colQuery.limit(2);
+      if ((colMatches || []).length > 1) {
+        logger.warn('POS PIN login rejected: ambiguous PIN across branches', { ip: req.ip });
+        res.status(409).json({
+          success: false,
+          code: 'PIN_AMBIGUOUS',
+          message: 'This PIN exists in more than one branch. Register this terminal so the branch is known.'
+        });
+        return;
+      }
+      if ((colMatches || []).length === 1) {
+        user = colMatches![0];
       } else {
-        const { data: byMeta } = await supabase
-          .from('users')
-          .select('*')
-          .filter('metadata->>pos_pin', 'eq', pin)
-          .limit(1)
-          .maybeSingle();
-        if (byMeta) {
-          user = byMeta;
-          // Backfill the column so future logins use the fast path
+        let metaQuery = supabase.from('users').select('*').filter('metadata->>pos_pin', 'eq', pin);
+        if (scopeBranchId) metaQuery = metaQuery.eq('branch_id', scopeBranchId);
+        const { data: metaMatches } = await metaQuery.limit(2);
+        if ((metaMatches || []).length > 1) {
+          res.status(409).json({
+            success: false,
+            code: 'PIN_AMBIGUOUS',
+            message: 'This PIN exists in more than one branch. Register this terminal so the branch is known.'
+          });
+          return;
+        }
+        if ((metaMatches || []).length === 1) {
+          user = metaMatches![0];
+          // Backfill the column so future logins use the fast path.
           await supabase
             .from('users')
             .update({ pos_pin: pin, updated_at: new Date().toISOString() })
-            .eq('id', byMeta.id);
+            .eq('id', user.id);
         }
       }
     }

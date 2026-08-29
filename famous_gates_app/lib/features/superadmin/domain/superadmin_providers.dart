@@ -38,6 +38,7 @@ enum SuperAdminSection {
   cashierStationConfig,
   nonConsumablesCatalog,
   posOutletMenu,
+  posTerminals,
 
   // Finance & Inventory
   finance,
