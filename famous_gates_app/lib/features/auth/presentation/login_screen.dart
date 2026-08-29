@@ -129,13 +129,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ],
           // ── Back button overlay (Top-Left circle) ───────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: IconButton.filledTonal(
-                tooltip: 'Back to terminal',
-                onPressed: () => context.go('/terminal'),
-                icon: const Icon(Icons.arrow_back),
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: IconButton.filledTonal(
+                  tooltip: 'Back to terminal',
+                  onPressed: () => context.go('/terminal'),
+                  icon: const Icon(Icons.arrow_back),
+                ),
               ),
             ),
           ),
