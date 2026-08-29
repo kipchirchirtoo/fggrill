@@ -504,7 +504,7 @@ type StandardsCatalogRow = {
   item_sku: string | null;
   unit: string | null;
   category: string | null;
-  standard_type: 'RECIPE_STANDARD' | 'CHANNEL_STANDARD';
+  standard_type: 'RECIPE_STANDARD' | 'CHANNEL_STANDARD' | 'DIRECT_STANDARD';
   default_channel: string | null;
 };
 
@@ -620,6 +620,9 @@ const formatStandardChannel = (
   if (standardType === 'RECIPE_STANDARD') {
     return 'POS Restaurant';
   }
+  if (standardType === 'DIRECT_STANDARD') {
+    return 'Direct Food Item';
+  }
   return null;
 };
 
@@ -629,6 +632,8 @@ const getStandardTypePriority = (type: StandardsCatalogRow['standard_type']): nu
       return 3;
     case 'RECIPE_STANDARD':
       return 2;
+    case 'DIRECT_STANDARD':
+      return 1;
     default:
       return 0;
   }
@@ -644,6 +649,8 @@ const getStandardTypeRank = (type: string): number => {
       return 2;
     case 'CHANNEL_STANDARD':
       return 2;
+    case 'DIRECT_STANDARD':
+      return 1;
     default:
       return 0;
   }
@@ -659,7 +666,7 @@ const fetchKitchenStandardsCatalog = async (
     { data: recipeRows, error: recipeErr },
     { data: recipeInputs, error: recipeInputsErr },
     { data: channelStandards, error: standardsErr },
-    { data: foodstuffRows, error: foodstuffsErr },
+    { data: directItems, error: directsErr },
   ] = await Promise.all([
     supabase
       .from('kitchen_production_recipes')
@@ -676,16 +683,15 @@ const fetchKitchenStandardsCatalog = async (
       .select('channel, raw_item_sku, raw_item_name, unit')
       .eq('branch_id', branchId),
     supabase
-      .from('inventory_items')
-      .select('id, sku, item_name, unit, category')
-      .or('store_type.eq.foodstuffs,category.ilike.%food%,category.ilike.%produce%,category.ilike.%meat%,category.ilike.%poultry%,category.ilike.%vegetable%,category.ilike.%dairy%')
-      .eq('is_active', true)
-      .or(`branch_id.is.null,branch_id.eq.${branchId}`),
+      .from('food_control_direct_items')
+      .select('stock_item_sku, stock_item_name, pos_outlet_item_id')
+      .eq('branch_id', branchId)
+      .eq('is_active', true),
   ]);
   if (recipeErr) throw recipeErr;
   if (recipeInputsErr) throw recipeInputsErr;
   if (standardsErr) throw standardsErr;
-  if (foodstuffsErr) logger.warn('Kitchen stocktake foodstuffs query warning:', foodstuffsErr.message);
+  if (directsErr) logger.warn('Kitchen stocktake direct items query warning:', directsErr.message);
 
   const rawEntries: StandardsCatalogRow[] = [];
   for (const row of (recipeRows || []) as any[]) {
@@ -744,15 +750,15 @@ const fetchKitchenStandardsCatalog = async (
       default_channel: formatStandardChannel(String(row.channel || ''), 'CHANNEL_STANDARD'),
     });
   }
-  for (const row of ((foodstuffRows || []) as any[])) {
+  for (const row of ((directItems || []) as any[])) {
     rawEntries.push({
-      item_id: row.id || null,
-      item_name: String(row.item_name || '').trim(),
-      item_sku: row.sku || null,
-      unit: row.unit || null,
-      category: row.category || 'Foodstuffs',
-      standard_type: 'RECIPE_STANDARD',
-      default_channel: 'Kitchen Store',
+      item_id: null,
+      item_name: String(row.stock_item_name || '').trim(),
+      item_sku: row.stock_item_sku || null,
+      unit: null,
+      category: null,
+      standard_type: 'DIRECT_STANDARD',
+      default_channel: 'Direct Food Item',
     });
   }
 
