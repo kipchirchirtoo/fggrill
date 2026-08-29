@@ -401,10 +401,10 @@ async function recordEventCashierPayment(
           source_table,
           source_id,
           branch_id,
-          notes,
-          source
+          source,
+          notes
         )
-        VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, 'RECEPTION')
+        VALUES ($1, $2, $3, $4, $5, NOW(), 'cashier_transactions', $2, $6, 'cashier', $7)
       `,
       [
         shift.id,
@@ -412,10 +412,8 @@ async function recordEventCashierPayment(
         cashierTransactionNumber,
         shiftMethod,
         amount,
-        sourceTable,
-        booking.id,
         booking.branch_id,
-        `${revenueType} payment`,
+        `${revenueType} payment for ${booking.customer_name}`,
       ]
     );
 
