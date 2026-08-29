@@ -76,7 +76,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 900;
     return Scaffold(
-      backgroundColor: const Color(0xFF070B16),
+      backgroundColor: const Color(0xFF0F172A),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -333,23 +333,16 @@ class _BrandPanel extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ── 0. Deep dark luxury base layer ─────────────────────────────
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF060B18),
-                Color(0xFF0D1B2A),
-                Color(0xFF050811),
-              ],
-            ),
-          ),
-        ),
+        // ── 0. Solid navy base layer — the fallback shown when the background
+        //    photo asset fails to load on a machine ─────────────────────────
+        const ColoredBox(color: Color(0xFF0F172A)),
 
-        // ── 1. Background photo ──────────────────────────────────────────
-        const SafeAssetImage(_bgImage, fit: BoxFit.cover),
+        // ── 1. Background photo (falls back to the same navy on load failure)
+        const SafeAssetImage(
+          _bgImage,
+          fit: BoxFit.cover,
+          fallback: ColoredBox(color: Color(0xFF0F172A)),
+        ),
 
         // ── 2. Dark gradient overlay (ensures text legibility) ───────────
         DecoratedBox(
