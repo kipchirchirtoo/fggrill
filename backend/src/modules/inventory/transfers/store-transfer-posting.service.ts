@@ -95,6 +95,11 @@ export class StoreTransferPostingService {
         .map((item) => ({
           itemName: item.item_name || item.item_sku || null,
           itemSku: String(item.item_sku || '').trim(),
+          // Receiving a dispatch means the goods physically arrived — the branch
+          // must gain this stock regardless of the transit/central balance (the
+          // transit location is often not pre-seeded). Override the source
+          // availability check so the receipt never blocks on an empty source.
+          allowNegativeOverride: true,
           metadata: {
             dispatch_id: input.dispatchId,
             dispatch_number: input.dispatchNumber,
