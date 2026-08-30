@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/network/dio_client.dart';
@@ -71,8 +73,65 @@ class PosTerminalService {
   Future<PosTerminalIdentity?> loadIdentity() async {
     try {
       final raw = await _storage.read(key: _kIdentity);
-      if (raw == null || raw.trim().isEmpty) return null;
-      return PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      if (raw != null && raw.trim().isNotEmpty) {
+        return PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      }
+    } catch (_) {
+      // fall through to the file backup
+    }
+    // Secure storage empty or unreadable (e.g. wiped by an app reinstall) —
+    // recover from the resilient file backup and re-hydrate secure storage so
+    // device auth keeps working, instead of forcing a re-registration.
+    final backup = await _readBackup();
+    if (backup == null) return null;
+    try {
+      final identity = PosTerminalIdentity.fromJson(
+          Map<String, dynamic>.from(backup['identity'] as Map));
+      final seed = '${backup['seed'] ?? ''}';
+      final fingerprint = '${backup['fingerprint'] ?? ''}';
+      await _storage.write(key: _kIdentity, value: jsonEncode(identity.toJson()));
+      if (seed.isNotEmpty) await _storage.write(key: _kSeed, value: seed);
+      if (fingerprint.isNotEmpty) await _storage.write(key: _kFingerprint, value: fingerprint);
+      return identity;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---- Resilient file backup ---------------------------------------
+  // Secure storage can be wiped by an app reinstall on some platforms; a plain
+  // JSON file in the app-support directory survives updates so a registered
+  // terminal is not forced to re-enroll. It holds the (sensitive) device seed,
+  // so it lives only on the POS machine.
+  Future<File?> _backupFile() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      return File('${dir.path}${Platform.pathSeparator}pos_terminal_identity.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeBackup(
+      PosTerminalIdentity identity, String seedB64, String fingerprint) async {
+    try {
+      final file = await _backupFile();
+      if (file == null) return;
+      await file.writeAsString(jsonEncode({
+        'identity': identity.toJson(),
+        'seed': seedB64,
+        'fingerprint': fingerprint,
+      }));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _readBackup() async {
+    try {
+      final file = await _backupFile();
+      if (file == null || !await file.exists()) return null;
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return null;
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
     } catch (_) {
       return null;
     }
@@ -120,10 +179,13 @@ class PosTerminalService {
     final identity = PosTerminalIdentity.fromJson(data);
 
     // Persist only after the server accepted the registration.
-    await _storage.write(key: _kSeed, value: base64Encode(seed));
+    final seedB64 = base64Encode(seed);
+    await _storage.write(key: _kSeed, value: seedB64);
     await _storage.write(key: _kIdentity, value: jsonEncode(identity.toJson()));
     await _storage.delete(key: _kDeviceToken);
     await _storage.delete(key: _kDeviceTokenExp);
+    // Resilient backup so a reinstall/secure-store wipe does not force re-enroll.
+    await _writeBackup(identity, seedB64, fingerprint);
     return identity;
   }
 
@@ -188,6 +250,10 @@ class PosTerminalService {
     await _storage.delete(key: _kSeed);
     await _storage.delete(key: _kDeviceToken);
     await _storage.delete(key: _kDeviceTokenExp);
+    try {
+      final file = await _backupFile();
+      if (file != null && await file.exists()) await file.delete();
+    } catch (_) {}
   }
 }
 
