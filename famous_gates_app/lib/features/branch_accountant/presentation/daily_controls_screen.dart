@@ -665,6 +665,14 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                     ],
                   ),
                 ),
+                // Rows scroll vertically inside a bounded viewport so the dark
+                // column header above stays pinned (sticky) while reviewing.
+                SizedBox(
+                  height: (MediaQuery.of(context).size.height * 0.55)
+                      .clamp(320.0, 900.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
                 if (rows.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
@@ -759,6 +767,10 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                     );
                   }),
                 const SizedBox(height: 18),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
