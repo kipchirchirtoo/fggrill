@@ -129,6 +129,9 @@ export class InventoryBalanceService {
 
   static async ensureLocation(client: PoolClient, input: InventoryPostingLocationInput) {
     const locationCode = codeForLocation(input);
+    // The location_type check constraint uses 'in_transit'; callers (e.g. the
+    // dispatch-confirm posting flow) may pass the alias 'transit'. Normalise it.
+    const locationType = input.locationType === 'transit' ? 'in_transit' : input.locationType;
     const found = await client.query<{ id: string; location_code: string }>(
       `
         SELECT id, location_code
@@ -138,7 +141,7 @@ export class InventoryBalanceService {
         ORDER BY CASE WHEN location_code = $1 THEN 0 ELSE 1 END
         LIMIT 1
       `,
-      [locationCode, input.branchId ?? null, input.locationType],
+      [locationCode, input.branchId ?? null, locationType],
     );
 
     if (found.rows[0]) {
@@ -164,7 +167,7 @@ export class InventoryBalanceService {
         input.branchId ?? null,
         locationCode,
         nameForLocation(input),
-        input.locationType,
+        locationType,
         input.departmentCode ?? null,
         input.outletId ?? null,
         JSON.stringify(input.metadata || {}),
