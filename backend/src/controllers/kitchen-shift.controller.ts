@@ -4509,7 +4509,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     const { data: inventoryItems } = controlledSkus.length
         ? await supabase
             .from('inventory_items')
-            .select('sku, item_name, unit')
+            .select('id, sku, item_name, unit')
             .in('sku', controlledSkus)
         : { data: [] } as any;
     const inventoryBySku = new Map<string, any>(
@@ -4669,7 +4669,17 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             standard.raw_item_unit ||
             'unit'
         );
-        const openingQty = n(item.opening_stock);
+        // Opening for a raw ingredient: use the shift-ledger row when present,
+        // otherwise fall back to the day's submitted kitchen stocktake opening.
+        // kitchen_shift_items is not always seeded (the stocktake is the
+        // authoritative opening count), so without this fallback Opening reads 0.
+        const invIdForOpening = String(inventoryItem.id || '').trim();
+        const stocktakeOpening = invIdForOpening
+            ? n(stocktakeItemByInvId.get(invIdForOpening)?.opening_qty)
+            : 0;
+        const openingQty = shiftItemBySku.has(sku)
+            ? n(item.opening_stock)
+            : stocktakeOpening;
         const additionsQty = additionsBySku.get(sku) ?? n(item.additions);
         const posSalesQty = n(posSalesQtyBySku.get(sku) ?? item.sold_quantity);
         const spoilageQty = n(item.spoilage_quantity);
