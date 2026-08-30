@@ -211,14 +211,16 @@ export async function resolveBranchStockSource(
     }
   }
 
-  if (
-    balanceId &&
-    (
-      isCentralStore ||
-      !branchStockRes.data ||
-      (branchStockQuantity <= 0 && balanceQuantity > 0)
-    )
-  ) {
+  // The Branch-Store inventory_balances row is authoritative: it is the
+  // location ledger that captures GRN receipts and is exactly what the
+  // storekeeper UI ("Current Available Stock" / getItems) displays. branch_stock
+  // can drift stale (e.g. a supplier receipt landed in the balance but not in
+  // branch_stock), so whenever a Branch-Store balance row exists, prefer it —
+  // this keeps the available figure consistent with the UI and, because
+  // updateBranchStock writes the new quantity back to BOTH tables, re-syncs the
+  // stale branch_stock on the next movement. Fall back to branch_stock only when
+  // there is no balance row at all.
+  if (balanceId) {
     return {
       available: balanceQuantity,
       source: 'inventory_balances',
