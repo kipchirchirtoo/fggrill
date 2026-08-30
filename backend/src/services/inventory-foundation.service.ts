@@ -87,11 +87,12 @@ async function ensureLocation(
   const result = await client.query(
     `
       INSERT INTO inventory_locations (
-        branch_id, location_code, location_name, location_type, department_code, outlet_id, metadata, created_by
+        branch_id, location_code, name, location_name, location_type, department_code, outlet_id, metadata
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+      VALUES ($1, $2, $3, $3, $4, $5, $6, $7::jsonb)
       ON CONFLICT (location_code)
       DO UPDATE SET
+        name = EXCLUDED.name,
         location_name = EXCLUDED.location_name,
         location_type = EXCLUDED.location_type,
         department_code = COALESCE(EXCLUDED.department_code, inventory_locations.department_code),
@@ -106,8 +107,7 @@ async function ensureLocation(
       locationType,
       input.departmentCode ?? null,
       input.outletId ?? null,
-      JSON.stringify(input.metadata || {}),
-      actorId
+      JSON.stringify({ ...(input.metadata || {}), created_by: actorId }),
     ]
   );
 

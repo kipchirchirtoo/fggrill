@@ -150,13 +150,14 @@ export class InventoryBalanceService {
         INSERT INTO inventory_locations (
           branch_id,
           location_code,
+          name,
           location_name,
           location_type,
           department_code,
           outlet_id,
           metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6::uuid, $7::jsonb)
+        VALUES ($1, $2, $3, $3, $4, $5, $6::uuid, $7::jsonb)
         RETURNING id
       `,
       [
