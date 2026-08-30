@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -132,35 +133,45 @@ class PosTerminalService {
   Future<String?> ensureDeviceToken() async {
     final identity = await loadIdentity();
     final seedB64 = await _storage.read(key: _kSeed);
-    if (identity == null || seedB64 == null || seedB64.trim().isEmpty) return null;
+    final seedPresent = seedB64 != null && seedB64.trim().isNotEmpty;
+    debugPrint('[PosTerminal] ensureDeviceToken: registered=${identity != null} seedPresent=$seedPresent');
+    if (identity == null || !seedPresent) return null;
 
     final cached = await _storage.read(key: _kDeviceToken);
     final expStr = await _storage.read(key: _kDeviceTokenExp);
     final exp = int.tryParse(expStr ?? '') ?? 0;
     if (cached != null && cached.isNotEmpty && exp > DateTime.now().millisecondsSinceEpoch + 60000) {
+      debugPrint('[PosTerminal] ensureDeviceToken: using cached token (valid)');
       return cached;
     }
 
-    final keyPair = await _ed25519.newKeyPairFromSeed(base64Decode(seedB64));
+    debugPrint('[PosTerminal] ensureDeviceToken: minting via challenge/sign/token for ${identity.terminalId}');
+    try {
+      final keyPair = await _ed25519.newKeyPairFromSeed(base64Decode(seedB64!));
 
-    final challengeRes = await _dio.post('/pos-terminals/device/challenge', data: {'terminal_id': identity.terminalId});
-    final challenge = '${(challengeRes.data as Map)['data']['challenge']}';
+      final challengeRes = await _dio.post('/pos-terminals/device/challenge', data: {'terminal_id': identity.terminalId});
+      final challenge = '${(challengeRes.data as Map)['data']['challenge']}';
 
-    final signature = await _ed25519.sign(utf8.encode(challenge), keyPair: keyPair);
-    final tokenRes = await _dio.post('/pos-terminals/device/token', data: {
-      'challenge': challenge,
-      'signature': base64Encode(signature.bytes),
-    });
+      final signature = await _ed25519.sign(utf8.encode(challenge), keyPair: keyPair);
+      final tokenRes = await _dio.post('/pos-terminals/device/token', data: {
+        'challenge': challenge,
+        'signature': base64Encode(signature.bytes),
+      });
 
-    final data = Map<String, dynamic>.from((tokenRes.data as Map)['data'] as Map);
-    final token = '${data['device_token']}';
-    final ttlHours = int.tryParse('${data['expires_in_hours'] ?? 12}') ?? 12;
-    await _storage.write(key: _kDeviceToken, value: token);
-    await _storage.write(
-      key: _kDeviceTokenExp,
-      value: '${DateTime.now().millisecondsSinceEpoch + ttlHours * 3600 * 1000}',
-    );
-    return token;
+      final data = Map<String, dynamic>.from((tokenRes.data as Map)['data'] as Map);
+      final token = '${data['device_token']}';
+      final ttlHours = int.tryParse('${data['expires_in_hours'] ?? 12}') ?? 12;
+      await _storage.write(key: _kDeviceToken, value: token);
+      await _storage.write(
+        key: _kDeviceTokenExp,
+        value: '${DateTime.now().millisecondsSinceEpoch + ttlHours * 3600 * 1000}',
+      );
+      debugPrint('[PosTerminal] ensureDeviceToken: minted OK (branch context will now be sent)');
+      return token;
+    } catch (e) {
+      debugPrint('[PosTerminal] ensureDeviceToken: mint FAILED — $e');
+      rethrow;
+    }
   }
 
   /// The device token to attach to outgoing requests, if one is cached. Kept

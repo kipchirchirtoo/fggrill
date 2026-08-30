@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_repository.dart';
 import '../../pos_terminal/data/pos_terminal_service.dart';
@@ -40,8 +41,11 @@ class AuthNotifier extends AsyncNotifier<User?> {
     // terminal must reject another branch's PIN. Best-effort: a token failure
     // must not block login on an unregistered / grandfathered terminal.
     try {
-      await ref.read(posTerminalServiceProvider).ensureDeviceToken();
-    } catch (_) {}
+      final token = await ref.read(posTerminalServiceProvider).ensureDeviceToken();
+      debugPrint('[PosTerminal] posLogin: device token ${token != null ? "ready → branch context sent" : "null (grandfather / unregistered)"}');
+    } catch (e) {
+      debugPrint('[PosTerminal] posLogin: ensureDeviceToken error — $e');
+    }
     final result = await AsyncValue.guard(() {
       return ref.read(authRepositoryProvider).posLogin(pin);
     });
