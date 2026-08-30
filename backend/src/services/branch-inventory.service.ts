@@ -1949,19 +1949,25 @@ export async function confirmDelivery(
     }
   }
 
-  const postingResult = acceptedItems.length > 0
-    ? await StoreTransferPostingService.postTransitReceipt({
-      actorId: receiverId,
+  // Add the received quantities to branch stock via the proven legacy path.
+  // The modern posting engine (inventory_document_lines) keys items off
+  // inventory_item_catalog ids, which are out of sync with this DB's
+  // inventory_items-keyed balances, so it cannot post here. updateBranchStock
+  // credits inventory_balances (+ branch_stock) — exactly "receiving adds stock".
+  void idempotencyKey;
+  for (const acc of acceptedItems) {
+    await updateBranchStock(
+      Number(dispatch.to_branch_id),
+      acc.item_sku,
+      acc.quantity_received, // positive → add to branch stock
+      'DISPATCH_RECEIVE',
+      receiverId,
+      'dispatch_notes',
       dispatchId,
-      dispatchNumber: dispatch.dispatch_number,
-      idempotencyKey: idempotencyKey || `compat-delivery-${dispatchId}`,
-      items: acceptedItems,
-      notes: deliveryNotes || null,
-      receivingBranchId: dispatch.to_branch_id,
-      sourceTable: 'dispatch_notes',
-      sourceTableId: dispatchId,
-    })
-    : null;
+      dispatch.dispatch_number,
+      deliveryNotes || `Received ${dispatch.dispatch_number}`,
+    );
+  }
 
   // Clear in-transit
   await supabase
@@ -2031,14 +2037,12 @@ export async function confirmDelivery(
 
   return {
     status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED',
-    ...(postingResult?.document || {
-      document_id: null,
-      document_number: null,
-      document_type: null,
-      posted_at: null,
-      posting_status: null,
-      reversal_of_document_id: null,
-    }),
+    document_id: null,
+    document_number: null,
+    document_type: null,
+    posted_at: null,
+    posting_status: null,
+    reversal_of_document_id: null,
   };
 }
 
