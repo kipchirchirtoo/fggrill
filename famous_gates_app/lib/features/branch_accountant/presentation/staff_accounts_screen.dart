@@ -126,8 +126,11 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         repo.getPayrollAdvances(fromDate: fromStr, toDate: toStr),
         repo.getPayrollLoans(fromDate: fromStr, toDate: toStr),
         repo.getBranchStaff(),
-        repo.getCashierPaidCreditEntries(
-            status: 'pending', fromDate: fromStr, toDate: toStr),
+        // Still-unapplied paid bills must surface for review regardless of the
+        // shift's age — they stay outstanding until applied. Constraining them
+        // to the screen's date window hid older (e.g. last-month) entries that
+        // still need review, so fetch every pending entry irrespective of date.
+        repo.getCashierPaidCreditEntries(status: 'pending'),
       ]);
       if (!mounted) return;
       setState(() {
