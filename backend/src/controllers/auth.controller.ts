@@ -508,15 +508,24 @@ export const login = async (
           status: dbUser.status
         };
       }
-    } catch (dbError) {
-      logger.error('Direct DB auth error:', dbError);
+    } catch (dbCatchErr: any) {
+      logger.error('Direct DB auth error:', dbCatchErr);
     }
 
-    if (!storedHash || !userId) {
-      logger.warn(`Login failed for ${email}: User found but no password hash in users table`);
+    if (!userId) {
+      logger.warn(`Login failed for ${email}: User not found in users table`);
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
+      });
+      return;
+    }
+
+    if (!storedHash) {
+      logger.warn(`Login failed for ${email}: User found but no password hash configured`);
+      res.status(401).json({
+        success: false,
+        message: 'Account not configured with password authentication. Please contact administrator.'
       });
       return;
     }

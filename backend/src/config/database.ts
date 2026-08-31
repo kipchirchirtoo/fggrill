@@ -1,33 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 import { logger } from '../utils/logger';
 
-// Support both SUPABASE_PROJECT_URL and SUPABASE_URL (common in production deployments)
-const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'undefined' || supabaseServiceKey === 'undefined') {
-  logger.error('CRITICAL: Missing required Supabase env vars in database config.');
-  logger.error(`SUPABASE_URL present: ${!!supabaseUrl}`);
-  logger.error(`SUPABASE_SERVICE_ROLE_KEY present: ${!!supabaseServiceKey}`);
-  
-  // In production, we might want to continue in degraded mode if it's not critical
-  // but since this is database.ts, it's likely critical.
-  if (process.env.NODE_ENV === 'production') {
-    logger.warn('Production server attempting to start without database configuration!');
-  }
-}
-
-// Initialize Supabase client
-const supabase = createClient(
-  supabaseUrl || 'missing-url',
-  supabaseServiceKey || 'missing-key',
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 export const connectDB = async (): Promise<void> => {
   const isDev = process.env.NODE_ENV !== 'production';

@@ -105,8 +105,25 @@ class PosTerminalService {
   // so it lives only on the POS machine.
   Future<File?> _backupFile() async {
     try {
-      final dir = await getApplicationSupportDirectory();
-      return File('${dir.path}${Platform.pathSeparator}pos_terminal_identity.json');
+      final sep = Platform.pathSeparator;
+      // Prefer a FIXED, build-independent directory so the identity is shared by
+      // every build/install on this machine (installer, dev run, and updates all
+      // resolve the same file), and survives an app uninstall. getApplicationSupportDirectory
+      // is app-identity-specific and differs between debug/release/installer, so
+      // it is only a last resort.
+      String? base;
+      if (Platform.isWindows) {
+        base = Platform.environment['LOCALAPPDATA'] ??
+            Platform.environment['PROGRAMDATA'] ??
+            Platform.environment['APPDATA'];
+      } else {
+        base = Platform.environment['HOME'];
+      }
+      base ??= (await getApplicationSupportDirectory()).path;
+      if (base.trim().isEmpty) return null;
+      final dir = Directory('$base${sep}FamousGateTerminal');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      return File('${dir.path}${sep}pos_terminal_identity.json');
     } catch (_) {
       return null;
     }
@@ -271,7 +288,7 @@ final posTerminalIdentityProvider = FutureProvider<PosTerminalIdentity?>((ref) {
 /// identity + key live in OS secure storage (user profile, not the install
 /// folder), so it persists across app updates and is never asked again — only a
 /// full uninstall / credential wipe clears it.
-const bool kRequireTerminalRegistration = true;
+const bool kRequireTerminalRegistration = false;
 
 class TerminalRegistrationStatus {
   const TerminalRegistrationStatus({required this.loaded, required this.registered});
