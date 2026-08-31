@@ -2044,6 +2044,38 @@ export const closeShift = async (
         if (shiftError) throw shiftError;
         if (!shift) throw new AppError('Shift not found', 404);
 
+        // Preserve bills recorded SERVER-SIDE during the shift (paid bills via
+        // recordStaffPaidBill, credit bills via their own flow). The close
+        // payload carries the cashier's LOCAL close-dialog list, which can be
+        // stale or empty and previously OVERWROTE these columns — silently
+        // wiping paid bills the cashier had already recorded and confirmed.
+        // Merge the server's existing entries with the incoming ones and
+        // deduplicate, so a close can only ADD, never erase.
+        const _mergeShiftBills = (existing: any, incoming: any): any[] => {
+            const keyOf = (e: any) => [
+                e?.id ?? '',
+                e?.staff_id ?? e?.staff_name ?? e?.name ?? '',
+                e?.amount ?? '',
+                e?.reference ?? e?.recorded_at ?? e?.time ?? '',
+            ].join('|');
+            const seen = new Set<string>();
+            const out: any[] = [];
+            for (const e of [
+                ...(Array.isArray(existing) ? existing : []),
+                ...(Array.isArray(incoming) ? incoming : []),
+            ]) {
+                if (!e) continue;
+                const k = keyOf(e);
+                if (seen.has(k)) continue;
+                seen.add(k);
+                out.push(e);
+            }
+            return out;
+        };
+        const mergedPaidBills = _mergeShiftBills(shift.paid_bills_details, paid_bills_details);
+        const mergedCreditBills = _mergeShiftBills(shift.credit_bills_details, credit_bills_details);
+        const mergedPaidValue = mergedPaidBills.reduce((s: number, b: any) => s + toNumber(b?.amount), 0);
+
         // Verify ownership - allow cashier to close own shift, or managers/accountants/auditors to close any shift
         const userRole = (req.user?.role || '').toString().toLowerCase();
         const canCloseAnyShift = [
@@ -2344,13 +2376,13 @@ export const closeShift = async (
                 ledger.bar_revenue, // 17
                 ledger.other_revenue, // 18
                 ledger.total_credit_bill, // 19
-                credit_bills_count || 0, // 20
-                JSON.stringify(credit_bills_details || []), // 21
+                mergedCreditBills.length, // 20
+                JSON.stringify(mergedCreditBills), // 21
                 computedUnpaidBills, // 22
                 unpaid_bills_count || 0, // 23
-                paid_bills_value || 0, // 24
-                paid_bills_count || 0, // 25
-                JSON.stringify(paid_bills_details || []), // 26
+                mergedPaidValue, // 24
+                mergedPaidBills.length, // 25
+                JSON.stringify(mergedPaidBills), // 26
                 toNumber(cash_at_hand ?? actualClosingFloat), // 27
                 actualCashCounted, // 28
                 actualMpesaLogged, // 29
