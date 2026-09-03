@@ -558,6 +558,27 @@ export const login = async (
       return;
     }
 
+    // Block non-active accounts (suspended / inactive) from logging in, even
+    // with the correct password.
+    const accountStatus = String(userProfile.status || 'active').toLowerCase();
+    if (accountStatus !== 'active') {
+      logger.warn(`Login blocked for ${email}: account status is '${accountStatus}'`);
+      await logAuthAttempt({
+        email,
+        status: 'failed',
+        req,
+        message: `Account ${accountStatus} (Fallback Auth)`,
+        authMethod: 'password'
+      });
+      res.status(403).json({
+        success: false,
+        message: accountStatus === 'suspended'
+          ? 'Your account has been suspended. Please contact your administrator.'
+          : 'Your account is inactive. Please contact your administrator.'
+      });
+      return;
+    }
+
     // Update last login using Supabase client
     try {
       await supabase
@@ -1317,6 +1338,34 @@ export const posLogin = async (
         ip_address: req.ip || null,
         user_agent: req.get('user-agent') || null,
         created_at: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Block non-active accounts (suspended / inactive) from POS PIN login too.
+    const posAccountStatus = String(user.status || 'active').toLowerCase();
+    if (posAccountStatus !== 'active') {
+      logger.warn(`POS login blocked for user ${user.id}: account status is '${posAccountStatus}'`);
+      await logAuthAttempt({
+        email: user.email || 'N/A (PIN)',
+        status: 'failed',
+        req,
+        message: `Account ${posAccountStatus} (PIN)`,
+        authMethod: 'pos_pin'
+      });
+      void supabase.from('pos_login_logs').insert({
+        pin_prefix: pin[0],
+        success: false,
+        failure_reason: `account_${posAccountStatus}`,
+        ip_address: req.ip || null,
+        user_agent: req.get('user-agent') || null,
+        created_at: new Date().toISOString()
+      });
+      res.status(403).json({
+        success: false,
+        message: posAccountStatus === 'suspended'
+          ? 'This account has been suspended. Please contact your administrator.'
+          : 'This account is inactive. Please contact your administrator.'
       });
       return;
     }
