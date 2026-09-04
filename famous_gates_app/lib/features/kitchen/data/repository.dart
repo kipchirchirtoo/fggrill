@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
@@ -778,4 +780,63 @@ class KitchenRepository {
       throw Exception(_errorMessage(e));
     }
   }
+
+  Future<File> downloadDailyControlsExcel(String shiftId, {required String filename}) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        '/kitchen/shifts/$shiftId/daily-controls/export.xlsx',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data ?? <int>[];
+      if (bytes.isEmpty) throw StateError('Downloaded Excel file was empty');
+      final directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final safeName = filename.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      File file = File('${directory.path}/$safeName');
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } on FileSystemException catch (_) {
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final dotIdx = safeName.lastIndexOf('.');
+        final altName = dotIdx != -1
+            ? '${safeName.substring(0, dotIdx)}_$ts${safeName.substring(dotIdx)}'
+            : '${safeName}_$ts.xlsx';
+        file = File('${directory.path}/$altName');
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      return file;
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<File> downloadDailyControlsCsv(String shiftId, {required String filename}) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        '/kitchen/shifts/$shiftId/daily-controls/export.csv',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data ?? <int>[];
+      if (bytes.isEmpty) throw StateError('Downloaded CSV file was empty');
+      final directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final safeName = filename.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      File file = File('${directory.path}/$safeName');
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } on FileSystemException catch (_) {
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final dotIdx = safeName.lastIndexOf('.');
+        final altName = dotIdx != -1
+            ? '${safeName.substring(0, dotIdx)}_$ts${safeName.substring(dotIdx)}'
+            : '${safeName}_$ts.csv';
+        file = File('${directory.path}/$altName');
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      return file;
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
 }
+

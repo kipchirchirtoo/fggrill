@@ -1161,10 +1161,16 @@ class AdminRepository {
   Future<List<Map<String, dynamic>>> getGRNs({
     String? status,
     String? supplierId,
+    String? scope = 'central',
+    String? sourceModule = 'central_store',
+    int? branchId,
   }) async {
     final response = await _dio.get('/procurement/grn', queryParameters: {
       if (status != null && status != 'all') 'status': status,
       if (supplierId != null) 'supplier_id': supplierId,
+      if (scope != null) 'scope': scope,
+      if (sourceModule != null) 'source_module': sourceModule,
+      if (branchId != null) 'branch_id': branchId,
     });
     return _parseMapList(response.data);
   }

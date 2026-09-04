@@ -165,7 +165,7 @@ router.route('/grn/:id')
     .get(authorize(allProcurementStaff), getGRN);
 
 router.get('/grn/:id/pdf', authorize(allProcurementStaff), printGRN);
-router.put('/grn/:id/approve', authorize([...auditorRoles, UserRole.CENTRAL_STOREKEEPER]), approveGRN);
+router.put('/grn/:id/approve', authorize([...auditorRoles, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), approveGRN);
 router.put('/grn/:id/cancel', authorize(storeRoles), cancelGRN);
 
 // =====================================================

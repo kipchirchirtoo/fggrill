@@ -168,6 +168,23 @@ class BranchStorekeeperRepository {
     await _dio.post('/store/items', data: data, options: await _authOptions);
   }
 
+  /// Re-classify a branch item (Store type + Category only). The backend scopes
+  /// the change to the caller's branch.
+  Future<void> updateItemClassification(
+    String sku, {
+    String? category,
+    String? storeType,
+  }) async {
+    await _dio.patch(
+      '/store/items/$sku/classification',
+      data: {
+        if (category != null) 'category': category,
+        if (storeType != null) 'store_type': storeType,
+      },
+      options: await _authOptions,
+    );
+  }
+
   // ---------------------------------------------------------------------
   // Bar stock ledger — built on bar_stock, the table actually decremented
   // when a bar sale completes (see backend decrement_bar_stock()).
@@ -611,6 +628,8 @@ class BranchStorekeeperRepository {
       final response = await _dio.get(
         '/procurement/grn',
         queryParameters: {
+          'scope': 'branch',
+          'source_module': 'branch_store',
           if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
           if (poId != null && poId.isNotEmpty) 'po_id': poId,
         },
@@ -622,6 +641,8 @@ class BranchStorekeeperRepository {
         final res2 = await _dio.get(
           '/storekeeping/grn',
           queryParameters: {
+            'scope': 'branch',
+            'source_module': 'branch_store',
             if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
             if (poId != null && poId.isNotEmpty) 'po_id': poId,
           },
@@ -632,6 +653,33 @@ class BranchStorekeeperRepository {
         return <Map<String, dynamic>>[];
       }
     }
+  }
+
+  /// Single GRN with its line items.
+  Future<Map<String, dynamic>> grn(String id) async {
+    final response = await _dio.get(
+      '/procurement/grn/$id',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  /// Approve a GRN — atomically posts inventory + creates the GRNI entry, and
+  /// flags it approved (moves it to the approved/history view).
+  Future<void> approveGrn(String id) async {
+    await _dio.put(
+      '/procurement/grn/$id/approve',
+      options: await _requestOptions(idempotent: true, scope: 'grn-approve'),
+    );
+  }
+
+  /// Raw bytes of the branded GRN PDF for printing/preview.
+  Future<List<int>> grnPdfBytes(String id) async {
+    final response = await _dio.get<List<int>>(
+      '/procurement/grn/$id/pdf',
+      options: await _requestOptions(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const <int>[];
   }
 
   Future<List<Map<String, dynamic>>> stockTakes({
@@ -1000,16 +1048,26 @@ class BranchStorekeeperRepository {
   Future<File> exportStockLedger({
     String? startDate,
     String? endDate,
+    String? exportType,
+    String? movementType,
   }) async {
     final branchId = await _branchId;
+    final isCatalog = exportType == 'central_catalog';
+    final isMovement = exportType == 'movement_ledger';
     return _downloadPost(
       '/store/stock-ledger/export',
-      filename: 'stock_ledger_${_today()}.xlsx',
+      filename: isMovement
+          ? 'stock_movement_ledger_${_today()}.xlsx'
+          : isCatalog
+              ? 'master_inventory_${_today()}.xlsx'
+              : 'branch_stock_${_today()}.xlsx',
       data: {
         if (branchId.isNotEmpty)
           'branch_id': int.tryParse(branchId) ?? branchId,
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
+        if (exportType != null) 'export_type': exportType,
+        if (movementType != null) 'movement_type': movementType,
       },
     );
   }

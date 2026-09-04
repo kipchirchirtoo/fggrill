@@ -1,5 +1,12 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/widgets/safe_avatar.dart';
 import '../../auth/domain/auth_notifier.dart';
@@ -194,6 +201,18 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Download blank count sheet (PDF)',
+            icon: const Icon(Icons.download_rounded),
+            onPressed: (state.isLoading || sortedItems.isEmpty)
+                ? null
+                : () => _exportCountSheet(
+                      context,
+                      state,
+                      sortedItems,
+                      branchName,
+                    ),
+          ),
+          IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: state.isLoading
@@ -221,8 +240,8 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
         padding: const EdgeInsets.only(bottom: 24),
         child: Column(
           children: [
-            // Shift info banner — shows which cashier shift this stocktake is for
-            if (state.currentShift != null || (!state.isLoading && state.items.isEmpty))
+            // Shift info banner — shows which cashier shift this stocktake is for (Only for Bar shifts)
+            if (widget.stockTakeType == StockTakeType.bar && (state.currentShift != null || (!state.isLoading && state.items.isEmpty)))
               _buildShiftBanner(context, state),
             if (isStorekeeper)
               _buildBlindCountBanner(
@@ -266,6 +285,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
                       items: sortedItems,
                       isReadOnly: state.isSubmitted,
                       isStorekeeper: isStorekeeper,
+                      isStoreType: widget.stockTakeType == StockTakeType.store,
                       onPhysicalCountChanged: (id, val) {
                         notifier.updatePhysicalCount(id, val);
                       },
@@ -284,6 +304,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
                 physicalCount: physicalCount,
                 totalVariance: totalVariance,
                 isStorekeeper: isStorekeeper,
+                isStoreType: widget.stockTakeType == StockTakeType.store,
                 totalItems: filteredItems.length,
                 countedLines: countedLines,
               ),
@@ -530,6 +551,394 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Printable BLANK count sheet (branded PDF).
+  //
+  // Mirrors exactly what's on screen — same category grouping and order — but
+  // with empty boxes for Actual Count / Sold / Total Sales so the count can be
+  // done on paper first and keyed into the system after. Header carries the
+  // cashier / shift / date / start & end times; the bottom has Credit Bills and
+  // Paid Bills sections (10 lines each).
+  // ---------------------------------------------------------------------------
+  Future<void> _exportCountSheet(
+    BuildContext context,
+    StockTakeState state,
+    List<StockTakeItem> items,
+    String branchName,
+  ) async {
+    try {
+      final bytes = await _buildCountSheetPdf(state, items, branchName);
+      final isBar = widget.stockTakeType == StockTakeType.bar;
+      final label = isBar ? 'Bar' : 'Store';
+      // Save straight to the Downloads folder (falls back to app documents).
+      final dir =
+          await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      final safeName =
+          '${label}_Stocktake_${state.dateFilter}.pdf'.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final file = File('${dir.path}/$safeName');
+      await file.writeAsBytes(bytes, flush: true);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Count sheet downloaded to ${file.path}'),
+          backgroundColor: const Color(0xFF2E7D32),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not download count sheet: $error'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
+  Future<pw.MemoryImage?> _loadBrandLogo() async {
+    try {
+      final data = await rootBundle.load('assets/frontend_public/fglogo.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _fmtPdfTime(dynamic iso) {
+    if (iso == null) return '';
+    try {
+      final d = DateTime.parse(iso.toString()).toLocal();
+      return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<Uint8List> _buildCountSheetPdf(
+    StockTakeState state,
+    List<StockTakeItem> items,
+    String branchName,
+  ) async {
+    final doc = pw.Document();
+    final logo = await _loadBrandLogo();
+    const primary = PdfColor.fromInt(0xFF173D5F);
+    const muted = PdfColor.fromInt(0xFF667085);
+    const border = PdfColor.fromInt(0xFFD0D5DD);
+    const soft = PdfColor.fromInt(0xFFF7F9FC);
+
+    final isBar = widget.stockTakeType == StockTakeType.bar;
+    final sheetTitle = isBar ? 'BAR STOCK TAKE' : 'STORE STOCK TAKE';
+    final shift = state.currentShift;
+    final cashier = shift?['cashier_name']?.toString() ?? '';
+    final shiftNo = shift?['shift_number']?.toString() ?? '';
+    final startTime = _fmtPdfTime(shift?['shift_opened_at']);
+    final endTime = _fmtPdfTime(shift?['shift_closed_at']);
+    final location = (_localLocation.isEmpty
+            ? (isBar ? 'main_bar' : 'branch_store')
+            : _localLocation)
+        .replaceAll('_', ' ')
+        .toUpperCase();
+
+    // Group items by category, preserving the on-screen order.
+    final groups = <String, List<StockTakeItem>>{};
+    for (final it in items) {
+      groups
+          .putIfAbsent(it.category.isEmpty ? 'OTHERS' : it.category, () => [])
+          .add(it);
+    }
+
+    pw.Widget field(String label, String value, {double width = 150}) {
+      return pw.Container(
+        width: width,
+        margin: const pw.EdgeInsets.only(right: 14, bottom: 8),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(label.toUpperCase(),
+                style: const pw.TextStyle(fontSize: 7, color: muted)),
+            pw.SizedBox(height: 3),
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 3),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(
+                    bottom: pw.BorderSide(color: primary, width: 0.8)),
+              ),
+              child: pw.Text(value.isEmpty ? ' ' : value,
+                  style:
+                      pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Returns the category header and its table as SEPARATE widgets (not a
+    // Column) so MultiPage can split a long category across pages — a Column
+    // is unsplittable and overflows a short landscape page (TooManyPages).
+    List<pw.Widget> categoryTable(String category, List<StockTakeItem> rows) {
+      final headers = isBar
+          ? const [
+              '#',
+              'ITEM',
+              'SKU',
+              'ACTUAL COUNT',
+              'SOLD',
+              'TOTAL SALES',
+            ]
+          : const [
+              '#',
+              'ITEM',
+              'SKU',
+              'ACTUAL COUNT',
+              'REMARKS / NOTES',
+            ];
+
+      final tableData = [
+        for (var i = 0; i < rows.length; i++)
+          if (isBar)
+            [
+              '${i + 1}',
+              rows[i].productName,
+              rows[i].sku,
+              '',
+              '',
+              '',
+            ]
+          else
+            [
+              '${i + 1}',
+              rows[i].productName,
+              rows[i].sku,
+              '',
+              '',
+            ],
+      ];
+
+      final colWidths = isBar
+          ? {
+              0: const pw.FixedColumnWidth(22),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FlexColumnWidth(2),
+              3: const pw.FlexColumnWidth(1.4),
+              4: const pw.FlexColumnWidth(1.2),
+              5: const pw.FlexColumnWidth(1.4),
+            }
+          : {
+              0: const pw.FixedColumnWidth(22),
+              1: const pw.FlexColumnWidth(3.5),
+              2: const pw.FlexColumnWidth(2),
+              3: const pw.FlexColumnWidth(1.8),
+              4: const pw.FlexColumnWidth(2.5),
+            };
+
+      final alignments = isBar
+          ? {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerLeft,
+              3: pw.Alignment.center,
+              4: pw.Alignment.center,
+              5: pw.Alignment.center,
+            }
+          : {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerLeft,
+              3: pw.Alignment.center,
+              4: pw.Alignment.centerLeft,
+            };
+
+      return [
+          pw.Container(
+            width: double.infinity,
+            margin: const pw.EdgeInsets.only(top: 12, bottom: 4),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            color: primary,
+            child: pw.Text('$category  (${rows.length})',
+                style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.TableHelper.fromTextArray(
+            border: pw.TableBorder.all(color: border, width: 0.5),
+            headers: headers,
+            data: tableData,
+            headerStyle: pw.TextStyle(
+                color: primary, fontWeight: pw.FontWeight.bold, fontSize: 7.5),
+            headerDecoration: const pw.BoxDecoration(color: soft),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellHeight: 20,
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            columnWidths: colWidths,
+            cellAlignments: alignments,
+          ),
+      ];
+    }
+
+    pw.Widget billsBlock(String title) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: double.infinity,
+            margin: const pw.EdgeInsets.only(bottom: 4),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            color: primary,
+            child: pw.Text(title,
+                style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.TableHelper.fromTextArray(
+            border: pw.TableBorder.all(color: border, width: 0.5),
+            headers: const ['#', 'CUSTOMER / BILL REF', 'AMOUNT (KES)'],
+            data: [
+              for (var i = 1; i <= 10; i++) ['$i', '', ''],
+            ],
+            headerStyle: pw.TextStyle(
+                color: primary, fontWeight: pw.FontWeight.bold, fontSize: 7.5),
+            headerDecoration: const pw.BoxDecoration(color: soft),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellHeight: 18,
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(22),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FlexColumnWidth(1.6),
+            },
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerRight,
+            },
+          ),
+        ],
+      );
+    }
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 30),
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('FamousGate Hotels · $sheetTitle Count Sheet',
+                style:
+                    const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+            pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
+                style:
+                    const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+          ],
+        ),
+        build: (context) => [
+          // Branded header
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (logo != null)
+                pw.Image(logo, width: 58, height: 58, fit: pw.BoxFit.contain)
+              else
+                pw.Text('FG',
+                    style: pw.TextStyle(
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                        color: primary)),
+              pw.SizedBox(width: 14),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(branchName,
+                        style: pw.TextStyle(
+                            fontSize: 13,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primary)),
+                    pw.Text('$sheetTitle - COUNT SHEET',
+                        style: pw.TextStyle(
+                            fontSize: 15, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('$location · ${state.dateFilter}',
+                        style: const pw.TextStyle(fontSize: 9, color: muted)),
+                  ],
+                ),
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Items: ${items.length}',
+                      style: const pw.TextStyle(fontSize: 9, color: muted)),
+                  if (shiftNo.isNotEmpty && isBar)
+                    pw.Text('Shift #$shiftNo',
+                        style: pw.TextStyle(
+                            fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          pw.Container(height: 1, color: border),
+          pw.SizedBox(height: 12),
+          // Fill-in header fields
+          pw.Wrap(children: [
+            if (isBar) ...[
+              field('Cashier Name', cashier, width: 165),
+              field('Shift No.', shiftNo, width: 70),
+            ],
+            field('Date', state.dateFilter, width: 100),
+            if (isBar) ...[
+              field('Shift Start Time', startTime, width: 110),
+              field('Shift End Time', endTime, width: 110),
+            ],
+            field(isBar ? 'Counted By (Bar Storekeeper)' : 'Counted By (Branch Storekeeper)', '', width: 160),
+            field('Verified By (Auditor)', '', width: 160),
+          ]),
+          pw.SizedBox(height: 4),
+          // Category-grouped item tables
+          for (final entry in groups.entries)
+            ...categoryTable(entry.key, entry.value),
+          pw.SizedBox(height: 18),
+          // Bills sections at the bottom (ONLY for Bar stocktake shifts, NOT for Store Stocktake)
+          if (isBar) ...[
+            billsBlock('CREDIT BILLS'),
+            pw.SizedBox(height: 12),
+            billsBlock('PAID BILLS'),
+            pw.SizedBox(height: 24),
+          ],
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              _pdfSignatureLine(isBar ? 'Counted By (Bar Storekeeper)' : 'Counted By (Branch Storekeeper)'),
+              _pdfSignatureLine('Verified By (Auditor)'),
+              _pdfSignatureLine('Accountant / Branch Manager'),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return doc.save();
+  }
+
+  pw.Widget _pdfSignatureLine(String label) {
+    return pw.Container(
+      width: 150,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(height: 18),
+          pw.Container(height: 0.8, color: PdfColors.black),
+          pw.SizedBox(height: 4),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
         ],
       ),
     );

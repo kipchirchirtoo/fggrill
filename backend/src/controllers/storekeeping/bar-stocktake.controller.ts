@@ -19,6 +19,77 @@ const num = (v: any): number => {
     return Number.isFinite(n) ? n : 0;
 };
 
+// Normalized drink name used to detect display duplicates (the same physical
+// drink exposed under both an `FGB-` and a `KYO-` SKU in the same outlet).
+const normDrinkName = (name: any): string =>
+    String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+// pos_outlet_items.category is sometimes just the outlet NAME ('Main Bar',
+// 'Executive bar', …) rather than a real drink category — that's the junk we
+// must ignore in favour of the drink's true group.
+const isJunkBarCategory = (cat: any): boolean => {
+    const c = String(cat || '').trim().toLowerCase();
+    if (!c) return true;
+    return /\bbar\b/.test(c) || /reception|restaurant|cashier|choma|spa|non-?consumable|outlet/.test(c);
+};
+
+// The stored bar_drinks.category is granular but inconsistent (19 spellings,
+// several wrong: HEINEKEN filed under Wines, Captain Morgan under Whisky,
+// Gilbeys/Gordons under Spirits/Whisky, Amarula/Baileys under Wines, …). This
+// resolves a single CANONICAL, correctly-grouped category from the drink's
+// name + SKU + stored value so the stocktake grid arranges cleanly. Name/brand
+// rules win (authoritative for the known-wrong rows); then the normalized
+// stored value; then the SKU prefix; else OTHERS.
+const barCanonicalCategory = (name: any, sku: any, stored: any): string => {
+    const n = String(name || '').toLowerCase();
+    const s = String(sku || '').toUpperCase();
+    const st = String(stored || '').trim().toLowerCase();
+
+    // Canned = SKU CAN-prefix (reliable); soft/energy drinks keep their own group.
+    if (/(^|-)CAN-/.test(s)) return 'CANNED BEERS';
+    if (/red bull|monster/.test(n)) return 'ENERGY DRINKS';
+
+    // Bottled beers / ciders
+    if (/heineken|savanna|\bbalozi\b|guinness|guiness|pilsner|white ?cap|black ice|snapp|manyatta|desperado|hunters beer|summit|windhoek|faxe|sikera|tusker/.test(n)) return 'BEERS';
+
+    // Spirit families by brand
+    if (/captain morgan/.test(n)) return 'RUM';
+    if (/gordons|tanqueray|tangaren|gilbeys/.test(n)) return 'GIN';
+    if (/richot|viceroy/.test(n)) return 'BRANDY';
+    if (/amarula|baileys|sheridans|malibu|jagermeister|jager\b|jagemeister/.test(n)) return 'LIQUEUR';
+    if (/tequila|don julio|camino|astral/.test(n)) return 'TEQUILA';
+    if (/hennessy|martel|martell/.test(n)) return 'COGNAC';
+    if (/vodka|smirnof|smirnoff|\bcruz\b|absolut/.test(n)) return 'VODKA';
+    if (/kenya cane/.test(n)) return 'SPIRITS';
+    if (/jw |johnnie walker|double black|black label|red label|gold label|green label|blue label|blonde|singleton|singletone|william lawson|vat 69|\bgrants\b|jack daniel|jameson|famous grouse|chivas|glenfiddich|best (whisk|cream)|bond 7|black & white|hunters (250|350|750)|scottish leader|southern comfort/.test(n)) return 'WHISKY';
+
+    // Wines
+    if (/4th street|four cousins|cellar cask|robertson|frontera|nederb|caprice|drostdy|chamdor|asconi|casabuena|kingfisher|penasol|martini|jc leroux|all mager|\bwine\b/.test(n)) return 'WINES';
+
+    // Soft drinks
+    if (/soda|coke|fanta|sprite|water|keringet|juice|tonic|ginger|alvaro|delmonte|lemonade|novida|lime cordial/.test(n)) return 'SOFT DRINKS';
+
+    const spellingMap: Record<string, string> = {
+        'beers': 'BEERS', 'beer - bottled': 'BEERS', 'beers & cans': 'BEERS',
+        'canned beers': 'CANNED BEERS', 'canned beer': 'CANNED BEERS',
+        'brandy': 'BRANDY', 'brandy/cognac': 'BRANDY', 'cognac': 'COGNAC',
+        'energy drinks': 'ENERGY DRINKS', 'gin': 'GIN', 'liqueur': 'LIQUEUR', 'cream': 'LIQUEUR',
+        'other': 'OTHERS', 'others': 'OTHERS', 'rum': 'RUM', 'soft drinks': 'SOFT DRINKS',
+        'spirits': 'SPIRITS', 'tequila': 'TEQUILA', 'tots': 'OTHERS', 'tot': 'OTHERS',
+        'vodka': 'VODKA', 'whisky': 'WHISKY', 'wines': 'WINES', 'wine': 'WINES',
+        'beverages': 'OTHERS', 'mixtures': 'OTHERS', 'executive bar': 'OTHERS',
+    };
+    if (spellingMap[st]) return spellingMap[st];
+
+    const m = s.match(/-(BER|CAN|WHK|WIN|COG|SPR|SDR|ENR|TEQ|OTH)-/);
+    const prefixMap: Record<string, string> = {
+        BER: 'BEERS', CAN: 'CANNED BEERS', WHK: 'WHISKY', WIN: 'WINES', COG: 'COGNAC',
+        SPR: 'SPIRITS', SDR: 'SOFT DRINKS', ENR: 'ENERGY DRINKS', TEQ: 'TEQUILA', OTH: 'OTHERS',
+    };
+    if (m && prefixMap[m[1]]) return prefixMap[m[1]];
+    return 'OTHERS';
+};
+
 const BAR_LOCATIONS = ['main_bar', 'executive_bar'];
 
 // Which cashier roles tend the till at each bar location — mirrors
@@ -536,7 +607,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const outlet = await resolveBarOutlet(branchId, locationFilter);
         const { data: outletItems, error: oiErr } = await supabase
             .from('pos_outlet_items')
-            .select('id, name, sku, unit, current_stock, cost_price, selling_price, source_item_id')
+            .select('id, name, sku, unit, current_stock, cost_price, selling_price, source_item_id, category')
             .eq('outlet_id', outlet?.id || '00000000-0000-0000-0000-000000000000')
             .eq('source_table', 'bar_drinks')
             .eq('is_active', true)
@@ -550,14 +621,18 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 .filter(Boolean)
         ));
         const invIdFromCatalog = new Map<string, string>();
+        const storedCatByDrinkId = new Map<string, string>();
         if (posDrinkIds.length > 0) {
             const { data: bd } = await supabase
                 .from('bar_drinks')
-                .select('id, inventory_item_id')
+                .select('id, inventory_item_id, category')
                 .in('id', posDrinkIds);
             for (const d of (bd || [])) {
                 if ((d as any).inventory_item_id) {
                     invIdFromCatalog.set(String((d as any).id), String((d as any).inventory_item_id));
+                }
+                if ((d as any).category) {
+                    storedCatByDrinkId.set(String((d as any).id), String((d as any).category));
                 }
             }
         }
@@ -583,6 +658,14 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 selling_price: num(oi.selling_price),
                 inventory_item_id: invIdFromCatalog.get(did) || null,
                 current_stock: num(oi.current_stock),
+                // Category comes from the SAME source the Bar Stock screen uses —
+                // pos_outlet_items.category — canonicalized to a clean group and
+                // ignoring the junk outlet-name value ('Main Bar'/'Executive bar').
+                category: barCanonicalCategory(
+                    oi.name,
+                    oi.sku,
+                    isJunkBarCategory(oi.category) ? storedCatByDrinkId.get(did) : oi.category,
+                ),
             });
         }
         let drinkRows = Array.from(drinkByDrinkId.values());
@@ -592,7 +675,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         if (drinkRows.length === 0) {
             const { data: catalog } = await supabase
                 .from('bar_drinks')
-                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id, stock_quantity')
+                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id, stock_quantity, category')
                 .eq('branch_id', branchId)
                 .eq('is_active', true)
                 .order('name');
@@ -605,7 +688,34 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 selling_price: num(d.selling_price),
                 inventory_item_id: d.inventory_item_id || null,
                 current_stock: num(d.stock_quantity),
+                category: barCanonicalCategory(d.name, d.sku, (d as any).category),
             }));
+        }
+
+        // Collapse display duplicates: the same physical drink is often exposed
+        // under both an `FGB-` and a `KYO-` SKU in one outlet (a leftover of the
+        // SKU-standardization). Merge by normalized name so each drink appears
+        // ONCE in the count sheet. The survivor keeps the standard `FGB-` SKU for
+        // display, the MAX stock across the pair (never sum — the twins are two
+        // caches of one ledger, so summing would double-count), and a non-null
+        // inventory_item_id. This is read-only; no rows are deactivated.
+        {
+            const byName = new Map<string, Record<string, any>>();
+            for (const d of drinkRows) {
+                const key = normDrinkName(d.name);
+                const prev = byName.get(key);
+                if (!prev) { byName.set(key, d); continue; }
+                const prevIsFgb = /^FGB-/i.test(String(prev.sku || ''));
+                const curIsFgb = /^FGB-/i.test(String(d.sku || ''));
+                // Prefer the FGB-SKU row as the survivor for display identity.
+                const keeper = (curIsFgb && !prevIsFgb) ? d : prev;
+                const other = keeper === prev ? d : prev;
+                keeper.current_stock = Math.max(num(keeper.current_stock), num(other.current_stock));
+                keeper.inventory_item_id = keeper.inventory_item_id || other.inventory_item_id;
+                if (!keeper.category || keeper.category === 'OTHERS') keeper.category = other.category || keeper.category;
+                byName.set(key, keeper);
+            }
+            drinkRows = Array.from(byName.values());
         }
 
         // drink_id → current_stock (straight from the POS outlet item).
@@ -635,12 +745,18 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
 
-        // Build map of drink_id -> inventory_item_id
+        // Build map of drink_id -> inventory_item_id, and the canonical
+        // category keyed by both drink id and inventory item id (the latter is
+        // how submitted bar_stocktake_records are keyed).
         const invIdByDrinkId = new Map<string, string>();
+        const canonCategoryByDrinkId = new Map<string, string>();
+        const canonCategoryByInvId = new Map<string, string>();
         for (const d of drinkRows) {
+            canonCategoryByDrinkId.set(String(d.id), String(d.category || 'OTHERS'));
             const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
             if (invId) {
                 invIdByDrinkId.set(String(d.id), String(invId));
+                canonCategoryByInvId.set(String(invId), String(d.category || 'OTHERS'));
             }
         }
 
@@ -706,16 +822,36 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 // sales, so every unit issued into the bar is reflected even if
                 // no shift was open when it was issued.
                 const additions = Math.max(0, sysQty - opening + sales);
+                const itemName = r.item?.item_name || r.item_name || null;
                 return {
                     ...r,
-                    item_name: r.item?.item_name || r.item_name || null,
+                    item_name: itemName,
                     additions,
                     sales,
                     opening_stock: opening,
                     system_quantity: sysQty,
+                    category: canonCategoryByInvId.get(invId)
+                        || barCanonicalCategory(itemName, r.sku, r.category)
+                        || 'OTHERS',
                 };
             });
-            const result = await enrichWithShiftInfo(rawResult);
+            // Collapse any duplicate saved rows for the same drink (the `FGB-`/
+            // `KYO-` twin artifact) so the submitted view lists each drink once —
+            // keep the row that actually has a physical count, else the one with
+            // the larger system quantity.
+            const dedupedResult = Array.from(
+                rawResult.reduce((acc, row: any) => {
+                    const key = normDrinkName(row.item_name) || String(row.item_id);
+                    const prev = acc.get(key);
+                    if (!prev) { acc.set(key, row); return acc; }
+                    const rowHasCount = row.physical_quantity != null;
+                    const prevHasCount = prev.physical_quantity != null;
+                    if (rowHasCount && !prevHasCount) acc.set(key, row);
+                    else if (rowHasCount === prevHasCount && num(row.system_quantity) > num(prev.system_quantity)) acc.set(key, row);
+                    return acc;
+                }, new Map<string, any>()).values()
+            );
+            const result = await enrichWithShiftInfo(dedupedResult);
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
@@ -745,7 +881,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 shift_id: shiftWindow.shiftId,
                 unit: d.unit || 'bottle',
                 sku: d.sku || `bard-${d.id}`,
-                category: null,
+                category: d.category || canonCategoryByInvId.get(invId) || 'OTHERS',
             };
         }).filter(Boolean);
 

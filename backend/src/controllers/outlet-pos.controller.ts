@@ -24,6 +24,8 @@ import {
   POS_STATION_CASHIER_ROLE_TYPES
 } from '../utils/posStationAccess';
 import { createBillVerificationCode } from '../services/bill-verification-code.service';
+import { isGlobalRole } from '../utils/branchIsolation';
+import { allocateStaffCreditPayment } from './credit-bills.controller';
 
 // Roles permitted to open/close a POS shift on behalf of a station.
 const SHIFT_MANAGER_ROLES = new Set([
@@ -227,9 +229,9 @@ const GLOBAL_ROLES = new Set([
   'general_manager',
   'director',
   'auditor',
-  'finance_manager',
-  'accountant',
-  'branch_accountant'
+  'central_operations_manager',
+  'central_storekeeper',
+  'hr_manager'
 ]);
 
 const REVIEW_ROLES = new Set([
@@ -309,7 +311,19 @@ const branchIdFor = (req: Request): number | null => {
 
 const roleFor = (req: Request): string => String(req.user?.role ?? '').toLowerCase();
 
-const isGlobalUser = (req: Request): boolean => GLOBAL_ROLES.has(roleFor(req));
+const isGlobalUser = (req: Request): boolean => isGlobalRole(roleFor(req));
+
+const resolveEffectiveBranchId = (req: Request): { branchId: number | null; isGlobal: boolean } => {
+  const isGlobal = isGlobalUser(req);
+  const userBranchId = branchIdFor(req);
+  const requestedBranchId = req.query.branch_id ? Number(req.query.branch_id) : null;
+  const validRequested = requestedBranchId && Number.isFinite(requestedBranchId) && requestedBranchId > 0 ? requestedBranchId : null;
+
+  if (!isGlobal) {
+    return { branchId: userBranchId, isGlobal: false };
+  }
+  return { branchId: validRequested, isGlobal: true };
+};
 
 const canViewProfit = (req: Request): boolean => PROFIT_VIEW_ROLES.has(roleFor(req));
 
@@ -2534,6 +2548,7 @@ const loadOpenShiftForOutlet = async (
   // own cashier is no longer mid-session (they have no open cashier shift
   // from before the POS shift opened), the row is a leftover the
   // cashier-close sweep missed — retire it and bridge a fresh one below.
+  let oldShiftId: string | undefined;
   if (data && match) {
     const posOpenedAt = new Date(data.opened_at).getTime();
     const matchStartedAt = new Date(match.shift_start).getTime();
@@ -2541,6 +2556,7 @@ const loadOpenShiftForOutlet = async (
     const ownerStillOnDuty = ownerShifts.some(
       (s) => new Date(s.shift_start).getTime() <= posOpenedAt
     );
+    oldShiftId = data?.id;
     if (Number.isFinite(matchStartedAt) && matchStartedAt > posOpenedAt && !ownerStillOnDuty) {
       const now = new Date().toISOString();
       const { data: closedRows, error: closeErr } = await supabase
@@ -2585,6 +2601,28 @@ const loadOpenShiftForOutlet = async (
       if (createErr) throw createErr;
       data = created;
       await seedShiftStockCounts(created.id, outlet.id);
+    }
+
+    if (oldShiftId && data?.id && oldShiftId !== data.id) {
+      try {
+        const rolloverRes = await db.query(
+          `UPDATE pos_shift_orders
+           SET shift_id = $1, updated_at = NOW()
+           WHERE outlet_id = $2
+             AND shift_id = $3
+             AND payment_status IN ('unpaid', 'partial')
+             AND status = 'open'
+           RETURNING id`,
+          [data.id, outlet.id, oldShiftId]
+        );
+        if (rolloverRes.rows.length > 0) {
+          logger.info(
+            `Rolled over ${rolloverRes.rows.length} open unpaid orders from rotated shift ${oldShiftId} to new shift ${data.id} on outlet ${outlet.id}`
+          );
+        }
+      } catch (rollErr: any) {
+        logger.error('Failed to roll over unpaid orders during POS shift rotation', rollErr);
+      }
     }
   }
 
@@ -3834,9 +3872,9 @@ export const getPendingVoidsKitchenWholeBill = async (req: Request, res: Respons
     ) {
       throw new AppError('Forbidden: kitchen access required', 403);
     }
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
-    const enriched = await fetchEnrichedPosVoidRequests('pending', branchId, !isGlobalUser(req), outletScope);
+    const enriched = await fetchEnrichedPosVoidRequests('pending', branchId, !isGlobal, outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -3850,9 +3888,9 @@ export const getPendingVoidsCashierWholeBill = async (req: Request, res: Respons
     if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier access required', 403);
     }
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
-    const enriched = await fetchEnrichedPosVoidRequests('kitchen_acknowledged', branchId, !isGlobalUser(req), outletScope);
+    const enriched = await fetchEnrichedPosVoidRequests('kitchen_acknowledged', branchId, !isGlobal, outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -3864,9 +3902,9 @@ export const getPendingPosVoidRequests = async (req: Request, res: Response, nex
   try {
     assertUser(req);
     if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
-    const enriched = await fetchEnrichedPosVoidRequests('cashier_acknowledged', branchId, !isGlobalUser(req), outletScope);
+    const enriched = await fetchEnrichedPosVoidRequests('cashier_acknowledged', branchId, !isGlobal, outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -4717,15 +4755,12 @@ export const getItemVoidHistoryForWaiter = async (req: Request, res: Response, n
       .eq('requested_by', waiterId)
       .order('created_at', { ascending: false });
 
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
-    if (!isGlobalUser(req)) {
-      if (branchId === null) {
-        res.json({ success: true, data: [] });
-        return;
-      }
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
+    if (branchId) {
       query = query.eq('branch_id', branchId);
-    } else if (req.query.branch_id) {
-      query = query.eq('branch_id', Number(req.query.branch_id));
+    } else if (!isGlobal) {
+      res.json({ success: true, data: [] });
+      return;
     }
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to);
@@ -5325,7 +5360,7 @@ export const cashierDeclineItemVoid = async (req: Request, res: Response, next: 
 export const getPendingVoidsKitchen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    const branchId = branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
 
     let query = supabase
@@ -5334,7 +5369,11 @@ export const getPendingVoidsKitchen = async (req: Request, res: Response, next: 
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
-    if (branchId) query = query.eq('branch_id', branchId);
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    } else if (!isGlobal) {
+      query = query.eq('branch_id', -1);
+    }
 
     // Cashiers get read-only visibility into what's still awaiting kitchen
     // (scoped to their own station) so a request that hasn't reached them
@@ -5361,7 +5400,7 @@ export const getPendingVoidsKitchen = async (req: Request, res: Response, next: 
 export const getPendingVoidsCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    const branchId = branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
 
     let query = supabase
       .from('pos_item_void_requests')
@@ -5371,6 +5410,8 @@ export const getPendingVoidsCashier = async (req: Request, res: Response, next: 
 
     if (branchId) {
       query = query.eq('branch_id', branchId);
+    } else if (!isGlobal) {
+      query = query.eq('branch_id', -1);
     }
 
     // Specific cashier station roles (e.g. main_bar_cashier, restaurant_cashier)
@@ -5401,7 +5442,7 @@ export const getPendingVoidsManager = async (req: Request, res: Response, next: 
   try {
     assertUser(req);
     if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
-    const branchId = branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
 
     let query = supabase
       .from('pos_item_void_requests')
@@ -5409,7 +5450,11 @@ export const getPendingVoidsManager = async (req: Request, res: Response, next: 
       .eq('status', 'void_acknowledged')
       .order('cashier_acknowledged_at', { ascending: true });
 
-    if (branchId) query = query.eq('branch_id', branchId);
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    } else if (!isGlobal) {
+      query = query.eq('branch_id', -1);
+    }
     const { data, error } = await query;
     if (error) throw error;
 
@@ -5435,7 +5480,7 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
     assertUser(req);
     if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
 
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const status = nullableText(String(req.query.status || ''));
     const from = nullableText(String(req.query.from || ''));
     const to = nullableText(String(req.query.to || ''));
@@ -5448,8 +5493,11 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
       .order('created_at', { ascending: false })
       .limit(500);
 
-    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
-    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    } else if (!isGlobal) {
+      query = query.eq('branch_id', -1);
+    }
     if (status) query = query.eq('status', status);
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to);
@@ -5461,12 +5509,13 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
 
     const rows = data || [];
     const userIds = Array.from(new Set(
-      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.manager_id, r.actioned_by]).filter(Boolean)
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.manager_id, r.actioned_by, r.kitchen_id]).filter(Boolean)
     ));
     const namesById = await userDisplayNamesById(userIds as string[]);
     const enriched = rows.map((r: any) => ({
       ...r,
       requested_by_name: namesById.get(String(r.requested_by)) || null,
+      kitchen_name: r.kitchen_id ? namesById.get(String(r.kitchen_id)) || null : null,
       cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null,
       manager_name: r.manager_id ? namesById.get(String(r.manager_id)) || null : null
     }));
@@ -5853,7 +5902,7 @@ export const getExchangeHistory = async (req: Request, res: Response, next: Next
       throw new AppError('Forbidden', 403);
     }
 
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const { branchId, isGlobal } = resolveEffectiveBranchId(req);
     const status = nullableText(String(req.query.status || ''));
     const direction = nullableText(String(req.query.direction || ''));
     const from = nullableText(String(req.query.from || ''));
@@ -5865,8 +5914,11 @@ export const getExchangeHistory = async (req: Request, res: Response, next: Next
       .order('created_at', { ascending: false })
       .limit(500);
 
-    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
-    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    } else if (!isGlobal) {
+      query = query.eq('branch_id', -1);
+    }
     if (status) query = query.eq('status', status);
     if (direction) query = query.eq('direction', direction);
     if (from) query = query.gte('created_at', from);
@@ -6699,15 +6751,17 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
     // 1. Resolve staff profile & user details for logged-in user
     const { data: userRec } = await supabase
       .from('users')
-      .select('id, first_name, last_name, display_name, email')
+      .select('id, first_name, last_name, display_name, email, branch_id')
       .eq('id', userId)
       .maybeSingle();
 
     const { data: staffProfile } = await supabase
       .from('staff_profiles')
-      .select('id, user_id, employee_number')
+      .select('id, user_id, employee_number, branch_id')
       .or(`user_id.eq.${userId},id.eq.${userId}`)
       .maybeSingle();
+
+    const branchId = (req as any).user?.branch_id || staffProfile?.branch_id || userRec?.branch_id;
 
     const staffId = staffProfile?.id || userId;
     const staffName = (userRec
@@ -6732,17 +6786,48 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         }
       }
     }
+
+    // Also look up staff_profiles by user's full name or email
+    if (userRec?.first_name && userRec?.last_name) {
+      const { data: matchedProfiles } = await supabase
+        .from('staff_profiles')
+        .select('id, user_id')
+        .ilike('first_name', userRec.first_name.trim())
+        .ilike('last_name', userRec.last_name.trim());
+      for (const p of (matchedProfiles || [])) {
+        if (p.id) staffIdsSet.add(p.id);
+        if (p.user_id) staffIdsSet.add(p.user_id);
+      }
+    } else if (staffName && staffName.trim().length > 3) {
+      const nameParts = staffName.trim().split(/\s+/);
+      if (nameParts.length >= 2) {
+        const { data: matchedProfiles } = await supabase
+          .from('staff_profiles')
+          .select('id, user_id')
+          .ilike('first_name', nameParts[0])
+          .ilike('last_name', nameParts[1]);
+        for (const p of (matchedProfiles || [])) {
+          if (p.id) staffIdsSet.add(p.id);
+          if (p.user_id) staffIdsSet.add(p.user_id);
+        }
+      }
+    }
+
     const staffIds = Array.from(staffIdsSet);
 
     // 2. Query staff_credit_bills (Approved & valid credit bills)
     const staffIdFilter = staffIds.map(id => `staff_id.eq.${id}`).join(',');
 
-    const { data: staffBills, error: staffErr } = await supabase
+    let staffQuery = supabase
       .from('staff_credit_bills')
       .select('*')
       .or(staffIdFilter)
-      .neq('status', 'rejected')
-      .order('created_at', { ascending: false });
+      .neq('status', 'rejected');
+    if (branchId) {
+      staffQuery = staffQuery.eq('branch_id', branchId);
+    }
+
+    const { data: staffBills, error: staffErr } = await staffQuery.order('created_at', { ascending: false });
 
     if (staffErr) {
       logger.warn('staff_credit_bills query error in getMyStaffCreditBills:', staffErr.message);
@@ -6756,12 +6841,15 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
 
     let cashierBills: any[] = [];
     try {
-      const { data: cbData, error: cbErr } = await supabase
+      let cbQuery = supabase
         .from('credit_bills')
         .select('*')
         .or(cashierFilter)
-        .neq('status', 'rejected')
-        .order('created_at', { ascending: false });
+        .neq('status', 'rejected');
+      if (branchId) {
+        cbQuery = cbQuery.eq('branch_id', branchId);
+      }
+      const { data: cbData, error: cbErr } = await cbQuery.order('created_at', { ascending: false });
       if (!cbErr && cbData) cashierBills = cbData;
     } catch (_) {}
 
@@ -6776,10 +6864,14 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
       const exactNameFilters = nameVariants.map(n => `waiter_name.eq.${n}`).join(',');
       const orFilter = [idFilters, exactNameFilters].filter(Boolean).join(',');
 
-      const { data: ordersData } = await supabase
+      let ordersQuery = supabase
         .from('pos_shift_orders')
         .select('id, order_number, short_code, waiter_id, waiter_name, customer_name, total_amount, items, created_at, staff_credit_bill_id, payment_status')
-        .or(orFilter)
+        .or(orFilter);
+      if (branchId) {
+        ordersQuery = ordersQuery.eq('branch_id', branchId);
+      }
+      const { data: ordersData } = await ordersQuery
         .order('created_at', { ascending: false })
         .limit(500);
       if (ordersData) posOrders = ordersData;
@@ -6911,11 +7003,135 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
       ];
     };
 
-    // 5. Normalize & combine (Credited bills only)
+    // 5. Query staff_credit_bill_payments for this staff member's bills
+    const allBillIds = [
+      ...(staffBills || []).map((b: any) => b.id),
+      ...(cashierBills || []).map((b: any) => b.id),
+    ].filter(Boolean);
+
+    let billPayments: any[] = [];
+    try {
+      if (allBillIds.length > 0) {
+        const sqlRes = await db.query(
+          `SELECT * FROM staff_credit_bill_payments
+            WHERE credit_bill_id::text = ANY($1::text[])
+               OR bill_id::text = ANY($1::text[])
+            ORDER BY created_at DESC`,
+          [allBillIds]
+        );
+        billPayments = sqlRes.rows || [];
+      }
+      if (staffName && staffName.trim().length > 2) {
+        const nameRes = await db.query(
+          `SELECT * FROM staff_credit_bill_payments
+            WHERE notes ILIKE $1
+            ORDER BY created_at DESC`,
+          [`%${staffName.trim()}%`]
+        );
+        const existingIds = new Set(billPayments.map((p: any) => p.id));
+        for (const r of (nameRes.rows || [])) {
+          if (!existingIds.has(r.id)) billPayments.push(r);
+        }
+      }
+    } catch (err: any) {
+      logger.warn('Error querying staff_credit_bill_payments in getMyStaffCreditBills:', err?.message || err);
+    }
+
+    // 6. Query cashier_shift_logs for any recorded paid bills for this staff member
+    let cashierShiftPayments: any[] = [];
+    try {
+      let shiftQuery = supabase
+        .from('cashier_shift_logs')
+        .select('id, shift_number, branch_id, cashier_name, paid_bills_details, created_at')
+        .not('paid_bills_details', 'is', null);
+      if (branchId) {
+        shiftQuery = shiftQuery.eq('branch_id', branchId);
+      }
+      const { data: shiftsWithPaid } = await shiftQuery
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      for (const s of (shiftsWithPaid || [])) {
+        if (!Array.isArray(s.paid_bills_details)) continue;
+        for (const pb of s.paid_bills_details) {
+          const pbStaffId = String(pb.staff_id || '');
+          const pbName = String(pb.name || pb.staff_name || '').toLowerCase();
+          const isMatch = staffIds.includes(pbStaffId) ||
+            (staffName && staffName.length > 2 && pbName.includes(staffName.toLowerCase()));
+
+          if (isMatch) {
+            const pbAmt = Number(pb.amount || 0);
+            const pbRef = pb.reference || '';
+            const pbDate = pb.time ? pb.time.split('T')[0] : (pb.recorded_at ? pb.recorded_at.split('T')[0] : s.created_at?.split('T')[0]);
+
+            cashierShiftPayments.push({
+              id: pb.id || `CS-PB-${s.id}-${Math.random().toString(36).substring(2, 6)}`,
+              amount: pbAmt,
+              payment_method: pb.payment_method || 'cash',
+              payment_date: pbDate,
+              reference: pbRef,
+              notes: `Cashier collection (${s.shift_number} - ${s.cashier_name})`,
+              shift_id: s.id,
+              shift_number: s.shift_number,
+              cashier_name: s.cashier_name,
+              created_at: pb.recorded_at || pb.time || s.created_at,
+              review_status: pb.review_status,
+            });
+
+            // If this cashier shift payment has not yet been recorded in staff_credit_bill_payments
+            // and the staff has open credit bills, auto-allocate it so credit bills are lessened!
+            const alreadyInPayments = billPayments.some(p =>
+              (pbRef && p.reference === pbRef) ||
+              (p.shift_id === s.id && Number(p.amount) === pbAmt)
+            );
+
+            if (!alreadyInPayments && pbAmt > 0 && staffIds.length > 0) {
+              const primaryStaffId = staffProfile?.id || userId;
+              try {
+                const alloc = await allocateStaffCreditPayment(
+                  primaryStaffId,
+                  s.branch_id || branchId || null,
+                  pbAmt,
+                  pb.payment_method || 'cash',
+                  null,
+                  pbRef ? `Cashier shift paid bill (${pbRef})` : `Cashier shift paid bill (${s.shift_number})`,
+                  s.id,
+                  pbRef || null
+                );
+                if (alloc?.appliedBills && alloc.appliedBills.length > 0) {
+                  // Re-query payments so the new payment is immediately reflected
+                  const { data: freshPayments } = await supabase
+                    .from('staff_credit_bill_payments')
+                    .select('*')
+                    .or(allBillIds.map(bid => `credit_bill_id.eq.${bid},bill_id.eq.${bid}`).join(','))
+                    .order('created_at', { ascending: false });
+                  if (freshPayments) billPayments = freshPayments;
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.warn('Error checking cashier shift payments in getMyStaffCreditBills:', err?.message || err);
+    }
+
+    const formatDateStr = (val: any) => {
+      if (!val) return '';
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+      const s = String(val);
+      return s.includes('T') ? s.split('T')[0] : s;
+    };
+
+    // 7. Normalize & combine (Credited bills with live payment tracking)
     const normalizedStaff = (staffBills || []).map((b: any) => {
       const amt = Number(b.amount || 0);
-      const paid = Number(b.paid_amount || b.amount_paid || 0);
-      const bal = b.balance != null ? Number(b.balance) : Math.max(0, amt - paid);
+      const matchingPayments = billPayments.filter(p => p.credit_bill_id === b.id || p.bill_id === b.id);
+      const paymentsSum = matchingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const paid = Math.max(Number(b.paid_amount || b.amount_paid || 0), paymentsSum);
+      const bal = b.balance != null ? Math.min(Number(b.balance), Math.max(0, amt - paid)) : Math.max(0, amt - paid);
+      const isSettled = bal <= 0.001 || String(b.status || '').toLowerCase() === 'paid';
+
       return {
         id: b.id,
         bill_number: b.bill_number || `CRD-${b.id.substring(0, 8)}`,
@@ -6924,28 +7140,34 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         description: b.description || 'Staff Credit Bill',
         amount: amt,
         paid_amount: paid,
-        balance: bal,
-        status: b.status || 'open',
+        balance: isSettled ? 0 : bal,
+        status: isSettled ? 'paid' : (paid > 0 ? 'partial' : (b.status || 'open')),
         approval_status: b.approval_status || 'approved',
         source: 'staff_credit_bills',
         items: resolveItems(b, amt, b.bill_date || b.created_at),
+        payments: matchingPayments.map(p => ({
+          id: p.id,
+          amount: Number(p.amount || 0),
+          payment_method: p.payment_method || p.method || 'cash',
+          payment_date: formatDateStr(p.payment_date) || formatDateStr(p.paid_on) || formatDateStr(p.created_at),
+          reference: p.reference || '',
+          notes: p.notes || 'Payment recorded',
+          created_at: formatDateStr(p.created_at),
+        })),
       };
     });
 
     const normalizedCashier = (cashierBills || []).map((b: any) => {
       const amt = Number(b.total_amount || b.amount || 0);
-      // credit_bills has no balance_due/paid_amount/amount_paid columns at
-      // all (see 20260206_create_credit_bills.sql) — it's a plain
-      // amount+status table, no partial-payment concept. status is the ONLY
-      // source of truth for whether this bill is still owed. Previously the
-      // balance here was computed from those nonexistent columns, so it
-      // always came out to the full amount regardless of status — a bill a
-      // cashier/accountant marked 'paid' could never show as settled to the
-      // waiter, since the "Settled" tab filters purely on balance <= 0.
+      const matchingPayments = billPayments.filter(p => p.credit_bill_id === b.id || p.bill_id === b.id);
+      const paymentsSum = matchingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const statusStr = String(b.status || '').toLowerCase();
-      const isSettled = statusStr === 'paid' || statusStr === 'cancelled';
-      const paid = isSettled ? amt : 0;
-      const bal = isSettled ? 0 : amt;
+      const statusIndicatesSettled = statusStr === 'paid' || statusStr === 'paid_cash' || statusStr === 'settled' || statusStr === 'cancelled';
+      const paidFromDb = Number(b.amount_paid || b.paid_amount || 0);
+      const paid = statusIndicatesSettled ? amt : Math.max(paidFromDb, paymentsSum);
+      const bal = statusIndicatesSettled ? 0 : (b.balance_due != null ? Math.min(Number(b.balance_due), Math.max(0, amt - paid)) : Math.max(0, amt - paid));
+      const isSettled = bal <= 0.001 || statusIndicatesSettled;
+
       return {
         id: b.id,
         bill_number: b.bill_number || `CRD-${b.id.substring(0, 8)}`,
@@ -6954,11 +7176,20 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         description: b.notes || b.description || `Credit Bill (${b.customer_name || 'Staff'})`,
         amount: amt,
         paid_amount: paid,
-        balance: bal,
-        status: b.status || 'open',
+        balance: isSettled ? 0 : bal,
+        status: isSettled ? 'paid' : (paid > 0 ? 'partial' : (b.status || 'open')),
         approval_status: b.approval_status || 'approved',
         source: 'credit_bills',
         items: resolveItems(b, amt, b.bill_date || b.credit_date || b.created_at, b.source_document_number),
+        payments: matchingPayments.map(p => ({
+          id: p.id,
+          amount: Number(p.amount || 0),
+          payment_method: p.payment_method || p.method || 'cash',
+          payment_date: formatDateStr(p.payment_date) || formatDateStr(p.paid_on) || formatDateStr(p.created_at),
+          reference: p.reference || '',
+          notes: p.notes || 'Payment recorded',
+          created_at: formatDateStr(p.created_at),
+        })),
       };
     });
 
@@ -6966,16 +7197,105 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
     const map = new Map<string, any>();
     for (const item of [...normalizedStaff, ...normalizedCashier]) {
       const key = item.bill_number || item.id;
-      if (!map.has(key)) map.set(key, item);
+      if (!map.has(key)) {
+        map.set(key, item);
+      } else {
+        // Merge with existing entry to pick the most up-to-date payment status
+        const existing = map.get(key);
+        const maxPaid = Math.max(existing.paid_amount, item.paid_amount);
+        const originalAmount = Math.max(existing.amount, item.amount);
+        const minBal = Math.min(existing.balance, item.balance);
+        const mergedBal = maxPaid >= originalAmount ? 0 : minBal;
+        const mergedPayments = [...(existing.payments || []), ...(item.payments || [])];
+        const uniquePayments = Array.from(new Map(mergedPayments.map(p => [p.id, p])).values());
+
+        map.set(key, {
+          ...existing,
+          amount: originalAmount,
+          paid_amount: maxPaid,
+          balance: mergedBal,
+          status: mergedBal <= 0.001 ? 'paid' : (maxPaid > 0 ? 'partial' : (existing.status || item.status)),
+          items: (existing.items && existing.items.length > 0) ? existing.items : item.items,
+          payments: uniquePayments,
+        });
+      }
     }
 
     const allBills = Array.from(map.values()).sort((a, b) =>
       new Date(b.created_at || b.bill_date).getTime() - new Date(a.created_at || a.bill_date).getTime()
     );
 
-    const outstandingBalance = allBills.reduce((sum, b) => sum + (b.balance > 0 ? b.balance : 0), 0);
+    // 8. Build consolidated paid_bills (payment receipts) list
+    const paidBillsMap = new Map<string, any>();
+
+    // Add all payments from staff_credit_bill_payments
+    for (const p of billPayments) {
+      const pAmt = Number(p.amount || 0);
+      if (pAmt <= 0) continue;
+      const linkedBill = allBills.find(b => b.id === p.credit_bill_id || b.id === p.bill_id);
+      const pRef = p.reference || '';
+      const pKey = p.id || `${p.payment_date}-${pAmt}-${pRef}`;
+
+      const formatDateStr = (val: any) => {
+        if (!val) return '';
+        if (val instanceof Date) return val.toISOString().split('T')[0];
+        const s = String(val);
+        return s.includes('T') ? s.split('T')[0] : s;
+      };
+
+      const dateStr = formatDateStr(p.payment_date) || formatDateStr(p.paid_on) || formatDateStr(p.created_at);
+
+      paidBillsMap.set(pKey, {
+        id: p.id,
+        credit_bill_id: p.credit_bill_id || p.bill_id || null,
+        bill_number: linkedBill?.bill_number || (pRef ? `REF: ${pRef}` : 'Credit Bill Payment'),
+        bill_description: linkedBill?.description || 'Staff Credit Settlement',
+        amount: pAmt,
+        payment_method: p.payment_method || p.method || 'cash',
+        payment_date: dateStr,
+        reference: pRef,
+        notes: p.notes || 'Paid bill recorded',
+        shift_id: p.shift_id || null,
+        created_at: formatDateStr(p.created_at) || dateStr,
+      });
+    }
+
+    // Add payments from cashier shift logs if not duplicate
+    for (const cs of cashierShiftPayments) {
+      const csAmt = Number(cs.amount || 0);
+      if (csAmt <= 0) continue;
+      const csRef = cs.reference || '';
+      const csKey = csRef ? `REF-${csRef}` : `${cs.payment_date}-${csAmt}-${cs.cashier_name}`;
+
+      if (!paidBillsMap.has(csKey)) {
+        paidBillsMap.set(csKey, {
+          id: cs.id,
+          credit_bill_id: null,
+          bill_number: csRef ? `REF: ${csRef}` : (cs.shift_number ? `SHIFT: ${cs.shift_number}` : 'Cashier Paid Bill'),
+          bill_description: `Paid to Cashier (${cs.cashier_name || 'Station'})`,
+          amount: csAmt,
+          payment_method: cs.payment_method || 'cash',
+          payment_date: cs.payment_date,
+          reference: csRef,
+          notes: cs.notes || `Shift ${cs.shift_number || ''}`,
+          shift_id: cs.shift_id || null,
+          shift_number: cs.shift_number,
+          cashier_name: cs.cashier_name,
+          created_at: cs.created_at,
+        });
+      }
+    }
+
+    const allPaidBills = Array.from(paidBillsMap.values()).sort((a, b) =>
+      new Date(b.payment_date || b.created_at).getTime() - new Date(a.payment_date || a.created_at).getTime()
+    );
+
+    // 9. Compute financial totals
     const totalCredited = allBills.reduce((sum, b) => sum + b.amount, 0);
-    const totalPaid = allBills.reduce((sum, b) => sum + b.paid_amount, 0);
+    const totalPaidOnBills = allBills.reduce((sum, b) => sum + b.paid_amount, 0);
+    const totalPaymentsReceived = allPaidBills.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const totalSettled = Math.max(totalPaidOnBills, totalPaymentsReceived);
+    const outstandingBalance = Math.max(0, totalCredited - totalSettled);
 
     res.json({
       success: true,
@@ -6983,9 +7303,11 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         staff_name: staffName,
         outstanding_balance: outstandingBalance,
         total_credited: totalCredited,
-        total_paid: totalPaid,
+        total_paid: totalSettled,
+        total_settled: totalSettled,
         count: allBills.length,
         bills: allBills,
+        paid_bills: allPaidBills,
       },
     });
   } catch (error) {

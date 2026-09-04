@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 class SummaryCard extends StatelessWidget {
@@ -10,6 +8,7 @@ class SummaryCard extends StatelessWidget {
   final double physicalCount;
   final double totalVariance;
   final bool isStorekeeper;
+  final bool isStoreType;
   final int? totalItems;
   final int? countedLines;
 
@@ -22,6 +21,7 @@ class SummaryCard extends StatelessWidget {
     required this.physicalCount,
     required this.totalVariance,
     this.isStorekeeper = false,
+    this.isStoreType = false,
     this.totalItems,
     this.countedLines,
   });
@@ -86,9 +86,9 @@ class SummaryCard extends StatelessWidget {
                 _divider(),
                 _LegacyStat(
                   'Adds',
-                  '+${-totalSdds}',
+                  '+$totalSdds',
                   const Color(0xFF64748B),
-                  (-totalSdds) > 0
+                  totalSdds > 0
                       ? const Color(0xFF166534)
                       : const Color(0xFF0F172A),
                 ),
@@ -100,15 +100,17 @@ class SummaryCard extends StatelessWidget {
                   const Color(0xFF0F172A),
                   bold: true,
                 ),
-                _divider(),
-                _LegacyStat(
-                  'Sales',
-                  '-$totalSales',
-                  const Color(0xFF64748B),
-                  totalSales > 0
-                      ? const Color(0xFFB91C1C)
-                      : const Color(0xFF0F172A),
-                ),
+                if (!isStoreType) ...[
+                  _divider(),
+                  _LegacyStat(
+                    'Sales',
+                    '-$totalSales',
+                    const Color(0xFF64748B),
+                    totalSales > 0
+                        ? const Color(0xFFB91C1C)
+                        : const Color(0xFF0F172A),
+                  ),
+                ],
                 _divider(),
                 _LegacyStat(
                   'Closing',

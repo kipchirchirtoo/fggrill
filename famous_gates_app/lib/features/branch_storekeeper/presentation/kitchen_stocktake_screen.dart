@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../../../core/widgets/sticky_horizontal_scrollbar.dart';
+import '../../../services/report_service.dart';
+import '../../auth/domain/auth_notifier.dart';
 import '../stocktakes/data/store_stocktake_repository.dart';
 import 'record_spoilage_screen.dart';
 
@@ -23,6 +25,7 @@ class _KitchenStocktakeScreenState
   String _selectedShift = 'A';
   late Future<Map<String, dynamic>> _future = _load();
   bool _saving = false;
+  bool _exportingPdf = false;
 
   final Map<String, TextEditingController> _physicalControllers = {};
   final List<TextEditingController> _chefControllers =
@@ -52,6 +55,7 @@ class _KitchenStocktakeScreenState
       value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
 
   String _fmt(dynamic value) {
+    if (value == null) return '';
     final number = _toDouble(value);
     if (number == 0) return '0.00';
     if (number == number.roundToDouble()) return number.toInt().toString();
@@ -101,9 +105,10 @@ class _KitchenStocktakeScreenState
         .toList();
     for (final item in items) {
       final key = _rowKey(item);
+      final rawClosing = item['closing_qty'];
       _physicalControllers
           .putIfAbsent(key, () => TextEditingController())
-          .text = _fmt(item['closing_qty']);
+          .text = rawClosing != null ? _fmt(rawClosing) : '';
     }
 
     final resolvedShift = (data['shift'] ?? _selectedShift).toString();
@@ -138,11 +143,149 @@ class _KitchenStocktakeScreenState
     });
   }
 
+  Future<void> _exportKitchenStocktakePdf(
+    Map<String, dynamic> data,
+    List<Map<String, dynamic>> items,
+  ) async {
+    if (_exportingPdf) return;
+    setState(() => _exportingPdf = true);
+    try {
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      final branchName = user?.branchName ?? 'Famous Gates Hotel';
+      final status = (data['status'] ?? 'draft').toString();
+      final shiftLabel = data['shift_name'] ?? _selectedShift;
+
+      final enrichedItems = items.map((item) {
+        final key = _rowKey(item);
+        final physicalVal = _physicalControllers[key]?.text.trim();
+        final numVal = double.tryParse(physicalVal ?? '');
+        return {
+          ...item,
+          if (numVal != null) 'closing_qty': numVal,
+        };
+      }).toList();
+
+      await ReportService().generateKitchenStocktakeReport(
+        branchName: branchName,
+        date: _dateStr,
+        shift: '$shiftLabel',
+        status: status,
+        items: enrichedItems,
+        dispenserName: _dispenserController.text.trim(),
+        confirmationName: _confirmationController.text.trim(),
+        chefsOnDuty: _chefControllers
+            .map((c) => c.text.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(),
+        preparedBy: user?.name,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text('Failed to generate PDF: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
+  }
+
   Future<void> _submit(Map<String, dynamic> data) async {
     final items = ((data['items'] as List?) ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
+
+    if (items.isEmpty) {
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(content: Text('No kitchen items found to submit.')),
+      );
+      return;
+    }
+
+    // Check for items with missing physical counts
+    final missingItems = <String>[];
+    for (final item in items) {
+      final key = _rowKey(item);
+      final rawText = _physicalControllers[key]?.text.trim() ?? '';
+      if (rawText.isEmpty) {
+        final name = (item['item_name'] ?? item['name'] ?? 'Item').toString();
+        missingItems.add(name);
+      }
+    }
+
+    if (missingItems.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFF9A825)),
+              SizedBox(width: 8),
+              Text('Missing Physical Counts'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'You cannot submit without entering physical counts for all items (${missingItems.length} uncounted):\n',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                ...missingItems.take(15).map((name) => Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text('• $name', style: const TextStyle(fontSize: 13)),
+                    )),
+                if (missingItems.length > 15)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '... and ${missingItems.length - 15} more items',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Submit Kitchen Stocktake'),
+        content: Text(
+          'Are you sure you want to submit the kitchen stocktake for date $_dateStr (Shift $_selectedShift)?\n\n'
+          'Once submitted, the counts will be locked and sent to the Accountant and Auditor for review.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF0D2C54),
+            ),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
 
     final payload = <Map<String, dynamic>>[];
 
@@ -174,7 +317,7 @@ class _KitchenStocktakeScreenState
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        const SnackBar(content: Text('Kitchen stocktake submitted')),
+        const SnackBar(content: Text('Kitchen stocktake submitted successfully!')),
       );
       _reload();
     } catch (error) {
@@ -195,6 +338,25 @@ class _KitchenStocktakeScreenState
       appBar: AppBar(
         title: const Text('Kitchen Stocktake'),
         actions: [
+          IconButton(
+            tooltip: 'Download / Print Branded PDF',
+            icon: _exportingPdf
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: () {
+              _future.then((data) {
+                final items = ((data['items'] as List?) ?? const [])
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item))
+                    .toList();
+                _exportKitchenStocktakePdf(data, items);
+              });
+            },
+          ),
           IconButton(
             tooltip: 'Record Spoilage',
             icon: const Icon(Icons.report_problem_outlined),
@@ -265,6 +427,29 @@ class _KitchenStocktakeScreenState
                           onPressed: _pickDate,
                           icon: const Icon(Icons.calendar_month, size: 16),
                           label: const Text('Change date'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: items.isEmpty || _exportingPdf
+                              ? null
+                              : () => _exportKitchenStocktakePdf(data, items),
+                          icon: _exportingPdf
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('Download PDF'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF0D2C54),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -725,6 +910,12 @@ class _LedgerTableState extends State<_LedgerTable> {
                             isDense: true,
                             filled: true,
                             fillColor: Colors.white,
+                            hintText: '0.00',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade400,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
@@ -740,7 +931,7 @@ class _LedgerTableState extends State<_LedgerTable> {
                                 width: 1.5,
                               ),
                             ),
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 14,
                             ),

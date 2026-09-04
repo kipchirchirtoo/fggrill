@@ -411,7 +411,10 @@ class RealtimeService {
     }
 
     if (_activeChannels.containsKey(channelName)) {
-      _activeChannels[channelName]?.unsubscribe();
+      final old = _activeChannels.remove(channelName);
+      if (old != null) {
+        client.removeChannel(old);
+      }
     }
 
     final channel = client.channel(channelName);
@@ -462,7 +465,7 @@ class RealtimeService {
     );
 
     channel.subscribe((status, [error]) {
-      if (isDisposed) return;
+      if (isDisposed || _activeChannels[channelName] != channel) return;
 
       if (status == RealtimeSubscribeStatus.subscribed) {
         debugPrint(
@@ -472,8 +475,21 @@ class RealtimeService {
 
       if (status == RealtimeSubscribeStatus.channelError ||
           status == RealtimeSubscribeStatus.timedOut) {
-        debugPrint('❌ RealtimeService Notifications subscription issue: $status'
-            '${error != null ? ' error=$error' : ''}');
+        debugPrint('⚠️ RealtimeService Notifications subscription status: $status'
+            '${error != null ? ' ($error)' : ''}. Attempting reconnect in 4s...');
+        Future.delayed(const Duration(seconds: 4), () {
+          if (!isDisposed && _activeChannels[channelName] == channel) {
+            _activeChannels.remove(channelName);
+            client.removeChannel(channel);
+            _initNotificationsChannel(
+              channelName,
+              userId,
+              role,
+              branchId,
+              controller,
+            );
+          }
+        });
       }
     });
 
@@ -481,8 +497,8 @@ class RealtimeService {
 
     controller.onCancel = () {
       isDisposed = true;
-      channel.unsubscribe();
       _activeChannels.remove(channelName);
+      client.removeChannel(channel);
     };
   }
 

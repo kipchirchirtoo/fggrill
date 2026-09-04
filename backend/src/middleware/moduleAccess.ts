@@ -38,7 +38,8 @@ const ROLE_MODULE_ACCESS: Record<string, SourceModule[]> = {
         SourceModule.BRANCH_STORE
     ],
     [UserRole.BRANCH_ACCOUNTANT]: [
-        SourceModule.BRANCH_ACCOUNTING
+        SourceModule.BRANCH_ACCOUNTING,
+        SourceModule.BRANCH_STORE
     ],
     [UserRole.AUDITOR]: [
         SourceModule.INVENTORY,
@@ -48,7 +49,8 @@ const ROLE_MODULE_ACCESS: Record<string, SourceModule[]> = {
         SourceModule.RESTAURANT
     ],
     [UserRole.ACCOUNTANT]: [
-        SourceModule.BRANCH_ACCOUNTING
+        SourceModule.BRANCH_ACCOUNTING,
+        SourceModule.BRANCH_STORE
     ],
     [UserRole.PROCUREMENT]: [
         SourceModule.CENTRAL_STORE
@@ -162,8 +164,13 @@ export const applyModuleBranchFilter = (query: any, req: Request): any => {
     const sourceModule = (req as any).sourceModule;
     const enforcedBranchId = (req as any).enforcedBranchId;
 
-    // Always filter by source_module
-    if (sourceModule) {
+    const userRole = (req as any).user?.role;
+
+    // For branch accountants / accountants, allow matching either branch_store or branch_accounting
+    if ((userRole === UserRole.BRANCH_ACCOUNTANT || userRole === UserRole.ACCOUNTANT) &&
+        (sourceModule === SourceModule.BRANCH_ACCOUNTING || sourceModule === SourceModule.BRANCH_STORE)) {
+        query = query.in('source_module', [SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]);
+    } else if (sourceModule) {
         query = query.eq('source_module', sourceModule);
     }
 

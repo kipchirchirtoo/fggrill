@@ -56,6 +56,9 @@ router.post('/test', testCreateUser);
 router.route('/:id')
   .get(getUser)
   .put(updateUser)
-  .delete(authorize([UserRole.SUPER_ADMIN]), deleteUser);
+  .patch(updateUser)
+  .delete(deleteUser);
+
+router.patch('/:id/status', updateUser);
 
 export default router;

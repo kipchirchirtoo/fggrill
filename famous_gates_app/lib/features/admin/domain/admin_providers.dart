@@ -318,7 +318,9 @@ final centralPurchaseOrdersProvider =
 
 final centralGrnsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getGRNs();
+  return ref
+      .read(adminRepositoryProvider)
+      .getGRNs(scope: 'central', sourceModule: 'central_store');
 });
 
 final centralStockTakesProvider =

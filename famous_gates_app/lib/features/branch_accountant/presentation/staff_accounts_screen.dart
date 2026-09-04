@@ -70,6 +70,9 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   // toward their credit during a shift) waiting for the branch accountant to
   // apply them against an actual credit bill and shrink its balance.
   List<Map<String, dynamic>> _paidCreditEntries = [];
+  // Full history of recorded paid-bill payments (money already applied against
+  // staff credit bills) — the "Paid History" tab.
+  List<Map<String, dynamic>> _payments = [];
 
   Timer? _searchTimer;
   int _page = 1;
@@ -114,23 +117,27 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     if (mounted) setState(() => _loading = true);
     try {
       final repo = _repo;
-      // The From/To filter chips used to be purely cosmetic — they filtered
-      // the list client-side *after* every credit bill/advance/loan/paid-bill
-      // entry the branch has ever had was already fetched in full (1000+
-      // rows, unbounded, on every load). That's what made this screen hang
-      // or crash. Now the same range actually scopes the server query.
-      final fromStr = DateFormat('yyyy-MM-dd').format(_from);
-      final toStr = DateFormat('yyyy-MM-dd').format(_to);
+      // Fetch every outstanding credit bill / advance / loan, NOT just the
+      // From/To window. A recorded payment settles the OLDEST debt first (FIFO),
+      // which is frequently an older bill; scoping the fetch to the window made
+      // that reduction invisible in the owed totals ("I recorded a payment but
+      // nothing changed"). The owed summary must reflect the full balance. The
+      // From/To range still scopes the transaction LISTS client-side via
+      // _inRange, and the DataTable is paginated, so this is not the unbounded
+      // render that used to hang the screen.
       final res = await Future.wait([
-        repo.getPayrollCreditBills(fromDate: fromStr, toDate: toStr),
-        repo.getPayrollAdvances(fromDate: fromStr, toDate: toStr),
-        repo.getPayrollLoans(fromDate: fromStr, toDate: toStr),
+        repo.getPayrollCreditBills(),
+        repo.getPayrollAdvances(),
+        repo.getPayrollLoans(),
         repo.getBranchStaff(),
         // Still-unapplied paid bills must surface for review regardless of the
         // shift's age — they stay outstanding until applied. Constraining them
         // to the screen's date window hid older (e.g. last-month) entries that
         // still need review, so fetch every pending entry irrespective of date.
         repo.getCashierPaidCreditEntries(status: 'pending'),
+        // Full history of recorded paid-bill payments (all-time), so there is a
+        // single record of every paid bill.
+        repo.getBranchCreditBillPayments(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -139,6 +146,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _loans = List<Map<String, dynamic>>.from(res[2]);
         _staffList = List<Map<String, dynamic>>.from(res[3]);
         _paidCreditEntries = List<Map<String, dynamic>>.from(res[4]);
+        _payments = List<Map<String, dynamic>>.from(res[5]);
         _buildStaffIndex();
         _page = 1;
         _loading = false;
@@ -326,16 +334,25 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   }
 
   num _creditBalance(Map m) {
-    final bal = _n(m, ['balance']);
-    return bal > 0 ? bal : _n(m, ['amount']) - _n(m, ['paid_amount']);
+    if (!_isOpenCredit(m)) return 0;
+    final bal = _n(m, ['balance', 'balance_due']);
+    if (bal > 0) return bal;
+    final total = _n(m, ['amount', 'total_amount']);
+    final paid = _n(m, ['paid_amount', 'amount_paid']);
+    final diff = total - paid;
+    return diff > 0 ? diff : 0;
   }
 
   String _creditBillLabel(Map<String, dynamic> bill) => '${_t(bill, [
+            'bill_number',
             'description',
             'reason'
           ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(bill))}';
 
   String _creditTargetLabel(Map<String, dynamic> target) {
+    if (target['id'] == 'auto') {
+      return target['description'] ?? '⚡ Auto-Apply (FIFO across oldest open bills)';
+    }
     if (target['id'] == 'unlinked') {
       return '${target['description'] ?? 'General Staff Salary Credit'}';
     }
@@ -413,51 +430,103 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   List<Map<String, dynamic>> _overviewData() {
     final byStaff = <String, Map<String, num>>{};
     void add(String id, String key, num v) {
+      if (id.isEmpty) return;
       final m =
           byStaff.putIfAbsent(id, () => {'credit': 0, 'adv': 0, 'loan': 0});
       m[key] = (m[key] ?? 0) + v;
     }
 
+    // Canonical helper: resolves any alias (user_id, employee_number, national_id)
+    // to the staff profile's primary ID (s['id'] or s['staff_id']).
+    String canonicalStaffId(String rawId) {
+      final trimmed = rawId.trim();
+      if (trimmed.isEmpty) return '';
+      final s = _staffIndex[trimmed];
+      if (s != null) {
+        final pId = _t(s, ['id', 'staff_id']);
+        if (pId.isNotEmpty) return pId;
+      }
+      return trimmed;
+    }
+
+    // Owed roll-up is all-time: what each staff member actually owes, independent
+    // of the From/To range (which only scopes the transaction lists). A payment
+    // applied to an out-of-window bill must still reduce the total shown here.
     for (final m in _credit) {
-      if (_isOpenCredit(m) && _inRange(m, _creditDateKeys)) {
-        add(_t(m, ['staff_id']), 'credit', _creditBalance(m));
+      if (_isOpenCredit(m)) {
+        final sid = canonicalStaffId(_t(m, ['staff_id']));
+        add(sid, 'credit', _creditBalance(m));
       }
     }
     for (final m in _advances) {
-      if (_isOpenAdvance(m) && _inRange(m, _advanceDateKeys)) {
-        add(_t(m, ['staff_id']), 'adv', _n(m, ['amount']));
+      if (_isOpenAdvance(m)) {
+        final sid = canonicalStaffId(_t(m, ['staff_id']));
+        add(sid, 'adv', _n(m, ['amount']));
       }
     }
     for (final m in _loans) {
-      if (_isActiveLoan(m) && _inRange(m, _loanDateKeys)) {
-        add(_t(m, ['staff_id']), 'loan',
+      if (_isActiveLoan(m)) {
+        final sid = canonicalStaffId(_t(m, ['staff_id']));
+        add(sid, 'loan',
             _n(m, ['remaining_balance', 'total_amount']));
       }
     }
 
-    final idx = _staffIndex;
-    final ids = {...idx.keys, ...byStaff.keys}..removeWhere((e) => e.isEmpty);
-    final sorted = ids.toList()
-      ..sort((a, b) {
-        final ta = byStaff[a]?.values.fold<num>(0, (s, v) => s + v) ?? 0;
-        final tb = byStaff[b]?.values.fold<num>(0, (s, v) => s + v) ?? 0;
-        return tb.compareTo(ta);
-      });
+    // Consolidate staff profiles by person (combining duplicate entries like
+    // Ezra Yegon with FG01001 and FG01005 into one single ledger row)
+    final personMap = <String, Map<String, dynamic>>{};
+    for (final s in _staffList) {
+      final pId = _t(s, ['id', 'staff_id']);
+      if (pId.isEmpty) continue;
+      final name = _staffName(s).trim();
+      final key = name.toLowerCase();
+      if (key.isEmpty) continue;
+
+      if (!personMap.containsKey(key)) {
+        personMap[key] = {
+          'primaryId': pId,
+          'allIds': <String>{pId},
+          'profile': s,
+          'name': name,
+        };
+      } else {
+        final existing = personMap[key]!;
+        (existing['allIds'] as Set<String>).add(pId);
+        final existingSal = _n(existing['profile'] as Map, ['basic_salary', 'salary']);
+        final newSal = _n(s, ['basic_salary', 'salary']);
+        // Keep the profile with salary > 0 or with a non-zero basic salary
+        if (newSal > existingSal || (existingSal == 0 && newSal > 0)) {
+          existing['profile'] = s;
+          existing['primaryId'] = pId;
+        }
+      }
+    }
 
     final out = <Map<String, dynamic>>[];
-    for (final id in sorted) {
-      if (_staff != 'all' && id != _staff) continue;
-      final s = idx[id] ?? {'staff_id': id};
-      final name = _staffName(s);
+
+    for (final person in personMap.values) {
+      final allIds = person['allIds'] as Set<String>;
+      if (_staff != 'all' && !allIds.contains(_staff)) continue;
+
+      final s = person['profile'] as Map<String, dynamic>;
+      final name = person['name'] as String;
       if (_query.trim().isNotEmpty &&
           !name.toLowerCase().contains(_query.trim().toLowerCase())) {
         continue;
       }
-      final agg = byStaff[id] ?? const {'credit': 0, 'adv': 0, 'loan': 0};
-      final credit = agg['credit'] ?? 0;
-      final adv = agg['adv'] ?? 0;
-      final loan = agg['loan'] ?? 0;
+
+      num credit = 0, adv = 0, loan = 0;
+      for (final id in allIds) {
+        final agg = byStaff[id];
+        if (agg != null) {
+          credit += agg['credit'] ?? 0;
+          adv += agg['adv'] ?? 0;
+          loan += agg['loan'] ?? 0;
+        }
+      }
+
       final salary = _n(s, ['basic_salary', 'salary']);
+      final owed = credit + adv + loan;
       out.add({
         'name': name,
         'emp': _t(s, ['employee_id', 'employee_number', 'national_id']),
@@ -466,10 +535,44 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         'credit': credit,
         'adv': adv,
         'loan': loan,
-        'owed': credit + adv + loan,
-        'net': salary - (credit + adv + loan),
+        'owed': owed,
+        'net': salary - owed,
       });
     }
+
+    // Include any debt IDs from byStaff that weren't in _staffList
+    final accountedIds = personMap.values.expand((p) => p['allIds'] as Set<String>).toSet();
+    for (final entry in byStaff.entries) {
+      if (accountedIds.contains(entry.key)) continue;
+      final id = entry.key;
+      if (_staff != 'all' && id != _staff) continue;
+      final s = _staffIndex[id] ?? {'staff_id': id};
+      final name = _staffName(s);
+      if (_query.trim().isNotEmpty &&
+          !name.toLowerCase().contains(_query.trim().toLowerCase())) {
+        continue;
+      }
+      final credit = entry.value['credit'] ?? 0;
+      final adv = entry.value['adv'] ?? 0;
+      final loan = entry.value['loan'] ?? 0;
+      final salary = _n(s, ['basic_salary', 'salary']);
+      final owed = credit + adv + loan;
+      out.add({
+        'name': name,
+        'emp': _t(s, ['employee_id', 'employee_number', 'national_id']),
+        'dept': _t(s, ['department', 'role']),
+        'salary': salary,
+        'credit': credit,
+        'adv': adv,
+        'loan': loan,
+        'owed': owed,
+        'net': salary - owed,
+      });
+    }
+
+    // Sort by Total Owed descending (largest debtors first)
+    out.sort((a, b) => (b['owed'] as num).compareTo(a['owed'] as num));
+
     return out;
   }
 
@@ -675,20 +778,20 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   // ── Totals panel (Tax/Total/Paid/Balance style) ────────────────────────────
   Widget _totalsPanel() {
+    // All-time outstanding (not date-scoped): these header totals are the true
+    // amounts owed, so a payment against any bill — including one outside the
+    // From/To window — is reflected immediately.
     num creditOut = 0, advOut = 0, loanOut = 0;
     for (final m in _credit) {
       if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
-      if (!_inRange(m, _creditDateKeys)) continue;
       if (_isOpenCredit(m)) creditOut += _creditBalance(m);
     }
     for (final m in _advances) {
       if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
-      if (!_inRange(m, _advanceDateKeys)) continue;
       if (_isOpenAdvance(m)) advOut += _n(m, ['amount']);
     }
     for (final m in _loans) {
       if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
-      if (!_inRange(m, _loanDateKeys)) continue;
       if (_isActiveLoan(m))
         loanOut += _n(m, ['remaining_balance', 'total_amount']);
     }
@@ -764,6 +867,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
           _tab2('credit', 'Credit Bills', Icons.credit_card),
           _tab2('paidbills', 'Paid Bills', Icons.point_of_sale,
               badge: _paidCreditEntries.length),
+          _tab2('payhistory', 'Paid History', Icons.history),
           _tab2('advances', 'Advances', Icons.payments),
           _tab2('loans', 'Loans', Icons.account_balance),
           _tab2('salaries', 'Salaries', Icons.badge),
@@ -827,6 +931,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         return _creditGrid();
       case 'paidbills':
         return _paidBillsGrid();
+      case 'payhistory':
+        return _paymentsGrid();
       case 'advances':
         return _advancesGrid();
       case 'loans':
@@ -1054,6 +1160,79 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             ],
             rows,
             emptyLabel: 'No cashier-recorded paid bills awaiting review.',
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Full record of every recorded paid-bill payment (money already applied to a
+  /// staff credit bill). Read-only history — distinct from the "Paid Bills" tab,
+  /// which holds cashier-collected money still awaiting the accountant to apply.
+  /// The Paid History entries after the staff + search filters (but NOT the date
+  /// range — this is a complete audit record of every paid bill, independent of
+  /// the From/To chips).
+  List<Map<String, dynamic>> get _fPayments {
+    String nameOf(Map e) => _t(e, ['staff_name'])
+        .ifEmpty(_staffName(_staffIndex[_t(e, ['staff_id'])] ?? const {}));
+    return _payments.where((e) {
+      if (_staff != 'all' && _t(e, ['staff_id']) != _staff) return false;
+      if (_query.trim().isNotEmpty &&
+          !('${nameOf(e)} ${_t(e, ['bill_number', 'description', 'reference'])}')
+              .toLowerCase()
+              .contains(_query.trim().toLowerCase())) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Widget _paymentsGrid() {
+    String nameOf(Map e) => _t(e, ['staff_name'])
+        .ifEmpty(_staffName(_staffIndex[_t(e, ['staff_id'])] ?? const {}));
+    final entries = _fPayments;
+
+    final rows = <List<Widget>>[];
+    num total = 0;
+    for (final e in entries) {
+      total += _n(e, ['amount']);
+      rows.add([
+        _c(_date(_t(e, ['created_at']))),
+        _c(nameOf(e).ifEmpty('—'), bold: true),
+        _c(_t(e, ['bill_number', 'description']).ifEmpty('—'), color: _muted),
+        _c(_money(_n(e, ['amount'])), bold: true, color: _success),
+        _chip(_t(e, ['payment_method']).ifEmpty('cash')),
+        _c(_t(e, ['reference']).ifEmpty('—'), color: _muted),
+        _c(_t(e, ['recorded_by_name']).ifEmpty('—'), color: _muted),
+      ]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+          child: Text(
+            'Every paid bill recorded against staff credit (all dates) — '
+            '${entries.length} payment(s) totalling ${_money(total)}. Use '
+            '"Record Paid Bill" to add one; it reduces the staff member\'s '
+            'oldest credit bill.',
+            style: const TextStyle(
+                fontSize: 11.5, color: _muted, fontStyle: FontStyle.italic),
+          ),
+        ),
+        Expanded(
+          child: _grid(
+            const [
+              'Date',
+              'Staff',
+              'Bill',
+              'Amount',
+              'Method',
+              'Reference',
+              'Recorded By',
+            ],
+            rows,
+            emptyLabel: 'No paid bills recorded yet.',
           ),
         ),
       ],
@@ -1479,6 +1658,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         ? _fCredit.length
         : _tab == 'paidbills'
             ? _paidCreditEntries.length
+            : _tab == 'payhistory'
+            ? _fPayments.length
             : _tab == 'advances'
                 ? _fAdvances.length
                 : _tab == 'loans'
@@ -1534,7 +1715,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     }
     final label = _tab == 'credit'
         ? 'New Credit Bill'
-        : _tab == 'paidbills'
+        : (_tab == 'paidbills' || _tab == 'payhistory')
             ? 'Record Paid Bill'
             : _tab == 'advances'
                 ? 'New Advance'
@@ -1545,7 +1726,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             ? null
             : _tab == 'credit'
                 ? _newCreditDialog
-                : _tab == 'paidbills'
+                : (_tab == 'paidbills' || _tab == 'payhistory')
                     ? _recordPaidBillDialog
                     : _tab == 'advances'
                         ? _newAdvanceDialog
@@ -1626,9 +1807,50 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         return _salariesPayload();
       case 'overview':
         return _overviewPayload();
+      case 'payhistory':
+        return _paymentsPayload();
       default:
         return null;
     }
+  }
+
+  Map<String, dynamic> _paymentsPayload() {
+    final rows = <List<String>>[];
+    num tot = 0;
+    for (final e in _fPayments) {
+      tot += _n(e, ['amount']);
+      final name = _t(e, ['staff_name'])
+          .ifEmpty(_staffName(_staffIndex[_t(e, ['staff_id'])] ?? const {}));
+      rows.add([
+        _date(_t(e, ['created_at'])),
+        name.ifEmpty('-'),
+        _t(e, ['bill_number', 'description']).ifEmpty('-'),
+        _t(e, ['payment_method']).ifEmpty('cash'),
+        _t(e, ['reference']).ifEmpty('-'),
+        _t(e, ['recorded_by_name']).ifEmpty('-'),
+        _fmt2.format(_n(e, ['amount'])),
+      ]);
+    }
+    return {
+      'title': 'PAID BILLS HISTORY',
+      'period': 'All dates',
+      'branch': _branchName(),
+      'columns': const [
+        {'header': 'Date', 'align': 'left', 'weight': 1.4},
+        {'header': 'Staff', 'align': 'left', 'weight': 2.4},
+        {'header': 'Bill', 'align': 'left', 'weight': 2.0},
+        {'header': 'Method', 'align': 'center', 'weight': 1.2},
+        {'header': 'Reference', 'align': 'left', 'weight': 1.6},
+        {'header': 'Recorded By', 'align': 'left', 'weight': 2.0},
+        {'header': 'Amount (KES)', 'align': 'right', 'weight': 1.6},
+      ],
+      'rows': rows,
+      'summary': [
+        {'label': 'Payments', 'value': '${rows.length}'},
+        {'label': 'Total Paid (KES)', 'value': _fmt2.format(tot)},
+      ],
+      'totals': ['TOTALS', '', '', '', '', '', _fmt2.format(tot)],
+    };
   }
 
   Map<String, dynamic> _salariesPayload() {
@@ -2093,28 +2315,43 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   /// Pending) before a payment can land on it.
   Future<void> _applyPaidEntryDialog(Map entry) async {
     final staffId = '${entry['staff_id'] ?? ''}';
-    final candidates = _credit.where((c) {
+    final remaining = _n(entry, ['remaining_amount']);
+
+    List<Map<String, dynamic>> openBills = [];
+    if (staffId.isNotEmpty) {
+      try {
+        openBills = await _repo.getPayrollCreditBills(
+          staffId: staffId,
+          status: 'outstanding',
+        );
+      } catch (_) {}
+    }
+    final candidates = (openBills.isNotEmpty ? openBills : _credit).where((c) {
       if (!_isOpenCredit(c)) return false;
       if (staffId.isEmpty) return true;
       return '${c['staff_id'] ?? ''}' == staffId;
     }).toList();
-    final remaining = _n(entry, ['remaining_amount']);
 
-    final generalOption = <String, dynamic>{
-      'id': 'unlinked',
-      'description':
-          'General Staff Salary Credit (Credit to Payroll / Future Bills)',
-    };
-    final options = [generalOption, ...candidates];
-
-    Map<String, dynamic>? selected =
-        candidates.isNotEmpty ? candidates.first : generalOption;
+    final seenCandidateIds = <String>{'auto', 'unlinked'};
+    final uniqueCandidates = <Map<String, dynamic>>[];
+    for (final c in candidates) {
+      final cid = '${c['id'] ?? ''}';
+      if (cid.isNotEmpty && !seenCandidateIds.contains(cid)) {
+        seenCandidateIds.add(cid);
+        uniqueCandidates.add(c);
+      }
+    }
+    String selectedTargetId = uniqueCandidates.isNotEmpty ? 'auto' : 'unlinked';
     final amount = TextEditingController(text: remaining.toStringAsFixed(0));
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
+        builder: (ctx, setD) {
+          final effectiveCandidateId = seenCandidateIds.contains(selectedTargetId)
+              ? selectedTargetId
+              : (uniqueCandidates.isNotEmpty ? 'auto' : 'unlinked');
+          return AlertDialog(
           title: const Text('Apply Paid Bill Entry'),
           content: SizedBox(
             width: 480,
@@ -2127,38 +2364,51 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                         'staff_name'
                       ]).ifEmpty('Staff')} — ${_money(remaining)} remaining to apply',
                   style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w700),
+                       fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<Map<String, dynamic>>(
-                  value: selected,
+                DropdownButtonFormField<String>(
+                  value: effectiveCandidateId,
                   decoration: _dec('Credit bill or account target *'),
                   isExpanded: true,
-                  selectedItemBuilder: (_) => _buildSelectedDropdownItems(
-                      options,
-                      highlightUnlinked: true),
-                  items: options
-                      .map((c) => DropdownMenuItem(
-                            value: c,
-                            child: Text(
-                              c['id'] == 'unlinked'
-                                  ? c['description']
-                                  : '${_t(c, [
-                                          'description',
-                                          'reason'
-                                        ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: c['id'] == 'unlinked'
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: c['id'] == 'unlinked' ? _success : _text,
-                              ),
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setD(() => selected = v),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: 'auto',
+                      child: Text(
+                        '⚡ Auto-Apply to Oldest Open Bill (FIFO - Recommended)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _accent,
+                        ),
+                      ),
+                    ),
+                    for (final c in uniqueCandidates)
+                      DropdownMenuItem<String>(
+                        value: '${c['id']}',
+                        child: Text(
+                          '${_t(c, [
+                                  'bill_number',
+                                  'description',
+                                  'reason'
+                                ]).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    const DropdownMenuItem<String>(
+                      value: 'unlinked',
+                      child: Text(
+                        'General Staff Salary Credit (Credit to Payroll / Future Bills)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _success,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (v) => setD(() => selectedTargetId = v ?? 'auto'),
                 ),
                 const SizedBox(height: 10),
                 _numField(amount, 'Amount to apply (KES) *'),
@@ -2172,7 +2422,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
             ElevatedButton(
               onPressed: () {
                 final v = num.tryParse(amount.text.trim()) ?? 0;
-                if (selected == null || v <= 0) {
+                if (selectedTargetId.isEmpty || v <= 0) {
                   _snack('Select a valid target and amount');
                   return;
                 }
@@ -2181,52 +2431,88 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
               child: const Text('Apply & Approve'),
             ),
           ],
-        ),
-      ),
-    );
+        );
+      },
+    ),
+  );
     final value = num.tryParse(amount.text.trim()) ?? 0;
     amount.dispose();
-    if (ok != true || selected == null) return;
+    if (ok != true || selectedTargetId.isEmpty) return;
     await _run(
         () => _repo.applyCashierPaidCreditEntry('${entry['id']}', {
-              'staff_credit_bill_id': '${selected!['id']}',
+              'staff_credit_bill_id': selectedTargetId,
               'amount': value,
             }),
-        ok: 'Payment processed successfully');
+        ok: 'Payment processed and bill deducted successfully');
+    await _load();
   }
 
-  /// Directly record a staff member settling money toward their credit bill
-  /// — for when the branch accountant collects/hears about the payment
-  /// themselves rather than reviewing one a cashier already logged in a
-  /// shift. This works like the cashier station "paid bills" flow:
-  /// the accountant records a payment for the staff member and the backend
-  /// auto-applies it FIFO across that staff member's open credit bills.
+  /// Directly record a staff member settling money toward their credit bill.
+  /// Deducts credit balance and synchronizes payment across ledger.
   Future<void> _recordPaidBillDialog() async {
     String staffId = '';
     String paymentMethod = 'cash';
     final reference = TextEditingController();
     final amount = TextEditingController();
+    List<Map<String, dynamic>> staffOpenBills = [];
+    String selectedTargetId = 'auto';
+    bool loadingBills = false;
 
-    List<Map<String, dynamic>> candidatesFor(String id) => _credit
-        .where((c) => _isOpenCredit(c) && '${c['staff_id'] ?? ''}' == id)
-        .toList();
+    Future<void> fetchStaffBills(String sId, StateSetter setD) async {
+      if (sId.isEmpty) {
+        setD(() {
+          staffOpenBills = [];
+          selectedTargetId = 'auto';
+          loadingBills = false;
+        });
+        return;
+      }
+      setD(() => loadingBills = true);
+      try {
+        final bills = await _repo.getPayrollCreditBills(staffId: sId, status: 'outstanding');
+        if (!mounted) return;
+        setD(() {
+          staffOpenBills = bills.where((b) => _isOpenCredit(b)).toList();
+          selectedTargetId = 'auto';
+          loadingBills = false;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setD(() {
+          staffOpenBills = _credit.where((c) => _isOpenCredit(c) && '${c['staff_id'] ?? ''}' == sId).toList();
+          selectedTargetId = 'auto';
+          loadingBills = false;
+        });
+      }
+    }
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) {
-          final candidates = staffId.isEmpty
-              ? <Map<String, dynamic>>[]
-              : candidatesFor(staffId);
-          final outstandingTotal = candidates.fold<num>(
+          final outstandingTotal = staffOpenBills.fold<num>(
             0,
             (sum, bill) => sum + _creditBalance(bill),
           );
           final needsReference = paymentMethod != 'cash';
+
+          final seenTargetIds = <String>{'auto'};
+          final uniqueStaffOpenBills = <Map<String, dynamic>>[];
+          for (final c in staffOpenBills) {
+            final cid = '${c['id'] ?? ''}';
+            if (cid.isNotEmpty && !seenTargetIds.contains(cid)) {
+              seenTargetIds.add(cid);
+              uniqueStaffOpenBills.add(c);
+            }
+          }
+          final effectiveTargetId = seenTargetIds.contains(selectedTargetId)
+              ? selectedTargetId
+              : 'auto';
+
           return AlertDialog(
             title: const Text('Record Paid Bill'),
             content: SizedBox(
-              width: 460,
+              width: 480,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2234,17 +2520,27 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                   children: [
                     _staffField(
                         staffId,
-                        (v) => setD(() {
-                              staffId = v;
-                            })),
+                        (v) {
+                          setD(() => staffId = v);
+                          fetchStaffBills(v, setD);
+                        }),
                     const SizedBox(height: 10),
-                    if (staffId.isNotEmpty && candidates.isEmpty)
+                    if (loadingBills)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Center(
+                            child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2))),
+                      ),
+                    if (staffId.isNotEmpty && !loadingBills && staffOpenBills.isEmpty)
                       const Text(
                         'This staff member has no open credit bill to '
                         'reduce right now.',
                         style: TextStyle(color: _danger, fontSize: 12),
                       ),
-                    if (candidates.isNotEmpty)
+                    if (staffOpenBills.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -2254,11 +2550,41 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                               color: _success.withValues(alpha: .18)),
                         ),
                         child: Text(
-                          '${candidates.length} open credit bill(s) found • Total outstanding ${_money(outstandingTotal)}',
+                          '${staffOpenBills.length} open credit bill(s) found • Total outstanding ${_money(outstandingTotal)}',
                           style: const TextStyle(
                               fontSize: 12, fontWeight: FontWeight.w700),
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: effectiveTargetId,
+                        decoration: _dec('Target credit bill *'),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: 'auto',
+                            child: Text(
+                              '⚡ Auto-Apply across oldest open bills (FIFO)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _accent,
+                              ),
+                            ),
+                          ),
+                          for (final c in uniqueStaffOpenBills)
+                            DropdownMenuItem<String>(
+                              value: '${c['id']}',
+                              child: Text(
+                                '${_t(c, ['bill_number', 'description', 'reason']).ifEmpty('Credit bill')} — Bal ${_money(_creditBalance(c))}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => setD(() => selectedTargetId = v ?? 'auto'),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     _numField(amount, 'Amount paid (KES) *'),
                     const SizedBox(height: 10),
@@ -2301,7 +2627,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                     _snack('Select the staff member who paid');
                     return;
                   }
-                  if (candidates.isEmpty) {
+                  if (staffOpenBills.isEmpty) {
                     _snack(
                         'This staff member has no open credit bill to reduce');
                     return;
@@ -2334,9 +2660,12 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
               'staff_id': staffId,
               'amount': value,
               'payment_method': paymentMethod,
+              if (selectedTargetId != 'auto')
+                'staff_credit_bill_id': selectedTargetId,
               if (ref.isNotEmpty) 'reference': ref,
             }),
         ok: 'Paid bill recorded and applied to staff credit balance');
+    await _load();
   }
 
   Future<void> _viewContents(Map m) async {
@@ -2345,17 +2674,37 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       contents = await _repo.getPayrollCreditBillContents('${m['id']}');
     } catch (_) {}
     if (!mounted) return;
-    final items =
-        (contents['items'] ?? contents['contents'] ?? contents['data']);
+    final rawData = contents['data'];
+    final items = contents['items'] ??
+        contents['contents'] ??
+        (rawData is Map ? rawData['items'] : (rawData is List ? rawData : null));
     final list =
         items is List ? items.whereType<Map>().toList() : const <Map>[];
+    final desc = '${m['description'] ?? ''}'.toLowerCase();
+    final billNo = '${m['bill_number'] ?? ''}';
+    final isKitchen = desc.contains('kitchen') || billNo.startsWith('CRD-KV');
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('${_staffName(m)} — Credit Bill'),
+        title: Row(
+          children: [
+            if (isKitchen) ...[
+              Icon(Icons.soup_kitchen_outlined, color: Colors.orange.shade800),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                isKitchen
+                    ? 'Kitchen Variance Credit Bill — ${_staffName(m)}'
+                    : '${_staffName(m)} — Credit Bill',
+              ),
+            ),
+          ],
+        ),
         content: SizedBox(
-          width: 480,
-          height: (MediaQuery.of(ctx).size.height * 0.55).clamp(240.0, 440.0),
+          width: 520,
+          height: (MediaQuery.of(ctx).size.height * 0.55).clamp(240.0, 480.0),
           child: list.isEmpty
               ? SingleChildScrollView(
                   child: Padding(
@@ -2370,9 +2719,10 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, index) {
                     final it = Map<String, dynamic>.from(list[index]);
-                    final qty = _n(it, ['quantity', 'qty']);
+                    final qty = _n(it, ['quantity', 'qty', 'variance_qty']);
                     final unitPrice = _n(it, [
                       'unit_price',
+                      'cost_price',
                       'selling_price',
                       'price',
                       'menu_price',
@@ -2380,6 +2730,7 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                     ]);
                     final totalPrice = _n(it, [
                       'total_price',
+                      'variance_cost',
                       'line_total',
                       'total_amount',
                       'subtotal',
@@ -2390,6 +2741,8 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                         ? totalPrice
                         : (qty > 0 && unitPrice > 0 ? qty * unitPrice : unitPrice);
 
+                    final unit = '${it['unit'] ?? ''}'.trim();
+
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -2397,16 +2750,25 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
                         '${it['name'] ?? it['item_name'] ?? it['description'] ?? 'Item'}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      subtitle: qty > 0 || unitPrice > 0
+                      subtitle: isKitchen
                           ? Text(
-                              'Qty ${qty > 0 ? qty : 1}${unitPrice > 0 ? ' • Unit ${_money(unitPrice)}' : ''}',
-                              style: const TextStyle(fontSize: 12),
+                              'Shortage: -${qty > 0 ? qty.toStringAsFixed(2) : '1'} ${unit.isNotEmpty ? unit : 'units'} • Unit Cost ${_money(unitPrice)}',
+                              style: const TextStyle(fontSize: 12, color: Colors.red),
                             )
-                          : null,
+                          : (qty > 0 || unitPrice > 0
+                              ? Text(
+                                  'Qty ${qty > 0 ? qty : 1}${unit.isNotEmpty ? ' $unit' : ''}${unitPrice > 0 ? ' • Unit ${_money(unitPrice)}' : ''}',
+                                  style: const TextStyle(fontSize: 12),
+                                )
+                              : null),
                       trailing: Text(
                         _money(finalTotal),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isKitchen ? Colors.red.shade700 : null,
+                        ),
                       ),
                     );
                   },

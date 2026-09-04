@@ -30,9 +30,13 @@ import 'kitchen_stocktake_screen.dart';
 import 'store_stocktake_screen.dart';
 import 'record_spoilage_screen.dart';
 import 'wastage_report_screen.dart';
+import 'grn_screen.dart';
 import '../../kitchen/presentation/kitchen_sessions_screen.dart';
 import '../../kitchen_operations/data/repository.dart';
 import 'supplier_folio_screen.dart';
+// Reuse the branch accountant's self-contained Sold Items analytics section.
+import '../../branch_accountant/presentation/branch_accountant_dashboard.dart'
+    show SoldItemsSection;
 
 enum BranchStorekeeperSection {
   overview,
@@ -41,6 +45,7 @@ enum BranchStorekeeperSection {
   inventoryLedger,
   receive,
   receiptVerification,
+  grn,
   suppliers,
   barStock,
   foodStuffsStock,
@@ -57,6 +62,7 @@ enum BranchStorekeeperSection {
   kitchenStocktake,
   recordSpoilage,
   wastageReport,
+  soldItems,
   reports,
   notifications,
   internalTransfers,
@@ -86,6 +92,7 @@ class _BranchStorekeeperDashboardState
   String _search = '';
   String _statusFilter = 'ALL';
   String _catalogFilter = 'all';
+  int _masterInventoryTabIndex = 0;
   String? _poSupplierFilter;
   String? _selectedRequestId;
   final _receiveBarcodeCtrl = TextEditingController();
@@ -1035,6 +1042,12 @@ class _BranchStorekeeperDashboardState
           icon: PhosphorIcons.clipboardText(),
           group: 'Receiving',
         ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.grn,
+          label: 'Goods Received (GRN)',
+          icon: Icons.receipt_long,
+          group: 'Receiving',
+        ),
         MasterNavItem(
           section: BranchStorekeeperSection.suppliers,
           label: 'Local Vendors',
@@ -1087,6 +1100,12 @@ class _BranchStorekeeperDashboardState
           section: BranchStorekeeperSection.stockOut,
           label: 'Stock Out & Requisitions',
           icon: PhosphorIcons.trendDown(),
+          group: 'Usage',
+        ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.soldItems,
+          label: 'Sold Items',
+          icon: Icons.inventory_2,
           group: 'Usage',
         ),
         const MasterNavItem(
@@ -1183,8 +1202,17 @@ class _BranchStorekeeperDashboardState
         );
       case BranchStorekeeperSection.recordSpoilage:
         return const RecordSpoilageScreen();
+      case BranchStorekeeperSection.grn:
+        return GrnScreen(
+          onBack: () =>
+              setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.wastageReport:
         return const WastageReportScreen();
+      case BranchStorekeeperSection.soldItems:
+        // Lighter default window so it loads fast; the range can be widened
+        // from the date picker inside the screen.
+        return const SoldItemsSection(initialRangeDays: 7);
       case BranchStorekeeperSection.reports:
         return _reportsPage();
       case BranchStorekeeperSection.notifications:
@@ -1313,9 +1341,15 @@ class _BranchStorekeeperDashboardState
         actions: [
           _RefreshButton(onPressed: _loadAll),
           OutlinedButton.icon(
-            onPressed: _exportStockLedger,
+            onPressed: () => _exportStockLedger(
+              exportType: _masterInventoryTabIndex == 1
+                  ? 'central_catalog'
+                  : 'branch_stock',
+            ),
             icon: Icon(PhosphorIcons.download()),
-            label: const Text('Export Ledger'),
+            label: Text(_masterInventoryTabIndex == 1
+                ? 'Export Master Catalog'
+                : 'Export Branch Stock'),
           ),
           FilledButton.icon(
             onPressed: () => _go(BranchStorekeeperSection.receive),
@@ -1329,12 +1363,14 @@ class _BranchStorekeeperDashboardState
               color: AppColors.kPrimary,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const TabBar(
+            child: TabBar(
+              onTap: (index) =>
+                  setState(() => _masterInventoryTabIndex = index),
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
               indicatorColor: Colors.white,
               indicatorSize: TabBarIndicatorSize.tab,
-              tabs: [
+              tabs: const [
                 Tab(
                   icon: Icon(Icons.inventory_2_outlined, size: 18),
                   text: 'Branch Inventory',
@@ -1359,6 +1395,7 @@ class _BranchStorekeeperDashboardState
                   qty: _qty,
                   toNum: _num,
                   onRequest: _quickRequestStock,
+                  onEditClassification: _editItemClassification,
                 ),
                 _CentralCatalogTab(
                   catalog: _catalog,
@@ -1368,6 +1405,7 @@ class _BranchStorekeeperDashboardState
                   onFilterChanged: (v) => setState(() => _catalogFilter = v),
                   toNum: _num,
                   onRegister: _openRegistrationDialog,
+                  onEditClassification: _editItemClassification,
                   onRefresh: _loadAll,
                 ),
               ],
@@ -3153,49 +3191,57 @@ class _BranchStorekeeperDashboardState
     });
   }
 
-  List<Map<String, dynamic>> get _stockOutDepartmentOptions =>
-      _departmentAccounts.isNotEmpty
-          ? _departmentAccounts
-          : const [
-              {
-                'department_code': 'main_kitchen',
-                'department_name': 'Main Kitchen'
-              },
-              {
-                'department_code': 'choma_zone_kitchen',
-                'department_name': 'Choma Zone Kitchen'
-              },
-              {
-                'department_code': 'pastries_kitchen',
-                'department_name': 'Pastries Kitchen'
-              },
-              {'department_code': 'buffet', 'department_name': 'Buffets'},
-              {
-                'department_code': 'outside_catering',
-                'department_name': 'Outside Catering'
-              },
-              {
-                'department_code': 'accommodation_breakfast',
-                'department_name': 'Accommodation Breakfast'
-              },
-              {'department_code': 'main_bar', 'department_name': 'Main Bar'},
-              {
-                'department_code': 'executive_bar',
-                'department_name': 'Executive Bar'
-              },
-              {
-                'department_code': 'housekeeping',
-                'department_name': 'Housekeeping & Maintenance'
-              },
-              {
-                'department_code': 'spa_sauna',
-                'department_name': 'Spa & Sauna'
-              },
-              {
-                'department_code': 'back_office',
-                'department_name': 'Back Office'
-              },
-            ];
+  List<Map<String, dynamic>> get _stockOutDepartmentOptions {
+    final list = _departmentAccounts.where((dept) {
+      final code = '${dept['department_code'] ?? ''}'.toLowerCase();
+      final type = '${dept['department_type'] ?? ''}'.toLowerCase();
+      return type != 'kitchen' &&
+          type != 'event' &&
+          code != 'main_kitchen' &&
+          code != 'choma_zone_kitchen' &&
+          code != 'pastries_kitchen' &&
+          code != 'buffet' &&
+          code != 'outside_catering' &&
+          code != 'accommodation_breakfast';
+    }).toList();
+
+    return list.isNotEmpty
+        ? list
+        : const [
+            {
+              'department_code': 'executive_bar',
+              'department_name': 'Executive Bar',
+            },
+            {
+              'department_code': 'main_bar',
+              'department_name': 'Main Bar',
+            },
+            {
+              'department_code': 'non_consumables',
+              'department_name': 'Non-Consumables',
+            },
+            {
+              'department_code': 'housekeeping',
+              'department_name': 'Housekeeping & Maintenance',
+            },
+            {
+              'department_code': 'spa_sauna',
+              'department_name': 'Spa & Sauna',
+            },
+            {
+              'department_code': 'car_wash',
+              'department_name': 'Car Wash',
+            },
+            {
+              'department_code': 'swimming_pool',
+              'department_name': 'Swimming Pool',
+            },
+            {
+              'department_code': 'back_office',
+              'department_name': 'Back Office & Admin',
+            },
+          ];
+  }
 
   String _departmentNameFor(String departmentCode) {
     for (final item in _stockOutDepartmentOptions) {
@@ -3249,7 +3295,7 @@ class _BranchStorekeeperDashboardState
   Future<bool> _submitStockOutDocument({
     required List<Map<String, dynamic>> lines,
     required String departmentCode,
-    required String shiftCode,
+    String shiftCode = '',
     required String notes,
     String? eventName,
     int? paxCount,
@@ -3406,12 +3452,10 @@ class _BranchStorekeeperDashboardState
     final requestorCtrl = TextEditingController();
     final purposeCtrl = TextEditingController();
     final lines = <Map<String, dynamic>>[];
-    String departmentCode = _departmentAccounts.isNotEmpty
-        ? '${_departmentAccounts.first['department_code']}'
-        : 'main_kitchen';
-    String shiftCode = 'A';
-
     final departmentOptions = _stockOutDepartmentOptions;
+    String departmentCode = departmentOptions.isNotEmpty
+        ? '${departmentOptions.first['department_code']}'
+        : 'executive_bar';
 
     showDialog<void>(
       context: context,
@@ -3435,49 +3479,22 @@ class _BranchStorekeeperDashboardState
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: departmentCode,
-                          decoration: const InputDecoration(
-                            labelText: 'Department *',
-                            prefixIcon: Icon(Icons.business),
-                          ),
-                          items: departmentOptions
-                              .map((item) => DropdownMenuItem(
-                                    value: '${item['department_code']}',
-                                    child: Text(
-                                        '${item['department_name'] ?? item['department_code']}',
-                                        overflow: TextOverflow.ellipsis),
-                                  ))
-                              .toList(),
-                          onChanged: (v) => setS(() => departmentCode = v!),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: shiftCode,
-                          decoration: const InputDecoration(
-                            labelText: 'Shift',
-                            prefixIcon: Icon(Icons.schedule),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'A', child: Text('Shift A')),
-                            DropdownMenuItem(
-                                value: 'B', child: Text('Shift B')),
-                            DropdownMenuItem(
-                                value: '', child: Text('No shift')),
-                          ],
-                          onChanged: (v) => setS(() => shiftCode = v ?? ''),
-                        ),
-                      ),
-                    ],
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: departmentCode,
+                    decoration: const InputDecoration(
+                      labelText: 'Department / Outlet *',
+                      prefixIcon: Icon(Icons.business),
+                    ),
+                    items: departmentOptions
+                        .map((item) => DropdownMenuItem(
+                              value: '${item['department_code']}',
+                              child: Text(
+                                  '${item['department_name'] ?? item['department_code']}',
+                                  overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (v) => setS(() => departmentCode = v!),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -3559,7 +3576,6 @@ class _BranchStorekeeperDashboardState
                         final result = await _repo.createDepartmentRequestLog({
                           'department_code': departmentCode,
                           'requestor_name': requestorCtrl.text.trim(),
-                          if (shiftCode.isNotEmpty) 'shift_code': shiftCode,
                           if (purposeCtrl.text.trim().isNotEmpty)
                             'purpose': purposeCtrl.text.trim(),
                           'items': lines
@@ -3731,9 +3747,9 @@ class _BranchStorekeeperDashboardState
       actions: [
         _RefreshButton(onPressed: _loadAll),
         OutlinedButton.icon(
-          onPressed: _exportStockLedger,
+          onPressed: () => _exportStockMovementLedger(filter: _ledgerFilter),
           icon: Icon(PhosphorIcons.download()),
-          label: const Text('Export'),
+          label: const Text('Export Ledger'),
         ),
       ],
       children: [
@@ -4224,6 +4240,8 @@ class _BranchStorekeeperDashboardState
             children: [
               _ReportButton(
                   'Stock Ledger', PhosphorIcons.package(), _exportStockLedger),
+              _ReportButton('Stock Movement Ledger',
+                  PhosphorIcons.arrowsLeftRight(), () => _exportStockMovementLedger()),
               _ReportButton('Receiving Oversight', PhosphorIcons.truck(),
                   _exportDispatches),
               _ReportButton('Request History', PhosphorIcons.gitPullRequest(),
@@ -4427,12 +4445,31 @@ class _BranchStorekeeperDashboardState
     );
   }
 
-  Future<void> _exportStockLedger() async {
+  Future<void> _exportStockLedger({String? exportType}) async {
     try {
-      final file = await _repo.exportStockLedger();
-      _showSnack('Stock ledger downloaded: ${file.path}');
+      final type = exportType ??
+          (_section == BranchStorekeeperSection.stock &&
+                  _masterInventoryTabIndex == 1
+              ? 'central_catalog'
+              : 'branch_stock');
+      final isCatalog = type == 'central_catalog';
+      final file = await _repo.exportStockLedger(exportType: type);
+      _showSnack(
+          '${isCatalog ? "Master inventory" : "Branch stock"} downloaded: ${file.path}');
     } catch (error) {
-      _showSnack('Stock ledger export failed: $error', error: true);
+      _showSnack('Stock export failed: $error', error: true);
+    }
+  }
+
+  Future<void> _exportStockMovementLedger({String? filter}) async {
+    try {
+      final file = await _repo.exportStockLedger(
+        exportType: 'movement_ledger',
+        movementType: filter != null && filter != 'ALL' ? filter : null,
+      );
+      _showSnack('Stock movement ledger downloaded: ${file.path}');
+    } catch (error) {
+      _showSnack('Movement ledger export failed: $error', error: true);
     }
   }
 
@@ -4509,6 +4546,96 @@ class _BranchStorekeeperDashboardState
       _showSnack('Stock request submitted');
     } catch (error) {
       _showSnack('Request failed: $error', error: true);
+    }
+  }
+
+  // Re-classify an item's Store type (drives the badge) + Category. Scoped to
+  // this branch by the backend. Fixes items like cleaners that show as "Food".
+  Future<void> _editItemClassification(Map<String, dynamic> item) async {
+    final sku = '${item['item_sku'] ?? item['sku'] ?? ''}';
+    if (sku.isEmpty) {
+      _showSnack('This item has no SKU to update.', error: true);
+      return;
+    }
+    const storeTypes = <String, String>{
+      'foodstuffs': 'Food',
+      'bar_store': 'Bar',
+      'dry_goods': 'Dry Goods',
+      'pastry': 'Pastry',
+      'non_consumables': 'Non-Food (cleaning / other)',
+    };
+    var storeType =
+        '${item['store_type'] ?? item['item']?['store_type'] ?? 'foodstuffs'}';
+    if (!storeTypes.containsKey(storeType)) storeType = 'foodstuffs';
+    final categoryCtrl = TextEditingController(
+        text: '${item['category'] ?? item['item']?['category'] ?? ''}');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text('Edit classification — ${_itemName(item)}'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: storeType,
+                  decoration: const InputDecoration(
+                    labelText: 'Store type *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final e in storeTypes.entries)
+                      DropdownMenuItem(value: e.key, child: Text(e.value)),
+                  ],
+                  onChanged: (v) => setD(() => storeType = v ?? storeType),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: categoryCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    hintText: 'e.g. DRY GOODS, PASTRY, KITCHEN MENU',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'The Store type controls the coloured badge (Food / Bar / Dry / '
+                  'Pastry / Non-Food). Only this branch is affected.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    final category = categoryCtrl.text.trim();
+    categoryCtrl.dispose();
+    if (saved != true) return;
+    try {
+      await _repo.updateItemClassification(
+        sku,
+        category: category,
+        storeType: storeType,
+      );
+      await _loadAll();
+      _showSnack('Classification updated');
+    } catch (error) {
+      _showSnack('Update failed: $error', error: true);
     }
   }
 
@@ -6100,12 +6227,12 @@ class _BranchStorekeeperDashboardState
     final lines = <Map<String, dynamic>>[
       if (preloadLines != null) ...preloadLines,
     ];
+    final departmentOptions = _stockOutDepartmentOptions;
     String departmentCode = preloadDeptCode.isNotEmpty
         ? preloadDeptCode
-        : _departmentAccounts.isNotEmpty
-            ? '${_departmentAccounts.first['department_code']}'
-            : 'main_kitchen';
-    String shiftCode = 'A';
+        : departmentOptions.isNotEmpty
+            ? '${departmentOptions.first['department_code']}'
+            : 'executive_bar';
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
@@ -6131,48 +6258,6 @@ class _BranchStorekeeperDashboardState
         }).toList();
         final totalQuantity =
             lines.fold<num>(0, (sum, line) => sum + _num(line['quantity']));
-        final departmentOptions = _departmentAccounts.isNotEmpty
-            ? _departmentAccounts
-            : const [
-                {
-                  'department_code': 'main_kitchen',
-                  'department_name': 'Main Kitchen'
-                },
-                {
-                  'department_code': 'choma_zone_kitchen',
-                  'department_name': 'Choma Zone Kitchen'
-                },
-                {
-                  'department_code': 'pastries_kitchen',
-                  'department_name': 'Pastries Kitchen'
-                },
-                {'department_code': 'buffet', 'department_name': 'Buffets'},
-                {
-                  'department_code': 'outside_catering',
-                  'department_name': 'Outside Catering'
-                },
-                {
-                  'department_code': 'accommodation_breakfast',
-                  'department_name': 'Accommodation Breakfast'
-                },
-                {'department_code': 'main_bar', 'department_name': 'Main Bar'},
-                {
-                  'department_code': 'executive_bar',
-                  'department_name': 'Executive Bar'
-                },
-                {
-                  'department_code': 'housekeeping',
-                  'department_name': 'Housekeeping & Maintenance'
-                },
-                {
-                  'department_code': 'spa_sauna',
-                  'department_name': 'Spa & Sauna'
-                },
-                {
-                  'department_code': 'back_office',
-                  'department_name': 'Back Office'
-                },
-              ];
         return AlertDialog(
           title: Text(preloadRef.isNotEmpty
               ? 'Issue Stock — Ref: $preloadRef'
@@ -6228,52 +6313,24 @@ class _BranchStorekeeperDashboardState
                       ),
                     ),
                   const SizedBox(height: 14),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: departmentCode,
-                          decoration: const InputDecoration(
-                            labelText: 'Department',
-                            prefixIcon: Icon(Icons.business),
-                          ),
-                          items: departmentOptions
-                              .map((item) => DropdownMenuItem(
-                                    value: '${item['department_code']}',
-                                    child: Text(
-                                      '${item['department_name'] ?? item['department_code']}',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ))
-                              .toList(),
-                          onChanged: (value) =>
-                              setDialogState(() => departmentCode = value!),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: shiftCode,
-                          decoration: const InputDecoration(
-                            labelText: 'Shift',
-                            prefixIcon: Icon(Icons.schedule),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'A', child: Text('Shift A')),
-                            DropdownMenuItem(
-                                value: 'B', child: Text('Shift B')),
-                            DropdownMenuItem(
-                                value: '', child: Text('No shift')),
-                          ],
-                          onChanged: (value) =>
-                              setDialogState(() => shiftCode = value ?? ''),
-                        ),
-                      ),
-                    ],
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: departmentCode,
+                    decoration: const InputDecoration(
+                      labelText: 'Department / Outlet',
+                      prefixIcon: Icon(Icons.business),
+                    ),
+                    items: departmentOptions
+                        .map((item) => DropdownMenuItem(
+                              value: '${item['department_code']}',
+                              child: Text(
+                                '${item['department_name'] ?? item['department_code']}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => departmentCode = value!),
                   ),
                   if (eventConfig != null) ...[
                     const SizedBox(height: 12),
@@ -6341,7 +6398,6 @@ class _BranchStorekeeperDashboardState
                             'item_sku': line['item_sku'],
                             'quantity': _num(line['quantity']),
                             'department_code': departmentCode,
-                            if (shiftCode.isNotEmpty) 'shift_code': shiftCode,
                             'destination_type': eventConfig != null
                                 ? departmentCode
                                 : 'department_issue',
@@ -7403,6 +7459,7 @@ class _LineEditor extends StatefulWidget {
     this.quantityKey = 'quantity',
     this.priceEnabled = true,
     this.showCentralAvailable = false,
+    this.availableStockLabel = 'Branch Store',
     this.destinationOptions = const [],
     this.destinationEnabled = false,
     this.destinationLabel = 'Destination item',
@@ -7419,6 +7476,7 @@ class _LineEditor extends StatefulWidget {
   final String quantityKey;
   final bool priceEnabled;
   final bool showCentralAvailable;
+  final String availableStockLabel;
   final List<Map<String, dynamic>> destinationOptions;
   final bool destinationEnabled;
   final String destinationLabel;
@@ -7645,8 +7703,8 @@ class _LineEditorState extends State<_LineEditor> {
                               ),
                               child: Text(
                                 centralQty <= 0
-                                    ? 'PENDING ARRIVAL'
-                                    : 'Available: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
+                                    ? '${widget.availableStockLabel}: 0 (Pending Arrival)'
+                                    : '${widget.availableStockLabel}: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -7970,7 +8028,7 @@ class _LineEditorState extends State<_LineEditor> {
 typedef _DirectIssueSubmitCallback = Future<bool> Function({
   required List<Map<String, dynamic>> lines,
   required String departmentCode,
-  required String shiftCode,
+  String shiftCode,
   required String notes,
   String? eventName,
   int? paxCount,
@@ -8023,22 +8081,108 @@ class _DirectIssueWorkbench extends StatefulWidget {
 }
 
 class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
-  static const _eventDepartments = {
-    'buffet': (label: 'Buffet Name', pax: true),
-    'outside_catering': (label: 'Event Name', pax: true),
-    'accommodation_breakfast': (label: 'Guest / Room', pax: false),
-  };
+  static const _nonConsumableCategories = [
+    {'code': 'car_wash', 'name': 'Car Wash', 'icon': Icons.local_car_wash},
+    {'code': 'swimming_pool', 'name': 'Swimming Pool', 'icon': Icons.pool},
+    {
+      'code': 'housekeeping',
+      'name': 'Housekeeping & Maintenance',
+      'icon': Icons.cleaning_services
+    },
+    {'code': 'spa_sauna', 'name': 'Spa & Sauna', 'icon': Icons.spa},
+    {
+      'code': 'back_office',
+      'name': 'Back Office & Admin',
+      'icon': Icons.admin_panel_settings
+    },
+    {
+      'code': 'playground',
+      'name': 'Playground & Recreation',
+      'icon': Icons.park
+    },
+    {
+      'code': 'other_non_consumables',
+      'name': 'Other Non-Consumables',
+      'icon': Icons.category
+    },
+  ];
 
   final _notesCtrl = TextEditingController();
-  final _eventNameCtrl = TextEditingController();
-  final _paxCtrl = TextEditingController();
 
   late List<Map<String, dynamic>> _lines;
-  late String _departmentCode;
+  late String _destinationKey;
+  String _nonConsumableCategory = 'car_wash';
   String? _outletId;
-  String _shiftCode = 'A';
   bool _submitting = false;
-  late _StockOutDestinationMode _mode;
+
+  List<Map<String, dynamic>> get _destinationOptions {
+    final list = <Map<String, dynamic>>[];
+
+    // 1. Executive Bar
+    final execOutlet = widget.outletOptions.firstWhere(
+      (o) =>
+          _destinationItemName(o).toLowerCase().contains('exec') ||
+          '${o['outlet_type']}'.toLowerCase().contains('exec') ||
+          '${o['name']}'.toLowerCase().contains('exec'),
+      orElse: () => <String, dynamic>{},
+    );
+    list.add({
+      'key': 'executive_bar',
+      'name': 'Executive Bar',
+      'icon': Icons.wine_bar,
+      'outlet_id': execOutlet.isNotEmpty ? _outletIdFor(execOutlet) : '',
+      'department_code': 'executive_bar',
+    });
+
+    // 2. Main Bar
+    final mainBarOutlet = widget.outletOptions.firstWhere(
+      (o) =>
+          '${o['name']}'.toLowerCase().contains('main bar') ||
+          '${o['outlet_type']}'.toLowerCase() == 'main_bar',
+      orElse: () => <String, dynamic>{},
+    );
+    list.add({
+      'key': 'main_bar',
+      'name': 'Main Bar',
+      'icon': Icons.sports_bar,
+      'outlet_id': mainBarOutlet.isNotEmpty ? _outletIdFor(mainBarOutlet) : '',
+      'department_code': 'main_bar',
+    });
+
+    // 3. Other bar outlets (like Sports Bar)
+    for (final outlet in widget.outletOptions) {
+      final name = '${outlet['name'] ?? ''}'.toLowerCase();
+      final type = '${outlet['outlet_type'] ?? ''}'.toLowerCase();
+      if ((type.contains('sports') || name.contains('sports')) &&
+          !list.any((d) => d['key'] == 'sports_bar')) {
+        list.add({
+          'key': 'sports_bar',
+          'name': widget.outletDisplayName(outlet),
+          'icon': Icons.sports_bar,
+          'outlet_id': _outletIdFor(outlet),
+          'department_code': 'main_bar',
+        });
+      }
+    }
+
+    // 4. Non-Consumables
+    final ncOutlet = widget.outletOptions.firstWhere(
+      (o) =>
+          '${o['name']}'.toLowerCase().contains('non-consumable') ||
+          '${o['outlet_type']}'.toLowerCase().contains('non_consumable') ||
+          '${o['outlet_type']}'.toLowerCase() == 'other',
+      orElse: () => <String, dynamic>{},
+    );
+    list.add({
+      'key': 'non_consumables',
+      'name': 'Non-Consumables',
+      'icon': Icons.inventory_2_outlined,
+      'outlet_id': ncOutlet.isNotEmpty ? _outletIdFor(ncOutlet) : '',
+      'department_code': 'non_consumables',
+    });
+
+    return list;
+  }
 
   @override
   void initState() {
@@ -8047,42 +8191,100 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       if (widget.preloadLines != null)
         ...widget.preloadLines!.map((line) => Map<String, dynamic>.from(line)),
     ];
-    _departmentCode = widget.preloadDeptCode.isNotEmpty
-        ? widget.preloadDeptCode
-        : widget.departmentOptions.isNotEmpty
-            ? '${widget.departmentOptions.first['department_code']}'
-            : 'main_kitchen';
-    _mode = widget.initialMode;
-    _outletId = widget.outletOptions.isNotEmpty
-        ? _outletIdFor(widget.outletOptions.first)
-        : null;
-    if (_outletId != null && _outletId!.isNotEmpty) {
-      widget.onOutletChanged(_outletId!);
+
+    final preloadDept = widget.preloadDeptCode.trim().toLowerCase();
+    if (preloadDept.isNotEmpty) {
+      if (_nonConsumableCategories.any((c) => c['code'] == preloadDept)) {
+        _destinationKey = 'non_consumables';
+        _nonConsumableCategory = preloadDept;
+      } else if (preloadDept.contains('exec')) {
+        _destinationKey = 'executive_bar';
+      } else if (preloadDept.contains('main')) {
+        _destinationKey = 'main_bar';
+      } else {
+        _destinationKey = 'executive_bar';
+      }
+    } else {
+      _destinationKey = 'executive_bar';
     }
-    _syncOutletLineTargets();
+    _syncSelectedDestination();
+  }
+
+  void _syncSelectedDestination() {
+    if (_destinationKey == 'non_consumables') {
+      _syncNonConsumableOutlet();
+    } else {
+      final match = _destinationOptions.firstWhere(
+        (o) => o['key'] == _destinationKey,
+        orElse: () => <String, dynamic>{},
+      );
+      final outId = '${match['outlet_id'] ?? ''}'.trim();
+      _outletId = outId.isNotEmpty ? outId : null;
+      if (_outletId != null && _outletId!.isNotEmpty) {
+        widget.onOutletChanged(_outletId!);
+      }
+      _syncOutletLineTargets();
+    }
+  }
+
+  void _syncNonConsumableOutlet() {
+    if (_nonConsumableCategory == 'spa_sauna') {
+      final spaOutlet = widget.outletOptions.firstWhere(
+        (o) =>
+            '${o['outlet_type']}'.toLowerCase() == 'spa' ||
+            _destinationItemName(o).toLowerCase().contains('spa'),
+        orElse: () => <String, dynamic>{},
+      );
+      if (spaOutlet.isNotEmpty) {
+        _outletId = _outletIdFor(spaOutlet);
+        widget.onOutletChanged(_outletId!);
+        _syncOutletLineTargets();
+        return;
+      }
+    }
+
+    final ncOutlet = widget.outletOptions.firstWhere(
+      (o) =>
+          '${o['outlet_type']}'.toLowerCase().contains('non_consumable') ||
+          '${o['outlet_type']}'.toLowerCase() == 'other' ||
+          _destinationItemName(o).toLowerCase().contains('non-consumable'),
+      orElse: () => <String, dynamic>{},
+    );
+    if (ncOutlet.isNotEmpty) {
+      _outletId = _outletIdFor(ncOutlet);
+      widget.onOutletChanged(_outletId!);
+      _syncOutletLineTargets();
+    } else {
+      _outletId = null;
+    }
   }
 
   @override
   void didUpdateWidget(covariant _DirectIssueWorkbench oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final preloadChanged =
-        oldWidget.preloadRef != widget.preloadRef ||
-            oldWidget.preloadDeptCode != widget.preloadDeptCode ||
-            (oldWidget.preloadLines?.length ?? 0) !=
-                (widget.preloadLines?.length ?? 0);
+    final preloadChanged = oldWidget.preloadRef != widget.preloadRef ||
+        oldWidget.preloadDeptCode != widget.preloadDeptCode ||
+        (oldWidget.preloadLines?.length ?? 0) !=
+            (widget.preloadLines?.length ?? 0);
     if (!preloadChanged) return;
 
     if (widget.preloadLines != null) {
       _lines = widget.preloadLines!
           .map((line) => Map<String, dynamic>.from(line))
           .toList();
-      if (widget.preloadDeptCode.isNotEmpty) {
-        _departmentCode = widget.preloadDeptCode;
+      final preloadDept = widget.preloadDeptCode.trim().toLowerCase();
+      if (preloadDept.isNotEmpty) {
+        if (_nonConsumableCategories.any((c) => c['code'] == preloadDept)) {
+          _destinationKey = 'non_consumables';
+          _nonConsumableCategory = preloadDept;
+        } else if (preloadDept.contains('exec')) {
+          _destinationKey = 'executive_bar';
+        } else if (preloadDept.contains('main')) {
+          _destinationKey = 'main_bar';
+        }
       }
-      _eventNameCtrl.clear();
-      _paxCtrl.clear();
       _notesCtrl.clear();
-      _syncOutletLineTargets();
+      _syncSelectedDestination();
       if (mounted) setState(() {});
       return;
     }
@@ -8096,8 +8298,6 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
   @override
   void dispose() {
     _notesCtrl.dispose();
-    _eventNameCtrl.dispose();
-    _paxCtrl.dispose();
     super.dispose();
   }
 
@@ -8122,7 +8322,9 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
 
   Map<String, dynamic> _stockForLine(Map<String, dynamic> line) {
     return widget.catalog.firstWhere(
-      (item) => '${item['item_sku'] ?? item['sku'] ?? ''}' == '${line['item_sku'] ?? ''}',
+      (item) =>
+          '${item['item_sku'] ?? item['sku'] ?? ''}' ==
+          '${line['item_sku'] ?? ''}',
       orElse: () => <String, dynamic>{},
     );
   }
@@ -8131,8 +8333,6 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
     setState(() {
       _lines = [];
       _notesCtrl.clear();
-      _eventNameCtrl.clear();
-      _paxCtrl.clear();
     });
   }
 
@@ -8199,69 +8399,210 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
     }
   }
 
-  Widget _buildDestinationField({required bool outletMissing}) {
-    if (_mode == _StockOutDestinationMode.department) {
-      return DropdownButtonFormField<String>(
-        isExpanded: true,
-        initialValue: _departmentCode,
-        decoration: const InputDecoration(
-          labelText: 'Department',
-          prefixIcon: Icon(Icons.business),
-        ),
-        items: widget.departmentOptions
-            .map(
-              (item) => DropdownMenuItem<String>(
-                value: '${item['department_code']}',
-                child: Text(
-                  '${item['department_name'] ?? item['department_code']}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-            .toList(),
-        onChanged: (value) {
-          if (value == null) return;
-          setState(() => _departmentCode = value);
-        },
-      );
+  bool _hasMappedOutletLines(List<Map<String, dynamic>> lines) {
+    return lines.any(
+        (l) => '${l['destination_item_id'] ?? ''}'.trim().isNotEmpty);
+  }
+
+  bool get _isBarDestination =>
+      _destinationKey == 'executive_bar' ||
+      _destinationKey == 'main_bar' ||
+      _destinationKey == 'sports_bar' ||
+      _destinationKey.contains('bar');
+
+  bool _isBarStockItem(Map<String, dynamic> item) {
+    final sku =
+        '${item['item_sku'] ?? item['sku'] ?? ''}'.trim().toUpperCase();
+    final name =
+        '${item['item_name'] ?? item['name'] ?? ''}'.trim().toLowerCase();
+    final cat = '${item['category'] ?? ''}'.trim().toLowerCase();
+    final storeType = '${item['store_type'] ?? ''}'.trim().toLowerCase();
+
+    if (storeType == 'bar' ||
+        storeType == 'bar store' ||
+        storeType == 'bar_store') {
+      return true;
     }
 
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      initialValue: _outletId,
-      decoration: InputDecoration(
-        labelText: 'POS Outlet',
-        prefixIcon: const Icon(Icons.storefront_outlined),
-        errorText: outletMissing ? 'Required' : null,
-      ),
-      items: widget.outletOptions
-          .map(
-            (item) => DropdownMenuItem<String>(
-              value: _outletIdFor(item),
-              child: Text(
-                widget.outletDisplayName(item),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: (value) {
-        setState(() {
-          _outletId = value;
-          _syncOutletLineTargets();
-        });
-        if (value != null && value.isNotEmpty) {
-          widget.onOutletChanged(value);
-        }
-      },
-    );
+    // Check SKU prefixes
+    if (sku.startsWith('FGB-') ||
+        sku.startsWith('KYO-FGB-') ||
+        sku.startsWith('KYO-TEQ-') ||
+        sku.startsWith('KYO-WHK-') ||
+        sku.startsWith('MOG-BAR-') ||
+        sku.startsWith('FGH-BEER') ||
+        sku.startsWith('FGH-CANNED-BEER') ||
+        sku.startsWith('FGH-WHISKY') ||
+        sku.startsWith('FGH-WHISKEY') ||
+        sku.startsWith('FGH-VODKA') ||
+        sku.startsWith('FGH-GIN') ||
+        sku.startsWith('FGH-RUM') ||
+        sku.startsWith('FGH-TEQUILA') ||
+        sku.startsWith('FGH-BRANDY') ||
+        sku.startsWith('FGH-COGNAC') ||
+        sku.startsWith('FGH-WINE') ||
+        sku.startsWith('FGH-BAR') ||
+        sku.startsWith('FGH-CIDER') ||
+        sku.startsWith('FGH-LIQUEUR') ||
+        sku.startsWith('FGH-SPIRIT') ||
+        sku.startsWith('FGH-SOFT-DRINK') ||
+        sku.startsWith('FGH-ENERGY-DRINK')) {
+      return true;
+    }
+
+    // Check category
+    if (cat.contains('bar') ||
+        cat.contains('beer') ||
+        cat.contains('wine') ||
+        cat.contains('whisky') ||
+        cat.contains('whiskey') ||
+        cat.contains('vodka') ||
+        cat.contains('gin') ||
+        cat.contains('rum') ||
+        cat.contains('tequila') ||
+        cat.contains('brandy') ||
+        cat.contains('cognac') ||
+        cat.contains('cider') ||
+        cat.contains('liqueur') ||
+        cat.contains('spirits') ||
+        cat.contains('drink') ||
+        cat.contains('beverage') ||
+        cat.contains('tobacco') ||
+        cat.contains('cigarette')) {
+      return true;
+    }
+
+    // Check bar keywords in item name
+    const barKeywords = [
+      'beer',
+      'lager',
+      'cider',
+      'wine',
+      'whisky',
+      'whiskey',
+      'vodka',
+      'gin',
+      'rum',
+      'tequila',
+      'brandy',
+      'cognac',
+      'liqueur',
+      'spirits',
+      'champagne',
+      'cocktail',
+      'tusker',
+      'guinness',
+      'guiness',
+      'heineken',
+      'white cap',
+      'whitecap',
+      'balozi',
+      'pilsner',
+      'summit',
+      'windhoek',
+      'black ice',
+      'savanna',
+      'savannah',
+      'snapp',
+      'smirnoff',
+      'smirnof',
+      'amarula',
+      'jameson',
+      'johnnie walker',
+      'jw red',
+      'jw black',
+      'gilbeys',
+      'gilbey',
+      'richot',
+      'viceroy',
+      'grants',
+      'william lawson',
+      'glenfiddich',
+      'don julio',
+      'camino',
+      'jack daniel',
+      'baileys',
+      'tanqueray',
+      'captain morgan',
+      'bacardi',
+      'gordons',
+      'gordon',
+      'asconi',
+      'casabuena',
+      '4th street',
+      'robertson',
+      'cellar cask',
+      'four cousins',
+      'tangaren',
+      'bond 7',
+      'v&a',
+      'kingfisher',
+      'delmonte',
+      'soda',
+      'coke',
+      'fanta',
+      'sprite',
+      'stoney',
+      'krest',
+      'tonic',
+      'water 500ml',
+      'water 1l',
+      'water 300ml',
+      'water 750ml',
+      'predator',
+      'monster',
+      'red bull',
+      'redbull',
+      'guarana',
+      'lemonade',
+      'alvaro',
+      'novida',
+      'can',
+      'tot',
+      'dawa',
+      'jagermeister',
+      'martell',
+      'hennessy',
+      'remy martin',
+      'chivas',
+      'ballantines',
+      'famous grouse',
+      'singleton',
+      'talisker',
+      'macallan',
+      'curacao',
+      'kahlua',
+      'triple sec',
+      'campari',
+      'aperol',
+      'vermouth',
+      'martini',
+      'condom',
+      'trust',
+      'scottish leader',
+      'scottish',
+      'vat 69',
+      'j&b',
+      'famous grouse',
+    ];
+
+    for (final kw in barKeywords) {
+      if (name.contains(kw)) return true;
+    }
+
+    return false;
+  }
+
+  List<Map<String, dynamic>> get _effectiveCatalog {
+    if (_isBarDestination) {
+      return widget.catalog.where(_isBarStockItem).toList();
+    } else {
+      return widget.catalog.where((item) => !_isBarStockItem(item)).toList();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final eventConfig = _mode == _StockOutDestinationMode.department
-        ? _eventDepartments[_departmentCode]
-        : null;
     final invalidLines = _lines.where((line) {
       final stock = _stockForLine(line);
       final qty = _num(line['quantity']);
@@ -8277,10 +8618,6 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
     final quantityLabel = totalQuantity.toStringAsFixed(
       totalQuantity % 1 == 0 ? 0 : 2,
     );
-    final eventNameMissing =
-        eventConfig != null && _eventNameCtrl.text.trim().isEmpty;
-    final outletMissing = _mode == _StockOutDestinationMode.outlet &&
-        (_outletId == null || _outletId!.isEmpty);
 
     return _SectionCard(
       title: 'Direct Issue',
@@ -8288,100 +8625,82 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ChoiceChip(
-                selected: _mode == _StockOutDestinationMode.department,
-                label: const Text('Department'),
-                onSelected: (_) {
-                  setState(() => _mode = _StockOutDestinationMode.department);
-                },
-              ),
-              ChoiceChip(
-                selected: _mode == _StockOutDestinationMode.outlet,
-                label: const Text('POS Outlet'),
-                onSelected: (_) {
-                  setState(() {
-                    _mode = _StockOutDestinationMode.outlet;
-                    _syncOutletLineTargets();
-                  });
-                  if (_outletId != null && _outletId!.isNotEmpty) {
-                    widget.onOutletChanged(_outletId!);
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
             spacing: 12,
             runSpacing: 12,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SizedBox(
-                width: 420,
-                child: _buildDestinationField(outletMissing: outletMissing),
-              ),
-              SizedBox(
-                width: 240,
+                width: 360,
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  initialValue: _shiftCode,
+                  value: _destinationKey,
                   decoration: const InputDecoration(
-                    labelText: 'Shift',
-                    prefixIcon: Icon(Icons.schedule),
+                    labelText: 'Issue Destination *',
+                    prefixIcon: Icon(Icons.storefront_outlined),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'A', child: Text('Shift A')),
-                    DropdownMenuItem(value: 'B', child: Text('Shift B')),
-                    DropdownMenuItem(value: '', child: Text('No shift')),
-                  ],
+                  items: _destinationOptions
+                      .map(
+                        (opt) => DropdownMenuItem<String>(
+                          value: opt['key'] as String,
+                          child: Row(
+                            children: [
+                              Icon(opt['icon'] as IconData, size: 18),
+                              const SizedBox(width: 8),
+                              Text(opt['name'] as String),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (value) {
-                    setState(() => _shiftCode = value ?? '');
+                    if (value == null) return;
+                    setState(() {
+                      _destinationKey = value;
+                      _syncSelectedDestination();
+                    });
                   },
                 ),
               ),
+              if (_destinationKey == 'non_consumables')
+                SizedBox(
+                  width: 360,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _nonConsumableCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Non-Consumables Category *',
+                      prefixIcon: Icon(Icons.category_outlined),
+                    ),
+                    items: _nonConsumableCategories
+                        .map(
+                          (cat) => DropdownMenuItem<String>(
+                            value: cat['code'] as String,
+                            child: Row(
+                              children: [
+                                Icon(cat['icon'] as IconData, size: 18),
+                                const SizedBox(width: 8),
+                                Text(cat['name'] as String),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _nonConsumableCategory = value;
+                        _syncNonConsumableOutlet();
+                      });
+                    },
+                  ),
+                ),
               if (widget.preloadRef.isNotEmpty)
                 OutlinedButton(
                   onPressed: widget.onClearPreload,
-                  child: const Text('Clear'),
+                  child: const Text('Clear Preload'),
                 ),
             ],
           ),
-          if (eventConfig != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SizedBox(
-                  width: 420,
-                  child: TextField(
-                    controller: _eventNameCtrl,
-                    decoration: InputDecoration(
-                      labelText: '${eventConfig.label} *',
-                      prefixIcon: const Icon(Icons.event),
-                      errorText: eventNameMissing ? 'Required' : null,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                if (eventConfig.pax)
-                  SizedBox(
-                    width: 180,
-                    child: TextField(
-                      controller: _paxCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Pax',
-                        prefixIcon: Icon(Icons.groups),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
           const SizedBox(height: 12),
           TextField(
             controller: _notesCtrl,
@@ -8394,17 +8713,17 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
           ),
           const SizedBox(height: 16),
           _LineEditor(
-            catalog: widget.catalog,
+            catalog: _effectiveCatalog,
             lines: _lines,
             onChanged: () => setState(() {}),
             quantityKey: 'quantity',
             priceEnabled: false,
             showCentralAvailable: true,
+            availableStockLabel: 'Branch Store Stock',
             destinationOptions:
-                _mode == _StockOutDestinationMode.outlet && _outletId != null
-                    ? _outletItems(_outletId)
-                    : const [],
-            destinationEnabled: _mode == _StockOutDestinationMode.outlet,
+                _outletId != null ? _outletItems(_outletId) : const [],
+            destinationEnabled:
+                _outletId != null && _outletItems(_outletId).isNotEmpty,
             destinationLabel: 'Outlet item to increase',
             destinationHelperText:
                 'Choose the POS outlet item that should increase after issue.',
@@ -8459,29 +8778,62 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
               FilledButton.icon(
                 onPressed: _submitting ||
                         _lines.isEmpty ||
-                        invalidLines.isNotEmpty ||
-                        eventNameMissing ||
-                        outletMissing
+                        invalidLines.isNotEmpty
                     ? null
                     : () async {
                         setState(() => _submitting = true);
                         final cleanLines = _lines
                             .map((line) => Map<String, dynamic>.from(line))
                             .toList();
-                        final success = _mode == _StockOutDestinationMode.department
-                            ? await widget.onSubmit(
-                                lines: cleanLines,
-                                departmentCode: _departmentCode,
-                                shiftCode: _shiftCode,
-                                notes: _notesCtrl.text,
-                                eventName: _eventNameCtrl.text,
-                                paxCount: int.tryParse(_paxCtrl.text.trim()),
-                              )
-                            : await widget.onSubmitOutlet(
-                                lines: cleanLines,
-                                outletId: _outletId ?? '',
-                                notes: _notesCtrl.text,
-                              );
+
+                        bool success;
+                        if (_destinationKey == 'non_consumables') {
+                          final categoryObj = _nonConsumableCategories.firstWhere(
+                            (c) => c['code'] == _nonConsumableCategory,
+                            orElse: () => _nonConsumableCategories.first,
+                          );
+                          final categoryName = categoryObj['name'] as String;
+                          final notes = _notesCtrl.text.trim();
+                          final fullNotes = notes.isEmpty
+                              ? 'Non-Consumables: $categoryName'
+                              : '[Non-Consumables: $categoryName] $notes';
+
+                          if (_outletId != null &&
+                              _outletId!.isNotEmpty &&
+                              _hasMappedOutletLines(cleanLines)) {
+                            success = await widget.onSubmitOutlet(
+                              lines: cleanLines,
+                              outletId: _outletId!,
+                              notes: fullNotes,
+                            );
+                          } else {
+                            success = await widget.onSubmit(
+                              lines: cleanLines,
+                              departmentCode: _nonConsumableCategory,
+                              shiftCode: '',
+                              notes: fullNotes,
+                            );
+                          }
+                        } else {
+                          final notes = _notesCtrl.text.trim();
+                          if (_outletId != null &&
+                              _outletId!.isNotEmpty &&
+                              _hasMappedOutletLines(cleanLines)) {
+                            success = await widget.onSubmitOutlet(
+                              lines: cleanLines,
+                              outletId: _outletId!,
+                              notes: notes,
+                            );
+                          } else {
+                            success = await widget.onSubmit(
+                              lines: cleanLines,
+                              departmentCode: _destinationKey,
+                              shiftCode: '',
+                              notes: notes,
+                            );
+                          }
+                        }
+
                         if (!mounted) return;
                         setState(() => _submitting = false);
                         if (!success) return;
@@ -10420,6 +10772,7 @@ class _BranchInventoryTab extends StatefulWidget {
     required this.qty,
     required this.toNum,
     required this.onRequest,
+    required this.onEditClassification,
   });
 
   final List<Map<String, dynamic>> stock;
@@ -10429,24 +10782,25 @@ class _BranchInventoryTab extends StatefulWidget {
   final String Function(Map<String, dynamic>) qty;
   final num Function(dynamic) toNum;
   final void Function(Map<String, dynamic>) onRequest;
+  final void Function(Map<String, dynamic>) onEditClassification;
 
   @override
   State<_BranchInventoryTab> createState() => _BranchInventoryTabState();
 }
 
 class _BranchInventoryTabState extends State<_BranchInventoryTab> {
-  String _storeTypeFilter = 'all';
+  String _categoryFilter = 'all';
 
   @override
   Widget build(BuildContext context) {
     final q = widget.search.toLowerCase();
     final filtered = widget.stock.where((item) {
-      final st = '${item['store_type'] ?? ''}';
-      if (_storeTypeFilter != 'all' && st != _storeTypeFilter) return false;
+      final cat = '${item['category'] ?? item['item']?['category'] ?? ''}'.trim();
+      if (_categoryFilter != 'all' && cat != _categoryFilter) return false;
       return q.isEmpty ||
           widget.itemName(item).toLowerCase().contains(q) ||
           '${item['item_sku'] ?? item['sku']}'.toLowerCase().contains(q) ||
-          '${item['category'] ?? ''}'.toLowerCase().contains(q);
+          cat.toLowerCase().contains(q);
     }).toList();
     final lowStock = filtered
         .where((i) =>
@@ -10518,40 +10872,49 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
             ),
           ),
           const SizedBox(height: 10),
-          // Store-type filter chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final entry in [
-                  ('all', 'All Items', Colors.grey),
-                  ('foodstuffs', 'Foodstuffs', Colors.green),
-                  ('bar_store', 'Bar', Colors.purple),
-                  ('dry_goods', 'Dry Goods', Colors.brown),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(entry.$2),
-                      selected: _storeTypeFilter == entry.$1,
-                      onSelected: (_) =>
-                          setState(() => _storeTypeFilter = entry.$1),
-                      selectedColor: entry.$3.withValues(alpha: 0.15),
-                      checkmarkColor: entry.$3,
-                      labelStyle: TextStyle(
-                        color: _storeTypeFilter == entry.$1
-                            ? entry.$3
-                            : Colors.grey.shade700,
-                        fontWeight: _storeTypeFilter == entry.$1
-                            ? FontWeight.w700
-                            : FontWeight.normal,
-                        fontSize: 12,
+          // Category filter chips — built from the ACTUAL categories present in
+          // this branch's stock, so every real category is filterable instead of
+          // a few hard-coded buckets (one of which — Dry Goods — matched nothing).
+          Builder(builder: (_) {
+            final cats = <String>{};
+            for (final item in widget.stock) {
+              final c =
+                  '${item['category'] ?? item['item']?['category'] ?? ''}'
+                      .trim();
+              if (c.isNotEmpty) cats.add(c);
+            }
+            final sorted = cats.toList()..sort();
+            final entries = <String>['all', ...sorted];
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final value in entries)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(value == 'all' ? 'All Items' : value),
+                        selected: _categoryFilter == value,
+                        onSelected: (_) =>
+                            setState(() => _categoryFilter = value),
+                        selectedColor:
+                            AppColors.kPrimary.withValues(alpha: 0.15),
+                        checkmarkColor: AppColors.kPrimary,
+                        labelStyle: TextStyle(
+                          color: _categoryFilter == value
+                              ? AppColors.kPrimary
+                              : Colors.grey.shade700,
+                          fontWeight: _categoryFilter == value
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          }),
           const SizedBox(height: 8),
           TextField(
             onChanged: widget.onSearchChanged,
@@ -10678,28 +11041,32 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
                                 child: Builder(builder: (_) {
                                   final st =
                                       '${item['store_type'] ?? item['item']?['store_type'] ?? 'foodstuffs'}';
-                                  final isBar = st == 'bar_store';
-                                  final isDry = st == 'dry_goods';
-                                  final bgColor = isBar
-                                      ? Colors.purple.shade50
-                                      : isDry
-                                          ? Colors.brown.shade50
-                                          : Colors.green.shade50;
-                                  final borderColor = isBar
-                                      ? Colors.purple.shade200
-                                      : isDry
-                                          ? Colors.brown.shade200
-                                          : Colors.green.shade200;
-                                  final textColor = isBar
-                                      ? Colors.purple.shade700
-                                      : isDry
-                                          ? Colors.brown.shade700
-                                          : Colors.green.shade700;
-                                  final label = isBar
-                                      ? 'Bar'
-                                      : isDry
-                                          ? 'Dry'
-                                          : 'Food';
+                                  String label;
+                                  MaterialColor c;
+                                  switch (st) {
+                                    case 'bar_store':
+                                      label = 'Bar';
+                                      c = Colors.purple;
+                                      break;
+                                    case 'dry_goods':
+                                      label = 'Dry';
+                                      c = Colors.brown;
+                                      break;
+                                    case 'pastry':
+                                      label = 'Pastry';
+                                      c = Colors.orange;
+                                      break;
+                                    case 'non_consumables':
+                                      label = 'Non-Food';
+                                      c = Colors.blueGrey;
+                                      break;
+                                    default:
+                                      label = 'Food';
+                                      c = Colors.green;
+                                  }
+                                  final bgColor = c.shade50;
+                                  final borderColor = c.shade200;
+                                  final textColor = c.shade700;
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 5, vertical: 2),
@@ -10790,6 +11157,8 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
                                     onSelected: (action) {
                                       if (action == 'request') {
                                         widget.onRequest(item);
+                                      } else if (action == 'reclassify') {
+                                        widget.onEditClassification(item);
                                       }
                                     },
                                     itemBuilder: (_) => const [
@@ -10801,6 +11170,16 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
                                               color: Colors.indigo),
                                           SizedBox(width: 8),
                                           Text('Request from Central',
+                                              style: TextStyle(fontSize: 13)),
+                                        ]),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'reclassify',
+                                        child: Row(children: [
+                                          Icon(Icons.category_outlined,
+                                              size: 16, color: Colors.teal),
+                                          SizedBox(width: 8),
+                                          Text('Edit classification',
                                               style: TextStyle(fontSize: 13)),
                                         ]),
                                       ),
@@ -10834,6 +11213,7 @@ class _CentralCatalogTab extends StatefulWidget {
     required this.onFilterChanged,
     required this.toNum,
     required this.onRegister,
+    required this.onEditClassification,
     this.onRefresh,
   });
 
@@ -10844,6 +11224,7 @@ class _CentralCatalogTab extends StatefulWidget {
   final ValueChanged<String> onFilterChanged;
   final num Function(dynamic) toNum;
   final Future<void> Function(Map<String, dynamic>) onRegister;
+  final void Function(Map<String, dynamic>) onEditClassification;
   final Future<void> Function()? onRefresh;
 
   @override
@@ -11217,7 +11598,7 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 12))),
-                          SizedBox(width: 110),
+                          SizedBox(width: 150),
                         ],
                       ),
                     ),
@@ -11372,25 +11753,42 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
                                     ),
                                   ),
                                   SizedBox(
-                                    width: 110,
-                                    child: isRegistered
-                                        ? const Center(
-                                            child: Icon(Icons.lock_outline,
-                                                size: 16, color: Colors.green))
-                                        : FilledButton(
-                                            onPressed: () =>
-                                                widget.onRegister(item),
-                                            style: FilledButton.styleFrom(
-                                              backgroundColor: Colors.indigo,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
+                                    width: 150,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Edit classification',
+                                          icon: const Icon(
+                                              Icons.category_outlined,
+                                              size: 16),
+                                          color: Colors.teal,
+                                          visualDensity: VisualDensity.compact,
+                                          constraints: const BoxConstraints(
+                                              minWidth: 30, minHeight: 30),
+                                          onPressed: () =>
+                                              widget.onEditClassification(item),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        isRegistered
+                                            ? const Icon(Icons.lock_outline,
+                                                size: 16, color: Colors.green)
+                                            : FilledButton(
+                                                onPressed: () =>
+                                                    widget.onRegister(item),
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor: Colors.indigo,
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
                                                       horizontal: 10,
                                                       vertical: 6),
-                                              textStyle:
-                                                  const TextStyle(fontSize: 12),
-                                            ),
-                                            child: const Text('+ Register'),
-                                          ),
+                                                  textStyle: const TextStyle(
+                                                      fontSize: 12),
+                                                ),
+                                                child: const Text('+ Register'),
+                                              ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),

@@ -8,6 +8,7 @@ import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
 import { calculateCashierShiftLedgerTotals } from '../services/cashier-ledger.service';
 import { autoCloseOpenKitchenShiftsForBranch } from '../services/kitchen-shift-auto-close.service';
+import { allocateStaffCreditPayment } from './credit-bills.controller';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -2542,11 +2543,31 @@ export const closeShift = async (
                 }
             }
 
-            // 2. Paid credits stay as shift entries for branch-accountant
-            // review. Do not auto-create payment rows or reduce any existing
-            // staff_credit_bills balances here.
+            // 2. Paid bills recorded during shift: automatically allocate to staff credit
+            // bills so staff credit balances are lessened immediately upon shift close.
             if (paid_bills_details && Array.isArray(paid_bills_details)) {
-                logger.info(`Shift ${id} has ${paid_bills_details.length} paid-credit entr${paid_bills_details.length === 1 ? 'y' : 'ies'} pending branch-accountant application.`);
+                for (const entry of paid_bills_details) {
+                    const staffId = entry.staff_id ? String(entry.staff_id) : null;
+                    const amount = Number(entry.amount || 0);
+                    const isAlreadyApplied = entry.review_status === 'applied' || entry.review_status === 'fully_applied';
+                    if (staffId && amount > 0 && !isAlreadyApplied) {
+                        try {
+                            const alloc = await allocateStaffCreditPayment(
+                                staffId,
+                                updatedShift.branch_id || null,
+                                amount,
+                                entry.payment_method || 'cash',
+                                updatedShift.cashier_id || null,
+                                entry.reference ? `Shift close paid bill (${entry.reference})` : 'Shift close paid bill',
+                                updatedShift.id,
+                                entry.reference || null
+                            );
+                            entry.review_status = (alloc?.remainingUnapplied || 0) <= 0.001 ? 'fully_applied' : 'partially_applied';
+                        } catch (err: any) {
+                            logger.warn(`Failed auto-allocating paid bill for staff ${staffId} on shift close:`, err?.message || err);
+                        }
+                    }
+                }
             }
         } catch (syncError) {
             // Log but don't fail the request since shift is already closed

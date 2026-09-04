@@ -116,7 +116,7 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
   try {
     const {
       category_id, name, description, price, cost_price,
-      unit, branch_id, image_url, sku
+      unit, branch_id, image_url, sku, opening_stock, current_stock, track_stock
     } = req.body;
 
     const categoryName = req.body.category || req.body.category_name;
@@ -125,6 +125,8 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
       resolvedCategoryId = await resolveBarCategoryId(categoryName) || null;
     }
 
+    const effectiveBranchId = branch_id || req.user?.branch_id || null;
+
     const { data, error } = await supabase
       .from('bar_drinks')
       .insert([{
@@ -132,11 +134,11 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
         name,
         description,
         price,
-        cost_price,
+        cost_price: cost_price ?? 0,
         unit: unit || 'bottle',
-        branch_id: branch_id || null,
+        branch_id: effectiveBranchId,
         image_url,
-        sku: sku || null,
+        sku: sku || `DRK-${Date.now()}`,
         is_available: true
       }])
       .select()
@@ -144,8 +146,12 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
 
     if (error) throw error;
 
-    // Note: We removed the auto-creation of bar_stock. 
-    // Inventory should be managed via the Inventory module (creating a restaurant_bar_inventory item).
+    if (data) {
+      await linkDrinkToBarPosOutlets(
+        { ...data, opening_stock, current_stock, track_stock },
+        categoryName
+      );
+    }
 
     res.status(201).json({ success: true, data });
   } catch (error) {
@@ -168,19 +174,20 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
       branch_id,
       image_url,
       is_available,
-      sku
+      sku,
+      opening_stock,
+      current_stock,
+      track_stock
     } = updates;
     const validUpdates: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
 
+    const categoryName = updates.category || updates.category_name;
     if (category_id !== undefined) {
       validUpdates.category_id = category_id || null;
-    } else {
-      const categoryName = updates.category || updates.category_name;
-      if (categoryName !== undefined) {
-        validUpdates.category_id = await resolveBarCategoryId(categoryName) || null;
-      }
+    } else if (categoryName !== undefined) {
+      validUpdates.category_id = await resolveBarCategoryId(categoryName) || null;
     }
 
     if (name !== undefined) validUpdates.name = name;
@@ -202,9 +209,81 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
 
     if (error) throw error;
 
+    if (data) {
+      await linkDrinkToBarPosOutlets(
+        { ...data, opening_stock, current_stock, track_stock },
+        categoryName
+      );
+    }
+
     res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
+  }
+};
+
+const linkDrinkToBarPosOutlets = async (
+  drink: Record<string, any>,
+  categoryName?: string
+): Promise<void> => {
+  try {
+    const drinkId = drink?.id;
+    if (!drinkId) return;
+
+    let outletsQuery = supabase
+      .from('pos_outlets')
+      .select('id, branch_id, outlet_type')
+      .in('outlet_type', ['main_bar', 'executive_bar', 'bar', 'sports_bar']);
+
+    if (drink.branch_id != null) {
+      outletsQuery = outletsQuery.eq('branch_id', drink.branch_id);
+    }
+
+    const { data: outlets } = await outletsQuery;
+    if (!outlets || !outlets.length) return;
+
+    let catLabel = categoryName;
+    if (!catLabel && drink.category_id) {
+      const { data: cat } = await supabase
+        .from('bar_drink_categories')
+        .select('name')
+        .eq('id', drink.category_id)
+        .maybeSingle();
+      if (cat?.name) catLabel = cat.name;
+    }
+    catLabel = catLabel || 'Bar';
+
+    const sellingPrice = Number(drink.price ?? drink.selling_price ?? 0);
+    const costPrice = Number(drink.cost_price ?? 0);
+    const sku = drink.sku || `DRK-${drinkId}`;
+
+    for (const outlet of outlets as Array<Record<string, any>>) {
+      const row = {
+        outlet_id: outlet.id,
+        source_table: 'bar_drinks',
+        source_item_id: drinkId,
+        sku: `${sku}-${outlet.id.slice(0, 8)}`,
+        name: drink.name,
+        category: catLabel,
+        unit: drink.unit || 'bottle',
+        cost_price: costPrice,
+        selling_price: sellingPrice,
+        opening_stock: Number(drink.opening_stock ?? 0),
+        current_stock: Number(drink.current_stock ?? 0),
+        track_stock: drink.track_stock !== false,
+        is_active: drink.is_available !== false && drink.is_active !== false,
+        is_available: drink.is_available !== false && drink.is_active !== false,
+        status: (drink.is_available !== false && drink.is_active !== false) ? 'active' : 'inactive',
+        branch_id: drink.branch_id ?? outlet.branch_id ?? null,
+        updated_at: new Date().toISOString()
+      };
+
+      await supabase
+        .from('pos_outlet_items')
+        .upsert(row, { onConflict: 'outlet_id,sku' });
+    }
+  } catch (err) {
+    logger.warn('linkDrinkToBarPosOutlets failed:', (err as Error).message);
   }
 };
 

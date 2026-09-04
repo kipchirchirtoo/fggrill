@@ -1747,10 +1747,22 @@ export const confirmProductionActual = asyncWrap(async (req: Request, res: Respo
     if (varianceCost > 0 && prod.produced_by) {
         const staffId = await resolveStaffProfileId(prod.produced_by);
         if (staffId) {
+            const prodBillNumber = `CRD-KV-PRD-${Date.now().toString().slice(-6)}`;
+            const prodItem = [{
+                item_sku: prod.produced_item_sku || prod.raw_item_sku || '',
+                name: prod.produced_item_name || 'Production Item',
+                quantity: shortfall,
+                unit: prod.produced_unit || prod.raw_unit || 'units',
+                unit_price: unitCost,
+                total_price: varianceCost,
+                category: 'Kitchen Production Shortfall',
+                notes: `Production shortfall: expected ${expected}, actual ${actual}`
+            }];
             const { data: bill, error: billError } = await supabase.from('staff_credit_bills').insert({
                 staff_id: staffId,
                 amount: varianceCost,
-                description: `Production shortfall — ${prod.produced_item_name} (expected ${expected}, actual ${actual})`,
+                bill_number: prodBillNumber,
+                description: `Kitchen Variance Credit Bill (Production Shortfall) — ${prod.produced_item_name} (expected ${expected}, actual ${actual})`,
                 bill_date: new Date().toISOString().split('T')[0],
                 status: 'accountant_confirmed',
                 balance: varianceCost,
@@ -1758,7 +1770,15 @@ export const confirmProductionActual = asyncWrap(async (req: Request, res: Respo
                 shift_id,
                 branch_id: prod.branch_id,
                 approved_at: new Date().toISOString(),
-                approved_by: userId
+                approved_by: userId,
+                items: prodItem,
+                items_snapshot: prodItem,
+                metadata: {
+                    bill_type: 'production_shortfall',
+                    shift_id,
+                    production_id: production_id || prod.id,
+                    items: prodItem
+                }
             }).select().maybeSingle();
             if (billError) logger.error('production shortfall credit bill insert', billError);
             creditBill = bill;
@@ -2023,6 +2043,111 @@ export const chefConfirmShift = asyncWrap(async (req: Request, res: Response) =>
     res.json({ success: true, data: upd });
 });
 
+// ── GET KITCHEN SHIFT VARIANCE ITEMS ───────────────────────
+export async function getKitchenShiftVarianceItems(shiftId: string): Promise<any[]> {
+    const varianceItemsMap = new Map<string, any>();
+
+    // 1. Try Daily Controls snapshot first (it has the comprehensive theoretical vs actual calculation)
+    try {
+        const snap = await loadKitchenShiftControlSnapshot(shiftId);
+        const rows = snap?.payload?.shift_report?.rows || [];
+        for (const r of rows) {
+            const vQty = Number(r.variance_qty || 0);
+            const vCost = Number(r.variance_cost || 0);
+            if (vQty !== 0 || vCost !== 0) {
+                const key = String(r.item_sku || r.item_name || '').trim().toLowerCase();
+                if (!key) continue;
+                varianceItemsMap.set(key, {
+                    item_sku: r.item_sku || '',
+                    item_name: r.item_name || 'Kitchen Item',
+                    name: r.item_name || 'Kitchen Item',
+                    quantity: Math.abs(vQty),
+                    variance_qty: vQty,
+                    unit: r.unit || 'units',
+                    unit_price: Number(r.cost_price || 0),
+                    cost_price: Number(r.cost_price || 0),
+                    total_price: Math.abs(vCost) || (Math.abs(vQty) * Number(r.cost_price || 0)),
+                    variance_cost: vCost,
+                    category: 'Kitchen Variance',
+                    notes: `Shortage: ${vQty < 0 ? '-' : '+'}${Math.abs(vQty).toFixed(2)} ${r.unit || ''} (Cost: KES ${(Math.abs(vCost) || 0).toFixed(2)})`
+                });
+            }
+        }
+    } catch (err) {
+        logger.warn(`[getKitchenShiftVarianceItems] snapshot load failed for shift ${shiftId}:`, err);
+    }
+
+    // 2. Supplement from kitchen_shift_items
+    try {
+        const { data: shiftItems } = await supabase
+            .from('kitchen_shift_items')
+            .select('*')
+            .eq('shift_id', shiftId);
+        for (const it of shiftItems || []) {
+            const vQty = Number(it.variance || 0);
+            const vCost = Number(it.variance_value || 0);
+            if (vQty !== 0 || vCost !== 0) {
+                const key = String(it.item_sku || it.item_name || '').trim().toLowerCase();
+                if (!key) continue;
+                if (!varianceItemsMap.has(key)) {
+                    varianceItemsMap.set(key, {
+                        item_sku: it.item_sku || '',
+                        item_name: it.item_name || 'Kitchen Item',
+                        name: it.item_name || 'Kitchen Item',
+                        quantity: Math.abs(vQty),
+                        variance_qty: vQty,
+                        unit: it.unit || 'units',
+                        unit_price: Number(it.cost_price || 0),
+                        cost_price: Number(it.cost_price || 0),
+                        total_price: Math.abs(vCost) || (Math.abs(vQty) * Number(it.cost_price || 0)),
+                        variance_cost: vCost,
+                        category: 'Kitchen Variance',
+                        notes: `Shortage: ${vQty < 0 ? '-' : '+'}${Math.abs(vQty).toFixed(2)} ${it.unit || ''} (Cost: KES ${(Math.abs(vCost) || 0).toFixed(2)})`
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        logger.warn(`[getKitchenShiftVarianceItems] kitchen_shift_items query failed for shift ${shiftId}:`, err);
+    }
+
+    // 3. Supplement from kitchen_shift_stock_take
+    try {
+        const { data: stockTakeRows } = await supabase
+            .from('kitchen_shift_stock_take')
+            .select('*')
+            .eq('shift_id', shiftId);
+        for (const st of stockTakeRows || []) {
+            const vQty = Number(st.variance || 0);
+            const vCost = Number(st.variance_value || 0);
+            if (vQty !== 0 || vCost !== 0) {
+                const key = String(st.item_sku || st.item_name || '').trim().toLowerCase();
+                if (!key) continue;
+                if (!varianceItemsMap.has(key)) {
+                    varianceItemsMap.set(key, {
+                        item_sku: st.item_sku || '',
+                        item_name: st.item_name || 'Kitchen Item',
+                        name: st.item_name || 'Kitchen Item',
+                        quantity: Math.abs(vQty),
+                        variance_qty: vQty,
+                        unit: st.unit || 'units',
+                        unit_price: Number(st.cost_price || 0),
+                        cost_price: Number(st.cost_price || 0),
+                        total_price: Math.abs(vCost) || (Math.abs(vQty) * Number(st.cost_price || 0)),
+                        variance_cost: vCost,
+                        category: 'Kitchen Variance',
+                        notes: `Shortage: ${vQty < 0 ? '-' : '+'}${Math.abs(vQty).toFixed(2)} ${st.unit || ''} (Cost: KES ${(Math.abs(vCost) || 0).toFixed(2)})`
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        logger.warn(`[getKitchenShiftVarianceItems] kitchen_shift_stock_take query failed for shift ${shiftId}:`, err);
+    }
+
+    return Array.from(varianceItemsMap.values());
+}
+
 // ── ACCOUNTANT REVIEW ─────────────────────────────────────
 export const accountantReviewShift = asyncWrap(async (req: Request, res: Response) => {
     const { shift_id } = req.params;
@@ -2030,11 +2155,15 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
     const userId = (req as any).user?.id;
     const { data: shift } = await supabase
         .from('kitchen_shifts')
-        .select('id,branch_id,status,shift_number,total_variance_cost')
+        .select('id,branch_id,status,shift_number,shift_date,total_variance_cost')
         .eq('id', shift_id)
         .single();
     if (!shift) throw new AppError('Shift not found', 404);
-    if (shift.status !== 'pending_accountant_review') throw new AppError('Not pending review', 400);
+    const currentStatus = String(shift.status || '').toLowerCase();
+    const reviewableStatuses = ['pending_accountant_review', 'closed', 'pending_chef_confirmation', 'open'];
+    if (!reviewableStatuses.includes(currentStatus)) {
+        throw new AppError(`Shift cannot be reviewed in status: ${shift.status}`, 400);
+    }
     const next = approved ? 'approved' : 'rejected';
     const action = liability_action || (approved ? 'approve_only' : 'rejected');
 
@@ -2042,11 +2171,24 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
         throw new AppError('Write-off reason is required', 400);
     }
 
+    // Lookup Daily Controls snapshot if total_variance_cost is 0 or not populated
+    let dcVarianceCost: number | null = null;
+    try {
+        const snap = await loadKitchenShiftControlSnapshot(shift_id);
+        if (snap?.payload?.shift_report?.summary?.total_variance_cost != null) {
+            dcVarianceCost = Number(snap.payload.shift_report.summary.total_variance_cost);
+        }
+    } catch (e) {
+        logger.warn('accountantReviewShift: snapshot lookup failed', e as any);
+    }
+
+    const varianceCost = absMoney(shift.total_variance_cost) || (dcVarianceCost != null ? absMoney(dcVarianceCost) : 0);
+
     // Deliberate-allocation guard: when the accountant explicitly chooses
     // liability_action='staff_liability', credit bills must never be
     // auto-created from a blank allocation list — the accountant must name
     // who is being billed and how much.
-    if (approved && action === 'staff_liability' && absMoney(shift.total_variance_cost) > 0) {
+    if (approved && action === 'staff_liability' && varianceCost > 0) {
         if (!Array.isArray(allocations) || allocations.length === 0) {
             res.status(400).json({
                 success: false,
@@ -2057,15 +2199,23 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
         }
     }
 
-    const { data: upd } = await supabase.from('kitchen_shifts').update({
-        status: next, accountant_reviewed_by: userId, accountant_reviewed_at: new Date().toISOString(),
-        accountant_approved_by: approved ? userId : null, accountant_approved_at: approved ? new Date().toISOString() : null,
-        accountant_rejection_reason: approved ? null : notes, updated_at: new Date().toISOString()
-    }).eq('id', shift_id).select().single();
+    const updatePayload: any = {
+        status: next,
+        accountant_reviewed_by: userId,
+        accountant_reviewed_at: new Date().toISOString(),
+        accountant_approved_by: approved ? userId : null,
+        accountant_approved_at: approved ? new Date().toISOString() : null,
+        accountant_rejection_reason: approved ? null : notes,
+        updated_at: new Date().toISOString()
+    };
+    if (dcVarianceCost != null && (!shift.total_variance_cost || shift.total_variance_cost === 0)) {
+        updatePayload.total_variance_cost = dcVarianceCost;
+    }
+
+    const { data: upd } = await supabase.from('kitchen_shifts').update(updatePayload).eq('id', shift_id).select().single();
 
     let liabilityCase: any = null;
     const creditBills: any[] = [];
-    const varianceCost = absMoney(shift.total_variance_cost);
     const normalizedAllocations = Array.isArray(allocations) ? allocations : [];
 
     if (approved && varianceCost > 0) {
@@ -2084,27 +2234,80 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
         liabilityCase = lc;
 
         if (action !== 'write_off') {
-            for (const allocation of normalizedAllocations) {
+            const varianceItems = await getKitchenShiftVarianceItems(shift_id);
+            const itemSummaries = varianceItems.map(it => {
+                const sign = it.variance_qty < 0 ? '-' : (it.variance_qty > 0 ? '+' : '');
+                const qtyStr = `${sign}${Number(it.quantity).toFixed(2)} ${it.unit || ''}`.trim();
+                const costStr = `KES ${Number(it.total_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                return `${it.name} (${qtyStr}, ${costStr})`;
+            });
+            const itemSummaryText = itemSummaries.slice(0, 4).join(', ');
+            const remainingCount = itemSummaries.length > 4 ? ` +${itemSummaries.length - 4} more` : '';
+            const itemsVarianceDetail = itemSummaries.length > 0
+                ? ` - Items with Variance: ${itemSummaryText}${remainingCount}`
+                : '';
+
+            for (let idx = 0; idx < normalizedAllocations.length; idx++) {
+                const allocation = normalizedAllocations[idx];
                 const amount = absMoney(allocation.amount);
                 if (amount <= 0) continue;
                 const staffId = await resolveStaffProfileId(
                     allocation.staff_profile_id || allocation.staff_id || allocation.user_id
                 );
                 if (!staffId) continue;
+
+                // Lookup staff profile name for rich description
+                let staffLabel = allocation.staff_name || '';
+                if (!staffLabel) {
+                    const { data: sp } = await supabase
+                        .from('staff_profiles')
+                        .select('first_name, last_name, employee_number')
+                        .eq('id', staffId)
+                        .maybeSingle();
+                    if (sp) {
+                        staffLabel = `${sp.first_name || ''} ${sp.last_name || ''}`.trim();
+                    }
+                }
+
+                const cleanShiftNum = String(shift.shift_number || 'SFT').replace(/^KS-/, '');
+                const billNumber = `CRD-KV-${cleanShiftNum}-${Date.now().toString().slice(-4)}${normalizedAllocations.length > 1 ? `-${idx + 1}` : ''}`;
+                const baseDesc = `Kitchen Variance Credit Bill - Shift #${shift.shift_number}${staffLabel ? ` (${staffLabel})` : ''}${itemsVarianceDetail}`;
+                const fullDesc = allocation.description
+                    ? `${allocation.description.trim()} [${baseDesc}]`
+                    : baseDesc;
+
                 const { data: bill, error: billError } = await supabase
                     .from('staff_credit_bills')
                     .insert({
                         staff_id: staffId,
+                        branch_id: shift.branch_id,
+                        bill_number: billNumber,
+                        description: fullDesc,
                         amount,
-                        description: allocation.description || `Kitchen variance liability - ${shift.shift_number}`,
+                        paid_amount: 0,
+                        balance: amount,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'accountant_confirmed',
-                        balance: amount,
-                        paid_amount: 0,
                         shift_id,
-                        branch_id: shift.branch_id,
                         approved_at: new Date().toISOString(),
-                        approved_by: userId
+                        approved_by: userId,
+                        accountant_confirmed_at: new Date().toISOString(),
+                        accountant_confirmed_by: userId,
+                        items: varianceItems,
+                        items_snapshot: varianceItems,
+                        metadata: {
+                            bill_type: 'kitchen_variance',
+                            shift_id,
+                            shift_number: shift.shift_number,
+                            shift_date: shift.shift_date,
+                            branch_id: shift.branch_id,
+                            total_variance_cost: varianceCost,
+                            allocated_amount: amount,
+                            staff_id: staffId,
+                            staff_name: staffLabel,
+                            items_with_variance_count: varianceItems.length,
+                            items: varianceItems
+                        }
                     })
                     .select()
                     .maybeSingle();
@@ -2156,13 +2359,14 @@ export const getKitchenShift = asyncWrap(async (req: Request, res: Response) => 
         }
     }
 
-    const [{ data: items }, { data: prods }, { data: prodInputs }, { data: st }, { data: aprv }, { data: liabilityCases }] = await Promise.all([
+    const [{ data: items }, { data: prods }, { data: prodInputs }, { data: st }, { data: aprv }, { data: liabilityCases }, { data: allBranchStaff }] = await Promise.all([
         supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).order('item_name'),
         supabase.from('kitchen_shift_production').select('*').eq('shift_id', shift_id).order('produced_at', { ascending: false }),
         supabase.from('kitchen_shift_production_inputs').select('*').eq('shift_id', shift_id).order('created_at', { ascending: false }),
         supabase.from('kitchen_shift_stock_take').select('*').eq('shift_id', shift_id).order('item_name'),
         supabase.from('kitchen_shift_approvals').select('*').eq('shift_id', shift_id).order('approved_at', { ascending: false }),
-        supabase.from('kitchen_shift_liability_cases').select('*').eq('shift_id', shift_id).order('created_at', { ascending: false })
+        supabase.from('kitchen_shift_liability_cases').select('*').eq('shift_id', shift_id).order('created_at', { ascending: false }),
+        supabase.from('staff_profiles').select('id, user_id, branch_id, first_name, last_name, role, department, position, status').eq('branch_id', shift.branch_id).eq('status', 'active').order('first_name')
     ]);
     const staff = await staffProfileSummaries([
         shift.store_keeper_id,
@@ -2193,7 +2397,63 @@ export const getKitchenShift = asyncWrap(async (req: Request, res: Response) => 
                 : `${prod.raw_item_name} ${n(prod.raw_quantity_used).toFixed(2)} ${prod.raw_unit || ''}`.trim()
         };
     });
-    res.json({ success: true, data: { shift, items: items || [], productions: enrichedProductions, stock_take: st || [], approvals: aprv || [], liability_cases: liabilityCases || [], shift_staff: staff, summary } });
+    // Load Daily Controls snapshot if available to enrich variance breakdown and costs
+    let dcReport: any = null;
+    let dcSummary: any = null;
+    try {
+        const snap = await loadKitchenShiftControlSnapshot(shift_id);
+        if (snap?.payload?.shift_report) {
+            dcReport = snap.payload.shift_report;
+            dcSummary = dcReport.summary || {};
+        }
+    } catch (e) {
+        logger.warn('getKitchenShift: Daily Controls snapshot lookup failed', e as any);
+    }
+
+    if (dcSummary?.total_variance_cost != null && (!shift.total_variance_cost || shift.total_variance_cost === 0)) {
+        shift.total_variance_cost = dcSummary.total_variance_cost;
+    }
+    if (dcSummary?.total_expected_cost != null && (!shift.total_expected_cost || shift.total_expected_cost === 0)) {
+        shift.total_expected_cost = dcSummary.total_expected_cost;
+    }
+    if (dcSummary?.total_actual_cost != null && (!shift.total_actual_cost || shift.total_actual_cost === 0)) {
+        shift.total_actual_cost = dcSummary.total_actual_cost;
+    }
+
+    // If stock_take is empty, populate it with itemized variance rows from Daily Controls
+    let effectiveStockTake = st || [];
+    if (effectiveStockTake.length === 0 && Array.isArray(dcReport?.rows)) {
+        const varianceRows = dcReport.rows.filter((r: any) => Math.abs(n(r.variance_cost)) > 0.01 || Math.abs(n(r.variance_qty)) > 0.001);
+        effectiveStockTake = varianceRows.map((r: any) => ({
+            item_name: r.item_name || '—',
+            item_sku: r.item_sku || '—',
+            unit: r.unit || '',
+            expected_quantity: r.expected_consumption_qty,
+            actual_quantity: r.actual_consumption_qty,
+            variance: r.variance_qty,
+            variance_value: r.variance_cost,
+            cost_price: r.cost_price,
+            expected_cost: r.expected_cost,
+            actual_cost: r.actual_cost,
+        }));
+    }
+
+    res.json({
+        success: true,
+        data: {
+            shift,
+            items: items || [],
+            productions: enrichedProductions,
+            stock_take: effectiveStockTake,
+            daily_controls_report: dcReport,
+            daily_controls_summary: dcSummary,
+            approvals: aprv || [],
+            liability_cases: liabilityCases || [],
+            shift_staff: staff,
+            branch_staff: allBranchStaff || [],
+            summary
+        }
+    });
 });
 
 // ── LIST SHIFTS ─────────────────────────────────────────────
@@ -2201,13 +2461,70 @@ export const listKitchenShifts = asyncWrap(async (req: Request, res: Response) =
     const { branch_id, status, shift_date, from_date, to_date } = req.query;
     let q = supabase.from('kitchen_shifts').select('*, store_keeper:users!store_keeper_id(first_name,last_name)').order('opened_at', { ascending: false });
     if (branch_id) q = q.eq('branch_id', branch_id);
-    if (status) q = q.eq('status', status);
+    if (status && status !== 'all') q = q.eq('status', status);
     if (shift_date) q = q.eq('shift_date', shift_date);
     if (from_date) q = q.gte('shift_date', from_date);
     if (to_date) q = q.lte('shift_date', to_date);
     const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
-    res.json({ success: true, data: data || [] });
+
+    const shiftList = data || [];
+    const shiftIds = shiftList.map((s: any) => s.id);
+    let snapshotMap = new Map<string, any>();
+    let liabilityMap = new Map<string, any>();
+
+    if (shiftIds.length > 0) {
+        try {
+            const [{ data: snapshots }, { data: liabilityCases }] = await Promise.all([
+                supabase
+                    .from('kitchen_shift_control_snapshots')
+                    .select('shift_id, computed_at, snapshot_data')
+                    .in('shift_id', shiftIds),
+                supabase
+                    .from('kitchen_shift_liability_cases')
+                    .select('*')
+                    .in('shift_id', shiftIds)
+            ]);
+
+            (snapshots || []).forEach((sn: any) => {
+                snapshotMap.set(sn.shift_id, sn);
+            });
+            (liabilityCases || []).forEach((lc: any) => {
+                liabilityMap.set(lc.shift_id, lc);
+            });
+        } catch (e) {
+            logger.warn('listKitchenShifts: snapshots/liability fetch failed', e as any);
+        }
+    }
+
+    const enriched = shiftList.map((shift: any) => {
+        const snap = snapshotMap.get(shift.id);
+        const rep = snap?.snapshot_data?.shift_report;
+        const sum = rep?.summary || {};
+        const varCost = sum.total_variance_cost != null ? n(sum.total_variance_cost) : n(shift.total_variance_cost);
+        const expCost = sum.total_expected_cost != null ? n(sum.total_expected_cost) : n(shift.total_expected_cost);
+        const actCost = sum.total_actual_cost != null ? n(sum.total_actual_cost) : n(shift.total_actual_cost);
+        const posQty = sum.total_pos_sales_qty != null ? n(sum.total_pos_sales_qty) : 0;
+        const topRows = Array.isArray(rep?.rows)
+            ? rep.rows.filter((r: any) => Math.abs(n(r.variance_cost)) > 0.01).slice(0, 5)
+            : [];
+        const lc = liabilityMap.get(shift.id);
+
+        return {
+            ...shift,
+            total_variance_cost: varCost,
+            total_expected_cost: expCost,
+            total_actual_cost: actCost,
+            total_pos_sales_qty: posQty,
+            daily_control_summary: rep?.summary || null,
+            daily_control_top_variances: topRows,
+            has_snapshot: !!snap,
+            snapshot_computed_at: snap?.computed_at || null,
+            liability_case: lc || null,
+        };
+    });
+
+    res.json({ success: true, data: enriched });
 });
 
 // ── PRODUCTION SESSION VIEW (compatibility) ──────────────────
@@ -3683,7 +4000,7 @@ export const configureShiftModeHandler = asyncWrap(async (req: AuthenticatedRequ
 
 export const getBreakfastPax = asyncWrap(async (req: Request, res: Response) => {
     const date = req.query.date as string || new Date().toISOString().slice(0, 10);
-    const branch_id = req.query.branch_id || req.user?.branch_id;
+    const branch_id = req.query.branch_id || (req as any).user?.branch_id;
     
     if (!branch_id) {
         throw new AppError('Branch ID is required', 400);
@@ -3962,6 +4279,12 @@ type DailyControlRow = {
         channel_name: string;
         issued_qty: number;
     }>;
+    produced_items?: Array<{
+        dish_name: string;
+        portions_sold: number;
+        raw_quantity_consumed: number;
+        unit: string;
+    }>;
 };
 
 type ShiftDailyControlsApiPayload = {
@@ -4035,6 +4358,17 @@ function toFrozenShiftDailyControlsResponse(
     };
 }
 
+// Bump this whenever buildShiftDailyControlsData changes what the report contains.
+// Frozen snapshots stamped with an older version are ignored on read and recomputed
+// with the current logic (then re-frozen), so a report fix reaches already-closed
+// shifts without any manual snapshot cleanup.
+// v2: surface issued-but-unregistered items (kitchen_shift_additions) with opening /
+//     closing from the day's kitchen stocktake.
+// v3: rank rows by relevance (issued / moved first) so real activity isn't buried
+//     under a wall of zero-activity menu items.
+// v9: detailed linked POS items breakdown per raw food-control standard
+const KITCHEN_SHIFT_CONTROL_REPORT_VERSION = 9;
+
 async function loadKitchenShiftControlSnapshot(shiftId: string): Promise<{ payload: KitchenShiftControlSnapshotPayload; computedAt: string | null } | null> {
     const { data, error } = await supabase
         .from('kitchen_shift_control_snapshots')
@@ -4050,6 +4384,11 @@ async function loadKitchenShiftControlSnapshot(shiftId: string): Promise<{ paylo
         throw new AppError(error.message, 500);
     }
     if (!data?.snapshot_data) return null;
+
+    // Ignore snapshots frozen by an older report version so the caller recomputes
+    // with the current logic instead of serving stale frozen data.
+    const snapshotVersion = Number((data.snapshot_data as any)?.report_version ?? 0);
+    if (snapshotVersion < KITCHEN_SHIFT_CONTROL_REPORT_VERSION) return null;
 
     return {
         payload: data.snapshot_data as KitchenShiftControlSnapshotPayload,
@@ -4105,7 +4444,7 @@ async function persistKitchenShiftControlSnapshot(shiftId: string): Promise<{ pa
     const sourceSnapshot = await getKitchenShiftDailyControlSourceSnapshot(Number(report.shift.branch_id));
     const timestamp = new Date().toISOString();
     const payload: KitchenShiftControlSnapshotPayload = {
-        report_version: 1,
+        report_version: KITCHEN_SHIFT_CONTROL_REPORT_VERSION,
         generated_at: timestamp,
         shift_report: toShiftDailyControlsApiPayload(report),
         source_snapshot: {
@@ -4209,7 +4548,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         })(),
         supabase
             .from('food_control_direct_items')
-            .select('stock_item_sku, stock_item_name')
+            .select('stock_item_sku, stock_item_name, pos_outlet_item_id')
             .eq('branch_id', shift.branch_id)
             .eq('is_active', true),
         supabase
@@ -4273,28 +4612,19 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     for (const recipe of activeRecipes) resolveSkuField(recipe);
     for (const standard of standardsList) resolveSkuField(standard);
 
-    // POS-linked recipes are shown as produced items (not raw ingredients) in daily controls
-    const posLinkedRecipeIds = new Set<string>(
-        activeRecipes
-            .filter((r: any) => String(r.pos_outlet_item_id || '').trim())
-            .map((r: any) => String(r.id))
-    );
-
+    // Controlled SKUs: All raw materials configured across channel standards,
+    // production recipes (both single-input and multi-input ingredients), and direct items.
     const controlledSkuSet = new Set<string>();
     for (const row of standardsList) {
         const sku = String(row.raw_item_sku || '').trim();
         if (sku) controlledSkuSet.add(sku);
     }
     for (const row of activeRecipes) {
-        // POS-linked recipes: tracked as produced items, not raw ingredients
-        if (row.pos_outlet_item_id) continue;
         const sku = String(row.raw_item_sku || '').trim();
         // 'MULTI' is a COMPLEX-recipe marker, not a real ingredient SKU — skip it
         if (sku && sku.toUpperCase() !== 'MULTI') controlledSkuSet.add(sku);
     }
     for (const row of ((recipeInputs || []) as any[])) {
-        // Skip inputs for POS-linked recipes — those flow through produced item rows
-        if (posLinkedRecipeIds.has(String(row.recipe_id))) continue;
         const sku = String(row.raw_item_sku || '').trim();
         if (sku) controlledSkuSet.add(sku);
     }
@@ -4304,15 +4634,23 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     }
     const controlledSkus = [...controlledSkuSet];
 
-    // Fetch current kitchen stocktake for this shift (produced item opening/closing stock)
+    // Fetch current kitchen stocktake for this shift (opening/closing stock).
+    // NOTE: kitchen_stocktake_items has no spoilage column — requesting one makes
+    // PostgREST reject the whole embedded select, which previously nulled the entire
+    // stocktake (so Opening read 0 for every item). Only select columns that exist.
     const shiftLetter: 'A' | 'B' = String(shift.sub_shift_type || 'A').trim().toUpperCase() === 'B' ? 'B' : 'A';
-    const { data: currentStocktake } = await supabase
+    const { data: currentStocktake, error: currentStocktakeError } = await supabase
         .from('kitchen_stocktake_shifts')
-        .select('id, items:kitchen_stocktake_items(inventory_item_id, opening_qty, closing_qty, spoilage_qty)')
+        .select('id, items:kitchen_stocktake_items(inventory_item_id, opening_qty, closing_qty)')
         .eq('branch_id', shift.branch_id)
         .eq('stocktake_date', shift.shift_date)
         .eq('shift', shiftLetter)
         .maybeSingle() as any;
+    if (currentStocktakeError) {
+        logger.error(
+            `[buildShiftDailyControlsData] kitchen stocktake fetch failed for shift ${shiftId} (branch ${shift.branch_id}, ${shift.shift_date} ${shiftLetter}): ${currentStocktakeError.message}`
+        );
+    }
     const stocktakeItemByInvId = new Map<string, any>();
     for (const item of ((currentStocktake?.items || []) as any[])) {
         const id = String(item.inventory_item_id || '').trim();
@@ -4365,19 +4703,114 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         );
     };
 
+    const portionsSoldByRawSku = new Map<string, number>();
+    const dishesProducedByRawSku = new Map<string, Map<string, { portions: number; raw_consumed: number }>>();
+
+    const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const recipeByPosId = new Map<string, any>();
+    const recipeByName = new Map<string, any>();
+    for (const r of activeRecipes) {
+        const pid = String(r.pos_outlet_item_id || '').trim();
+        if (pid) recipeByPosId.set(pid, r);
+        const pn = norm(r.produced_item_name);
+        if (pn) recipeByName.set(pn, r);
+        const rn = norm(r.recipe_name);
+        if (rn) recipeByName.set(rn, r);
+    }
+
+    const directByPosId = new Map<string, any>();
+    const directByName = new Map<string, any>();
+    for (const d of directFoodControlList) {
+        const pid = String(d.pos_outlet_item_id || '').trim();
+        if (pid) directByPosId.set(pid, d);
+        const sn = norm(d.stock_item_name);
+        if (sn) directByName.set(sn, d);
+    }
+
+    const dynamicallyMatchedSaleIds = new Set<string>();
+
     for (const sale of posConsumptionList) {
-        // Unmatched sales (no recipe/inventory/food-control link) are surfaced
-        // separately for configuration, not folded into expected consumption.
-        if (String((sale as any).match_status || 'matched') === 'unmatched') continue;
-        const sku = String(sale.raw_item_sku || '').trim();
-        if (!controlledSkuSet.has(sku)) continue;
-        const rawQtyConsumed = n(sale.raw_quantity_consumed);
-        if (rawQtyConsumed <= 0) continue;
-        addExpectedQty(sku, rawQtyConsumed);
+        const saleId = String(sale.id || '');
+        const posId = String(sale.pos_outlet_item_id || '').trim();
+        const itemName = String(sale.raw_item_name || sale.produced_item_name || '').trim();
+        const normName = norm(itemName);
+        const portions = n(sale.portions_sold) || 1;
+
+        let matchedRecipe = (posId ? recipeByPosId.get(posId) : null) || (normName ? recipeByName.get(normName) : null);
+        let matchedDirect = (posId ? directByPosId.get(posId) : null) || (normName ? directByName.get(normName) : null);
+
+        let targetSku = '';
+        let rawQtyConsumed = 0;
+        let dishDisplayName = itemName;
+
+        if (matchedRecipe) {
+            targetSku = String(matchedRecipe.raw_item_sku || '').trim();
+            const rawQty = n(matchedRecipe.raw_quantity) || 1;
+            const prodQty = n(matchedRecipe.produced_quantity) || n(matchedRecipe.conversion_ratio) || 1;
+            rawQtyConsumed = portions * (rawQty / prodQty);
+            dishDisplayName = matchedRecipe.produced_item_name || itemName;
+            dynamicallyMatchedSaleIds.add(saleId);
+        } else if (matchedDirect) {
+            targetSku = String(matchedDirect.stock_item_sku || '').trim();
+            rawQtyConsumed = portions;
+            dishDisplayName = matchedDirect.stock_item_name || itemName;
+            dynamicallyMatchedSaleIds.add(saleId);
+        } else if (sale.raw_item_sku && n(sale.raw_quantity_consumed) > 0 && String((sale as any).match_status || 'matched') !== 'unmatched') {
+            targetSku = String(sale.raw_item_sku).trim();
+            rawQtyConsumed = n(sale.raw_quantity_consumed);
+            dishDisplayName = String(sale.produced_item_name || sale.raw_item_name || '').trim();
+            dynamicallyMatchedSaleIds.add(saleId);
+        } else {
+            // Chicken & dairy portion patterns for items unlinked at checkout
+            if (normName.includes('broiler') && (normName.includes('panfry') || normName.includes('panfried'))) {
+                targetSku = 'FGH-DRY-GOODS-026';
+                rawQtyConsumed = normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25);
+                dynamicallyMatchedSaleIds.add(saleId);
+            } else if (normName.includes('kienyeji') && (normName.includes('panfry') || normName.includes('panfried') || normName.includes('stew'))) {
+                targetSku = 'FGH-DRY-GOODS-101';
+                rawQtyConsumed = normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25);
+                dynamicallyMatchedSaleIds.add(saleId);
+            } else if (normName.includes('mursik') || normName.includes('mala')) {
+                targetSku = 'FGH-DRY-GOODS-074';
+                rawQtyConsumed = portions * 0.5;
+                dynamicallyMatchedSaleIds.add(saleId);
+            } else if (normName.includes('water1l') || normName.includes('water1litre') || normName.includes('mineralwater1l')) {
+                targetSku = 'FGH-SOFT-DRINKS-024';
+                rawQtyConsumed = portions;
+                dynamicallyMatchedSaleIds.add(saleId);
+            } else if (normName.includes('keringetwater1l')) {
+                targetSku = 'FGH-SOFT-DRINKS-011';
+                rawQtyConsumed = portions;
+                dynamicallyMatchedSaleIds.add(saleId);
+            } else if (normName.includes('delmonte')) {
+                targetSku = 'FGH-SOFT-DRINKS-004';
+                rawQtyConsumed = portions;
+                dynamicallyMatchedSaleIds.add(saleId);
+            }
+        }
+
+        if (!targetSku || !controlledSkuSet.has(targetSku) || rawQtyConsumed <= 0) {
+            continue;
+        }
+
+        addExpectedQty(targetSku, rawQtyConsumed);
         posSalesQtyBySku.set(
-            sku,
-            (posSalesQtyBySku.get(sku) || 0) + rawQtyConsumed
+            targetSku,
+            (posSalesQtyBySku.get(targetSku) || 0) + rawQtyConsumed
         );
+        portionsSoldByRawSku.set(
+            targetSku,
+            (portionsSoldByRawSku.get(targetSku) || 0) + portions
+        );
+        if (dishDisplayName) {
+            const dishesMap = dishesProducedByRawSku.get(targetSku) || new Map<string, { portions: number; raw_consumed: number }>();
+            const stat = dishesMap.get(dishDisplayName) || { portions: 0, raw_consumed: 0 };
+            stat.portions += portions;
+            stat.raw_consumed += rawQtyConsumed;
+            dishesMap.set(dishDisplayName, stat);
+            dishesProducedByRawSku.set(targetSku, dishesMap);
+        }
     }
 
     // Legacy fallback for older shifts that predate kitchen_shift_pos_consumption.
@@ -4506,11 +4939,17 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         additionsBySkuAndChannel.set(sku, bucket);
     }
 
-    const { data: inventoryItems } = controlledSkus.length
+    // Resolve inventory rows for every SKU that can appear as a row — controlled
+    // items AND anything physically issued this shift (kitchen_shift_additions).
+    // Issued-but-unregistered items still need their inventory_items.id so their
+    // opening stock resolves from the day's kitchen stocktake below.
+    const additionSkus = [...additionsBySku.keys()];
+    const rowSkus = [...new Set([...controlledSkus, ...additionSkus])];
+    const { data: inventoryItems } = rowSkus.length
         ? await supabase
             .from('inventory_items')
-            .select('id, sku, item_name, unit')
-            .in('sku', controlledSkus)
+            .select('id, sku, item_name, unit, cost_price, default_unit_cost')
+            .in('sku', rowSkus)
         : { data: [] } as any;
     const inventoryBySku = new Map<string, any>(
         ((inventoryItems || []) as any[]).map((row) => [String(row.sku || '').trim(), row])
@@ -4555,6 +4994,19 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             });
         }
     }
+    // Finally, name/unit for anything issued this shift that is NOT registered as a
+    // controlled item (no standard / recipe / direct-item). The addition ledger
+    // carries the human-readable name and unit, so issued stock shows its real name
+    // instead of a bare SKU on the control sheet.
+    for (const addition of additionsList) {
+        const sku = String(addition.item_sku || '').trim();
+        if (!sku || standardBySku.has(sku)) continue;
+        standardBySku.set(sku, {
+            raw_item_sku: sku,
+            raw_item_name: String(addition.item_name || '').trim() || sku,
+            raw_item_unit: addition.unit ? String(addition.unit).trim() : null,
+        });
+    }
     const shiftItemBySku = new Map<string, any>();
     for (const item of shiftItemsList) {
         const sku = String(item.item_sku || '').trim();
@@ -4563,143 +5015,55 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         }
     }
 
-    // ── PRODUCED ITEM ROWS (POS Restaurant) ──────────────────────────────────
-    // Show produced/menu items (e.g. Mbuzi Wetfry, Chicken Burger) for POS channel,
-    // linking opening/closing to kitchen stocktake, not raw ingredients.
-
-    // Portions sold and produced qty per pos_outlet_item_id
-    const portionsSoldByPosId = new Map<string, number>();
-    for (const sale of posConsumptionList) {
-        const posId = String(sale.pos_outlet_item_id || '').trim();
-        if (!posId) continue;
-        portionsSoldByPosId.set(posId, (portionsSoldByPosId.get(posId) || 0) + n(sale.portions_sold));
-    }
-    const producedQtyByPosId = new Map<string, number>();
-    for (const prod of shiftProductionList) {
-        const posId = String(prod.pos_outlet_item_id || '').trim();
-        if (!posId) continue;
-        producedQtyByPosId.set(posId, (producedQtyByPosId.get(posId) || 0) + n(prod.produced_quantity));
-    }
-
-    // Deduplicate POS-linked recipes by pos_outlet_item_id
-    const dedupeByPosId = new Map<string, any>();
-    for (const recipe of activeRecipes) {
-        const posId = String(recipe.pos_outlet_item_id || '').trim();
-        if (posId && !dedupeByPosId.has(posId)) dedupeByPosId.set(posId, recipe);
-    }
-
-    // If no current stocktake yet, seed opening stock from previous stocktake closing
-    if (dedupeByPosId.size && !stocktakeItemByInvId.size) {
-        const posOutletIds = [...dedupeByPosId.keys()];
-        try {
-            const { rows: prevRows } = await db.query(
-                `SELECT DISTINCT ON (ki.inventory_item_id) ki.inventory_item_id, ki.closing_qty
-                 FROM public.kitchen_stocktake_items ki
-                 JOIN public.kitchen_stocktake_shifts ks ON ks.id = ki.shift_id
-                 WHERE ks.branch_id = $1
-                   AND ki.inventory_item_id = ANY($2)
-                   AND (ks.stocktake_date < $3 OR (ks.stocktake_date = $3 AND ks.shift < $4))
-                 ORDER BY ki.inventory_item_id, ks.stocktake_date DESC, ks.shift DESC`,
-                [shift.branch_id, posOutletIds, shift.shift_date, shiftLetter]
-            );
-            for (const row of (prevRows || [])) {
-                const id = String(row.inventory_item_id || '').trim();
-                if (id) stocktakeItemByInvId.set(id, { opening_qty: n(row.closing_qty), closing_qty: null, spoilage_qty: 0 });
-            }
-        } catch (_) { /* non-critical — opening defaults to 0 */ }
-    }
-
-    const producedItemRows: DailyControlRow[] = [];
-    for (const [posId, recipe] of dedupeByPosId.entries()) {
-        const stk = stocktakeItemByInvId.get(posId) || {};
-        const openingQty = n(stk.opening_qty);
-        const additionsQty = producedQtyByPosId.get(posId) ?? 0;
-        const posSalesQty = portionsSoldByPosId.get(posId) ?? 0;
-        const spoilageQty = n(stk.spoilage_qty);
-        const systemClosingQty = openingQty + additionsQty - posSalesQty - spoilageQty;
-        const physicalClosingQty = stk.closing_qty != null ? n(stk.closing_qty) : systemClosingQty;
-        const actualConsumptionQty = Math.max(0, Number((openingQty + additionsQty - physicalClosingQty - spoilageQty).toFixed(3)));
-        const expectedConsumptionQty = Number(posSalesQty.toFixed(3));
-        const varianceQty = Number((actualConsumptionQty - expectedConsumptionQty).toFixed(3));
-        const costPrice = 0;
-        producedItemRows.push({
-            item_sku: recipe.produced_item_sku || posId,
-            item_name: recipe.produced_item_name || 'Unknown Item',
-            unit: recipe.produced_unit || 'portion',
-            main_channel: 'POS Restaurant',
-            opening_qty: Number(openingQty.toFixed(3)),
-            additions_qty: Number(additionsQty.toFixed(3)),
-            pos_sales_qty: Number(posSalesQty.toFixed(3)),
-            spoilage_qty: Number(spoilageQty.toFixed(3)),
-            system_closing_qty: Number(systemClosingQty.toFixed(3)),
-            physical_closing_qty: Number(physicalClosingQty.toFixed(3)),
-            actual_consumption_qty: actualConsumptionQty,
-            expected_consumption_qty: expectedConsumptionQty,
-            variance_qty: varianceQty,
-            cost_price: costPrice,
-            expected_cost: 0,
-            actual_cost: 0,
-            variance_cost: 0,
-            channel_breakdown: [{ channel_code: 'pos_restaurant', channel_name: 'POS Restaurant', issued_qty: posSalesQty }],
-        });
-    }
-    // ─────────────────────────────────────────────────────────────────────────
-
     const allSkus = [...new Set([
         ...controlledSkus,
-        ...[...expectedQtyBySku.keys()].filter((sku) => controlledSkuSet.has(sku)),
-        ...[...additionsBySku.keys()].filter((sku) => controlledSkuSet.has(sku)),
+        ...additionsBySku.keys(),
+        ...expectedQtyBySku.keys(),
     ])];
 
-    const rawIngredientRows: DailyControlRow[] = allSkus.map((sku) => {
-        const item = shiftItemBySku.get(sku) || {};
-        const inventoryItem = inventoryBySku.get(sku) || {};
+    const controlRows: DailyControlRow[] = [];
+    for (const sku of allSkus) {
+        const inv = inventoryBySku.get(sku) || {};
+        const invId = String(inv.id || '').trim();
+        const stk = invId ? stocktakeItemByInvId.get(invId) || {} : {};
         const standard = standardBySku.get(sku) || {};
-        const itemName = String(
-            item.item_name ||
-            inventoryItem.item_name ||
-            standard.raw_item_name ||
-            sku ||
-            'Unnamed Item'
-        );
-        const unit = String(
-            item.unit_of_measure ||
-            item.unit ||
-            inventoryItem.unit ||
-            standard.raw_item_unit ||
-            'unit'
-        );
-        // Opening for a raw ingredient: use the shift-ledger row when present,
-        // otherwise fall back to the day's submitted kitchen stocktake opening.
-        // kitchen_shift_items is not always seeded (the stocktake is the
-        // authoritative opening count), so without this fallback Opening reads 0.
-        const invIdForOpening = String(inventoryItem.id || '').trim();
-        const stocktakeOpening = invIdForOpening
-            ? n(stocktakeItemByInvId.get(invIdForOpening)?.opening_qty)
-            : 0;
-        const openingQty = shiftItemBySku.has(sku)
-            ? n(item.opening_stock)
-            : stocktakeOpening;
-        const additionsQty = additionsBySku.get(sku) ?? n(item.additions);
-        const posSalesQty = n(posSalesQtyBySku.get(sku) ?? item.sold_quantity);
-        const spoilageQty = n(item.spoilage_quantity);
-        const systemClosingQty = openingQty + additionsQty - posSalesQty - spoilageQty;
-        const physicalClosingQty =
-            item.physical_count != null
-                ? n(item.physical_count)
-                : item.system_closing_stock != null
-                    ? n(item.system_closing_stock)
-                    : systemClosingQty;
-        const actualConsumptionQty = Math.max(
-            0,
-            Number((openingQty + additionsQty - physicalClosingQty - spoilageQty).toFixed(3))
-        );
+        const shiftItem = shiftItemBySku.get(sku) || {};
+
+        const hasLedgerRow = shiftItemBySku.has(sku);
+        const openingQty = hasLedgerRow ? n(shiftItem.opening_stock) : n(stk.opening_qty);
+        const additionsQty = additionsBySku.get(sku) ?? n(shiftItem.additions);
         const expectedConsumptionQty = n(expectedQtyBySku.get(sku) || 0);
+        const portionsSold = portionsSoldByRawSku.get(sku) || 0;
+        const posSalesQty = portionsSold > 0 ? portionsSold : n(posSalesQtyBySku.get(sku) ?? shiftItem.sold_quantity);
+        const spoilageQty = hasLedgerRow ? n(shiftItem.spoilage_quantity) : 0;
+
+        const physicalClosingQty =
+            shiftItem.physical_count != null
+                ? n(shiftItem.physical_count)
+                : (stk.closing_qty != null ? n(stk.closing_qty) : null);
+
+        // Filter out completely inactive items with 0 stock and 0 activity
+        if (openingQty === 0 && additionsQty === 0 && expectedConsumptionQty === 0 && (physicalClosingQty == null || physicalClosingQty === 0)) {
+            continue;
+        }
+
+        const systemClosingQty = Math.max(0, openingQty + additionsQty - expectedConsumptionQty - spoilageQty);
+        const actualClosing = physicalClosingQty != null ? physicalClosingQty : systemClosingQty;
+
+        // Actual usage: if opening and additions are 0 but expected usage occurred (e.g. Fresh Milk without logged additions),
+        // actual usage equals expected usage so it reconciles cleanly without false negative stock
+        let actualConsumptionQty = openingQty + additionsQty - actualClosing - spoilageQty;
+        if (openingQty === 0 && additionsQty === 0 && actualConsumptionQty <= 0 && expectedConsumptionQty > 0) {
+            actualConsumptionQty = expectedConsumptionQty;
+        }
+        actualConsumptionQty = Math.max(0, Number(actualConsumptionQty.toFixed(3)));
+
         const varianceQty = Number((actualConsumptionQty - expectedConsumptionQty).toFixed(3));
-        const costPrice = n(item.cost_price);
+        const costPrice = n(shiftItem.cost_price) || n(inv.cost_price) || n(inv.default_unit_cost) || 0;
         const expectedCost = Number((expectedConsumptionQty * costPrice).toFixed(2));
         const actualCost = Number((actualConsumptionQty * costPrice).toFixed(2));
         const varianceCost = Number((actualCost - expectedCost).toFixed(2));
+
         const channelBreakdownMap = additionsBySkuAndChannel.get(sku) || new Map<string, number>();
         const channelBreakdown = [...channelBreakdownMap.entries()]
             .map(([channelCode, issuedQty]) => ({
@@ -4709,17 +5073,54 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             }))
             .sort((a, b) => b.issued_qty - a.issued_qty);
 
-        return {
+        const itemName = String(
+            shiftItem.item_name ||
+            inv.item_name ||
+            standard.raw_item_name ||
+            sku
+        );
+        const unit = String(
+            shiftItem.unit_of_measure ||
+            shiftItem.unit ||
+            inv.unit ||
+            standard.raw_item_unit ||
+            'unit'
+        );
+
+        // Dishes produced summary
+        const dishesMap = dishesProducedByRawSku.get(sku);
+        const producedItems = dishesMap ? [...dishesMap.entries()].map(([name, stat]) => ({
+            dish_name: name,
+            portions_sold: Number(stat.portions.toFixed(2)),
+            raw_quantity_consumed: Number(stat.raw_consumed.toFixed(3)),
+            unit: unit,
+        })).sort((a, b) => b.portions_sold - a.portions_sold) : [];
+
+        if (dishesMap && dishesMap.size > 0 && channelBreakdown.length === 0) {
+            const dishesSummary = [...dishesMap.entries()]
+                .map(([name, stat]) => `${name}: ${stat.portions}`)
+                .join(', ');
+            channelBreakdown.push({
+                channel_code: 'pos_restaurant',
+                channel_name: `POS: ${dishesSummary}`,
+                issued_qty: Number(expectedConsumptionQty.toFixed(3)),
+            });
+        }
+
+        const rawChannelName = channelBreakdown[0]?.channel_name || 'POS Restaurant';
+        const displayChannel = rawChannelName.startsWith('POS:') ? 'POS Restaurant' : rawChannelName;
+
+        controlRows.push({
             item_sku: sku,
             item_name: itemName,
             unit,
-            main_channel: channelBreakdown[0]?.channel_name || 'POS Restaurant',
+            main_channel: displayChannel,
             opening_qty: Number(openingQty.toFixed(3)),
             additions_qty: Number(additionsQty.toFixed(3)),
             pos_sales_qty: Number(posSalesQty.toFixed(3)),
             spoilage_qty: Number(spoilageQty.toFixed(3)),
             system_closing_qty: Number(systemClosingQty.toFixed(3)),
-            physical_closing_qty: Number(physicalClosingQty.toFixed(3)),
+            physical_closing_qty: Number(actualClosing.toFixed(3)),
             actual_consumption_qty: actualConsumptionQty,
             expected_consumption_qty: Number(expectedConsumptionQty.toFixed(3)),
             variance_qty: varianceQty,
@@ -4728,11 +5129,21 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             actual_cost: actualCost,
             variance_cost: varianceCost,
             channel_breakdown: channelBreakdown,
-        };
-    }).filter((row) => row.item_sku.trim().length > 0);
+            produced_items: producedItems,
+        });
+    }
 
-    // Produced item rows come first, then raw ingredient rows for other channels
-    const rows: DailyControlRow[] = [...producedItemRows, ...rawIngredientRows];
+    // Rank by relevance: items that moved (additions / sales / variance) first, then by activity desc
+    const rows: DailyControlRow[] = controlRows.sort((a, b) => {
+        const aMoved = a.pos_sales_qty > 0 || a.additions_qty > 0 || a.opening_qty > 0 || a.expected_consumption_qty > 0;
+        const bMoved = b.pos_sales_qty > 0 || b.additions_qty > 0 || b.opening_qty > 0 || b.expected_consumption_qty > 0;
+        if (aMoved && !bMoved) return -1;
+        if (!aMoved && bMoved) return 1;
+        if (aMoved && bMoved) {
+            return (b.additions_qty + b.expected_consumption_qty) - (a.additions_qty + a.expected_consumption_qty);
+        }
+        return a.item_name.localeCompare(b.item_name);
+    });
 
     const summary = rows.reduce(
         (acc, row) => {
@@ -4769,7 +5180,8 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         const nonConsumables = [
             'pool token', 'token', 'pool', 'trust classic', 'trust', 'condom', 't-shirt',
             'merchandise', 'cap', 'hat', 'towel', 'ticket', 'corkage', 'service charge',
-            'damage fee', 'penalty', 'entry fee', 'parking'
+            'damage fee', 'penalty', 'entry fee', 'parking', 'car wash', 'engine wash',
+            'playground', 'swimming', 'dog food', 'takeaway tin', 'take away tin', 'tin', 'packaging', 'wash'
         ];
         if (nonConsumables.some(nc => normName.includes(nc))) {
             return true;
@@ -4782,7 +5194,8 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             'jameson', 'jack daniel', 'red label', 'black label', 'johnnie walker', 'chivas',
             'hennessy', 'martell', 'tequila', 'bacardi', 'campari', 'jagermeister', 'baileys',
             'amarula', 'heineken', 'snapp', 'smirnoff', 'pilsner', 'bavaria', 'cider', 'lager',
-            '750ml', '350ml', '250ml', 'soda 500ml', 'soda 300ml', 'red bull'
+            '750ml', '350ml', '250ml', 'soda 500ml', 'soda 300ml', 'red bull', 'black ice',
+            'drostdy', 'caprice', 'camino', 'alvaro', 'balozi', 'tot', 'can', 'wine', 'beer'
         ];
         if (barKeywords.some(bk => normName.includes(bk))) {
             return true;
@@ -4791,16 +5204,43 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         return false;
     };
 
+    // Re-evaluate the "needs config" list against the CURRENT food-control config.
+    const { data: exemptRows } = await supabase
+        .from('food_control_exempt_items')
+        .select('pos_outlet_item_id')
+        .eq('branch_id', shift.branch_id);
+    const configuredPosItemIds = new Set<string>();
+    const configuredPosNames = new Set<string>();
+
+    for (const recipe of activeRecipes) {
+        const id = String(recipe.pos_outlet_item_id || '').trim();
+        if (id) configuredPosItemIds.add(id);
+        if (recipe.produced_item_name) configuredPosNames.add(norm(recipe.produced_item_name));
+        if (recipe.recipe_name) configuredPosNames.add(norm(recipe.recipe_name));
+    }
+    for (const directRow of directFoodControlList) {
+        const id = String(directRow.pos_outlet_item_id || '').trim();
+        if (id) configuredPosItemIds.add(id);
+        if (directRow.stock_item_name) configuredPosNames.add(norm(directRow.stock_item_name));
+    }
+    for (const exemptRow of ((exemptRows || []) as any[])) {
+        const id = String(exemptRow.pos_outlet_item_id || '').trim();
+        if (id) configuredPosItemIds.add(id);
+    }
+
     const unmatchedByPosId = new Map<string, any>();
     for (const sale of posConsumptionList) {
+        const saleId = String(sale.id || '');
+        if (dynamicallyMatchedSaleIds.has(saleId)) continue;
         if (String((sale as any).match_status || 'matched') !== 'unmatched') continue;
-        const posId = String(sale.pos_outlet_item_id || '').trim()
-            || String(sale.raw_item_sku || '').trim();
-        if (!posId) continue;
-        const itemName = String(sale.raw_item_name || 'Unmapped POS item');
+        const posOutletId = String(sale.pos_outlet_item_id || '').trim();
+        if (posOutletId && configuredPosItemIds.has(posOutletId)) continue;
+        const itemName = String(sale.raw_item_name || sale.produced_item_name || 'Unmapped POS item');
+        if (configuredPosNames.has(norm(itemName))) continue;
         const outletType = String((sale as any).outlet_type || (sale as any).outlet_name || '');
         if (isBarOrNonConsumableItem(itemName, outletType)) continue;
 
+        const posId = posOutletId || norm(itemName);
         const existing = unmatchedByPosId.get(posId) || {
             pos_outlet_item_id: sale.pos_outlet_item_id || null,
             item_name: itemName,
@@ -4941,14 +5381,13 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             total_actual_cost: Number(summary.total_actual_cost.toFixed(2)),
             total_variance_cost: Number(summary.total_variance_cost.toFixed(2)),
             item_count: rows.length,
-            standards_item_count: controlledSkus.length + producedItemRows.length,
+            standards_item_count: controlledSkus.length,
         },
-        standards_configured: controlledSkus.length > 0 || producedItemRows.length > 0,
+        standards_configured: controlledSkus.length > 0,
     };
 }
 
-export const getShiftDailyControlsReport = asyncWrap(async (req: Request, res: Response) => {
-    const { shift_id } = req.params;
+export async function getDailyControlsDataForShift(shift_id: string): Promise<any> {
     const { data: shiftRow, error: shiftLookupError } = await supabase
         .from('kitchen_shifts')
         .select('id, cashier_shift_id, status')
@@ -4963,14 +5402,10 @@ export const getShiftDailyControlsReport = asyncWrap(async (req: Request, res: R
 
     const frozenShiftSnapshot = await loadKitchenShiftControlSnapshot(String(shift_id));
     if (frozenShiftSnapshot) {
-        res.status(200).json({
-            success: true,
-            data: toFrozenShiftDailyControlsResponse(
-                frozenShiftSnapshot.payload,
-                frozenShiftSnapshot.computedAt
-            ),
-        });
-        return;
+        return toFrozenShiftDailyControlsResponse(
+            frozenShiftSnapshot.payload,
+            frozenShiftSnapshot.computedAt
+        );
     }
 
     if (shiftRow.cashier_shift_id && String(shiftRow.status || '').toLowerCase() === 'closed') {
@@ -4984,41 +5419,844 @@ export const getShiftDailyControlsReport = asyncWrap(async (req: Request, res: R
         if (Array.isArray(frozenReports)) {
             const matched = frozenReports.find((row: any) => String(row?.shift_id || '') === shift_id);
             if (matched) {
-                res.status(200).json({
-                    success: true,
-                    data: {
-                        ...matched,
-                        frozen: true,
-                        frozen_at: frozenSnapshot?.computed_at ?? null,
-                    },
-                });
-                return;
+                return {
+                    ...matched,
+                    frozen: true,
+                    frozen_at: frozenSnapshot?.computed_at ?? null,
+                };
             }
         }
     }
 
     if (['closed', 'pending_chef_confirmation', 'pending_accountant_review', 'approved', 'rejected'].includes(String(shiftRow.status || '').toLowerCase())) {
         const persistedSnapshot = await persistKitchenShiftControlSnapshot(String(shift_id));
-        res.status(200).json({
-            success: true,
-            data: toFrozenShiftDailyControlsResponse(
-                persistedSnapshot.payload,
-                persistedSnapshot.computedAt
-            ),
-        });
-        return;
+        return toFrozenShiftDailyControlsResponse(
+            persistedSnapshot.payload,
+            persistedSnapshot.computedAt
+        );
     }
 
     const report = await buildShiftDailyControlsData(shift_id);
+    return {
+        ...toShiftDailyControlsApiPayload(report),
+        frozen: false,
+        frozen_at: null,
+    };
+}
 
+export const getShiftDailyControlsReport = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const data = await getDailyControlsDataForShift(shift_id);
     res.status(200).json({
         success: true,
-        data: {
-            ...toShiftDailyControlsApiPayload(report),
-            frozen: false,
-            frozen_at: null,
-        },
+        data,
     });
+});
+
+export const exportShiftDailyControlsExcel = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const data = await getDailyControlsDataForShift(shift_id);
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Famous Gate Hotel Management System';
+    workbook.created = new Date();
+
+    const shift = data.shift || {};
+    const summary = data.summary || {};
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const shiftDate = shift.shift_date || 'date';
+    const shiftNumber = shift.shift_number || String(shift_id).slice(0, 8);
+    const shiftType = (shift.sub_shift_type || shift.shift_type || 'SHIFT').toUpperCase();
+
+    // ── Sheet 1: Shift Control Sheet ─────────────────────────────────────────
+    const wsControls = workbook.addWorksheet('Shift Control Sheet', {
+        views: [{ state: 'frozen', ySplit: 5 }],
+        pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
+    });
+
+    // Title Block
+    wsControls.mergeCells('A1:R1');
+    const titleCell = wsControls.getCell('A1');
+    titleCell.value = 'FAMOUS GATE HOTELS — DAILY FOOD CONTROLS REPORT';
+    titleCell.font = { name: 'Calibri', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsControls.getRow(1).height = 36;
+
+    // Subtitle / Shift Info Block
+    wsControls.mergeCells('A2:R2');
+    const subCell = wsControls.getCell('A2');
+    subCell.value = `Shift: ${shiftNumber} | Date: ${shiftDate} | Shift Type: ${shiftType} | Department: ${shift.department || 'KITCHEN'} | Status: ${(shift.status || 'OPEN').toUpperCase()} | Snapshot: ${data.frozen ? `Frozen (${data.frozen_at || ''})` : 'Live Provisional'}`;
+    subCell.font = { name: 'Calibri', italic: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A5298' } };
+    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsControls.getRow(2).height = 22;
+
+    // KPI Summary Strip on Row 3
+    wsControls.mergeCells('A3:R3');
+    const kpiCell = wsControls.getCell('A3');
+    kpiCell.value = `Items: ${summary.item_count ?? rows.length}  |  Opening Qty: ${summary.total_opening_qty ?? 0}  |  Additions: ${summary.total_additions_qty ?? 0}  |  POS Sales: ${summary.total_pos_sales_qty ?? 0}  |  Spoilage: ${summary.total_spoilage_qty ?? 0}  |  Expected Cost: KES ${Number(summary.total_expected_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}  |  Actual Cost: KES ${Number(summary.total_actual_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}  |  Variance Cost: KES ${Number(summary.total_variance_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    kpiCell.font = { name: 'Calibri', bold: true, size: 10, color: { argb: 'FF0F172A' } };
+    kpiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    kpiCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsControls.getRow(3).height = 22;
+
+    wsControls.addRow([]); // Blank spacer row 4
+
+    // Table Headers on Row 5
+    const headers = [
+        '#', 'Item Name', 'SKU', 'Unit', 'Main Channel',
+        'Opening Qty', 'Additions Qty', 'POS Sales Qty', 'Spoilage Qty',
+        'System Closing', 'Physical Closing', 'Expected Usage', 'Actual Usage',
+        'Variance Qty', 'Cost Price (KES)', 'Expected Cost (KES)', 'Actual Cost (KES)', 'Variance Cost (KES)'
+    ];
+    const headerRow = wsControls.getRow(5);
+    headers.forEach((h: string, idx: number) => {
+        const cell = headerRow.getCell(idx + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+        cell.alignment = { horizontal: idx >= 5 ? 'right' : (idx === 0 ? 'center' : 'left'), vertical: 'middle', wrapText: true };
+        cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        };
+    });
+    headerRow.height = 28;
+
+    // Set Column Widths
+    wsControls.columns = [
+        { width: 6 },   // #
+        { width: 28 },  // Item Name
+        { width: 15 },  // SKU
+        { width: 10 },  // Unit
+        { width: 18 },  // Main Channel
+        { width: 13 },  // Opening Qty
+        { width: 13 },  // Additions Qty
+        { width: 13 },  // POS Sales Qty
+        { width: 13 },  // Spoilage Qty
+        { width: 14 },  // System Closing
+        { width: 15 },  // Physical Closing
+        { width: 15 },  // Expected Usage
+        { width: 14 },  // Actual Usage
+        { width: 14 },  // Variance Qty
+        { width: 15 },  // Cost Price
+        { width: 18 },  // Expected Cost
+        { width: 16 },  // Actual Cost
+        { width: 18 },  // Variance Cost
+    ];
+
+    const thinBorder = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+
+    rows.forEach((r: any, i: number) => {
+        const isEven = i % 2 === 0;
+        const rowNum = 6 + i;
+        const row = wsControls.getRow(rowNum);
+        const varianceCost = Number(r.variance_cost || 0);
+
+        row.getCell(1).value = i + 1;
+        row.getCell(2).value = r.item_name || '—';
+        row.getCell(3).value = r.item_sku || '—';
+        row.getCell(4).value = r.unit || '—';
+        row.getCell(5).value = r.main_channel || '—';
+        row.getCell(6).value = Number(r.opening_qty || 0);
+        row.getCell(7).value = Number(r.additions_qty || 0);
+        row.getCell(8).value = Number(r.pos_sales_qty || 0);
+        row.getCell(9).value = Number(r.spoilage_qty || 0);
+        row.getCell(10).value = Number(r.system_closing_qty || 0);
+        row.getCell(11).value = Number(r.physical_closing_qty || 0);
+        row.getCell(12).value = Number(r.expected_consumption_qty || 0);
+        row.getCell(13).value = Number(r.actual_consumption_qty || 0);
+        row.getCell(14).value = Number(r.variance_qty || 0);
+        row.getCell(15).value = Number(r.cost_price || 0);
+        row.getCell(16).value = Number(r.expected_cost || 0);
+        row.getCell(17).value = Number(r.actual_cost || 0);
+        row.getCell(18).value = varianceCost;
+
+        const defaultBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+        for (let col = 1; col <= 18; col++) {
+            const cell = row.getCell(col);
+            cell.font = { name: 'Calibri', size: 10 };
+            cell.border = thinBorder;
+            cell.alignment = {
+                horizontal: col >= 6 ? 'right' : (col === 1 ? 'center' : 'left'),
+                vertical: 'middle'
+            };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: defaultBg } };
+
+            if (col >= 6 && col <= 14) {
+                cell.numFmt = '#,##0.000';
+            } else if (col >= 15 && col <= 18) {
+                cell.numFmt = '#,##0.00';
+            }
+        }
+
+        // Highlight variance cell
+        const varCell = row.getCell(18);
+        if (varianceCost > 0.01) {
+            varCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFB91C1C' } };
+            varCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        } else if (varianceCost < -0.01) {
+            varCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+            varCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        }
+
+        row.height = 22;
+    });
+
+    // Total Summary Row
+    const totalRowNum = 6 + rows.length;
+    const totalRow = wsControls.getRow(totalRowNum);
+    wsControls.mergeCells(`A${totalRowNum}:E${totalRowNum}`);
+    const totalLabelCell = totalRow.getCell(1);
+    totalLabelCell.value = 'TOTALS';
+    totalLabelCell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    totalLabelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    totalLabelCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    for (let c = 6; c <= 18; c++) {
+        const colLetter = String.fromCharCode(64 + c);
+        const cell = totalRow.getCell(c);
+        if (rows.length > 0) {
+            cell.value = { formula: `SUM(${colLetter}6:${colLetter}${totalRowNum - 1})` };
+        } else {
+            cell.value = 0;
+        }
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        cell.numFmt = c >= 15 ? '#,##0.00' : '#,##0.000';
+    }
+    totalRow.height = 26;
+
+    // ── Sheet 2: Summary & Channel Controls ──────────────────────────────────
+    const wsSummary = workbook.addWorksheet('Summary & Channels', {
+        pageSetup: { orientation: 'portrait', fitToPage: true }
+    });
+    wsSummary.columns = [
+        { width: 28 }, { width: 35 }, { width: 18 }, { width: 18 }, { width: 18 }
+    ];
+
+    wsSummary.mergeCells('A1:E1');
+    const sTitle = wsSummary.getCell('A1');
+    sTitle.value = 'SHIFT SUMMARY & CHANNEL CONTROLS';
+    sTitle.font = { name: 'Calibri', bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    sTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    sTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsSummary.getRow(1).height = 30;
+
+    const summaryData = [
+        ['Kitchen Shift Number', shiftNumber],
+        ['Shift Date', shiftDate],
+        ['Shift Type', shiftType],
+        ['Department', shift.department || 'KITCHEN'],
+        ['Shift Status', (shift.status || 'OPEN').toUpperCase()],
+        ['Snapshot State', data.frozen ? `Frozen on ${data.frozen_at}` : 'Live provisional'],
+        ['Breakfast Pax', data.breakfast_pax || shift.breakfast_pax || 0],
+        ['Staff Meal Pax', data.staff_meal_pax || shift.staff_meal_pax || 0],
+        ['Total Items Controlled', summary.item_count ?? rows.length],
+        ['Total Opening Qty', summary.total_opening_qty ?? 0],
+        ['Total Additions Qty', summary.total_additions_qty ?? 0],
+        ['Total POS Sales Qty', summary.total_pos_sales_qty ?? 0],
+        ['Total Spoilage Qty', summary.total_spoilage_qty ?? 0],
+        ['Total Expected Cost (KES)', summary.total_expected_cost ?? 0],
+        ['Total Actual Cost (KES)', summary.total_actual_cost ?? 0],
+        ['Total Variance Cost (KES)', summary.total_variance_cost ?? 0],
+    ];
+
+    let currentSrow = 3;
+    summaryData.forEach(([k, v]) => {
+        const r = wsSummary.getRow(currentSrow);
+        r.getCell(1).value = k;
+        r.getCell(1).font = { name: 'Calibri', bold: true, size: 10 };
+        r.getCell(2).value = v;
+        r.getCell(2).font = { name: 'Calibri', size: 10 };
+        currentSrow++;
+    });
+
+    currentSrow += 2;
+    // Channel Controls table
+    const channels = Array.isArray(data.channel_controls) ? data.channel_controls : [];
+    if (channels.length > 0) {
+        wsSummary.getCell(`A${currentSrow}`).value = 'Channel Controls Breakdown';
+        wsSummary.getCell(`A${currentSrow}`).font = { name: 'Calibri', bold: true, size: 12, color: { argb: 'FF1E3D73' } };
+        currentSrow++;
+
+        const chHeaders = ['Channel', 'Control Method', 'Issued Cost (KES)', 'Returns (KES)', 'Net Cost (KES)', 'Revenue (KES)', 'Food Cost %', 'Margin (KES)', 'Pax'];
+        const chHeaderRow = wsSummary.getRow(currentSrow);
+        chHeaders.forEach((h, i) => {
+            const cell = chHeaderRow.getCell(i + 1);
+            cell.value = h;
+            cell.font = { name: 'Calibri', bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A5298' } };
+            cell.alignment = { horizontal: i >= 2 ? 'right' : 'left' };
+        });
+        currentSrow++;
+
+        channels.forEach((c: any) => {
+            const cr = wsSummary.getRow(currentSrow);
+            cr.getCell(1).value = c.channel_name || c.channel_code || '';
+            cr.getCell(2).value = c.control_method || '';
+            cr.getCell(3).value = Number(c.issued_cost || 0);
+            cr.getCell(4).value = Number(c.returns || 0);
+            cr.getCell(5).value = Number(c.net_cost || 0);
+            cr.getCell(6).value = Number(c.revenue || 0);
+            cr.getCell(7).value = c.food_cost_pct != null ? `${Number(c.food_cost_pct).toFixed(1)}%` : '—';
+            cr.getCell(8).value = c.gross_margin != null ? Number(c.gross_margin) : 0;
+            cr.getCell(9).value = Number(c.pax || 0);
+            for (let j = 1; j <= 9; j++) {
+                cr.getCell(j).font = { name: 'Calibri', size: 10 };
+                cr.getCell(j).border = thinBorder;
+                if ((j >= 3 && j <= 6) || j === 8) cr.getCell(j).numFmt = '#,##0.00';
+            }
+            currentSrow++;
+        });
+    }
+
+    // ── Sheet 3: Unmatched POS Items (if any) ───────────────────────────────
+    const unmatched = Array.isArray(data.unmatched_pos_items) ? data.unmatched_pos_items : [];
+    if (unmatched.length > 0) {
+        const wsUnmatched = workbook.addWorksheet('Unmatched POS Items');
+        wsUnmatched.columns = [{ width: 40 }, { width: 20 }];
+        wsUnmatched.mergeCells('A1:B1');
+        const uTitle = wsUnmatched.getCell('A1');
+        uTitle.value = 'POS ITEMS NEEDING FOOD-CONTROL CONFIGURATION';
+        uTitle.font = { name: 'Calibri', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+        uTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+        uTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        wsUnmatched.getRow(3).getCell(1).value = 'Item Name';
+        wsUnmatched.getRow(3).getCell(2).value = 'Portions Sold';
+        wsUnmatched.getRow(3).font = { name: 'Calibri', bold: true, size: 10 };
+
+        unmatched.forEach((u: any, idx: number) => {
+            const ur = wsUnmatched.getRow(4 + idx);
+            ur.getCell(1).value = u.item_name || 'Unknown';
+            ur.getCell(2).value = Number(u.portions_sold || 0);
+            ur.getCell(1).border = thinBorder;
+            ur.getCell(2).border = thinBorder;
+            ur.getCell(2).numFmt = '#,##0.00';
+        });
+    }
+
+    const safeShiftNum = String(shiftNumber).replace(/[^A-Za-z0-9_-]/g, '_');
+    const safeDate = String(shiftDate).replace(/[^A-Za-z0-9_-]/g, '_');
+    const filename = `FG_DailyControls_${safeDate}_${safeShiftNum}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+});
+
+export const exportShiftDailyControlsCsv = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const data = await getDailyControlsDataForShift(shift_id);
+    const shift = data.shift || {};
+    const summary = data.summary || {};
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const shiftDate = shift.shift_date || 'date';
+    const shiftNumber = shift.shift_number || String(shift_id).slice(0, 8);
+    const shiftType = (shift.sub_shift_type || shift.shift_type || 'SHIFT').toUpperCase();
+
+    const csvCell = (v: any) => {
+        let text = `${v ?? ''}`.replace(/\r/g, ' ').replace(/\n/g, ' ');
+        if (text.startsWith('=') || text.startsWith('+') || text.startsWith('-') || text.startsWith('@')) {
+            text = `'${text}`;
+        }
+        return `"${text.replace(/"/g, '""')}"`;
+    };
+
+    const lines: string[] = [];
+    // BOM for UTF-8 Excel auto-detection
+    lines.push('\uFEFFFAMOUS GATE HOTELS — DAILY FOOD CONTROLS REPORT');
+    lines.push([`Kitchen Shift: ${shiftNumber}`, `Date: ${shiftDate}`, `Shift Type: ${shiftType}`, `Department: ${shift.department || 'KITCHEN'}`, `Status: ${(shift.status || 'OPEN').toUpperCase()}`].map(csvCell).join(','));
+    lines.push([`Snapshot: ${data.frozen ? `Frozen (${data.frozen_at || ''})` : 'Live Provisional'}`].map(csvCell).join(','));
+    lines.push('');
+    lines.push('SUMMARY METRICS');
+    lines.push(['Items Count', 'Breakfast Pax', 'Staff Meal Pax', 'Opening Qty', 'Additions Qty', 'POS Sales Qty', 'Spoilage Qty', 'Expected Cost (KES)', 'Actual Cost (KES)', 'Variance Cost (KES)'].map(csvCell).join(','));
+    lines.push([
+        summary.item_count ?? rows.length,
+        data.breakfast_pax || shift.breakfast_pax || 0,
+        data.staff_meal_pax || shift.staff_meal_pax || 0,
+        summary.total_opening_qty ?? 0,
+        summary.total_additions_qty ?? 0,
+        summary.total_pos_sales_qty ?? 0,
+        summary.total_spoilage_qty ?? 0,
+        summary.total_expected_cost ?? 0,
+        summary.total_actual_cost ?? 0,
+        summary.total_variance_cost ?? 0,
+    ].map(csvCell).join(','));
+    lines.push('');
+    lines.push('SHIFT CONTROL SHEET');
+    const headers = [
+        '#', 'Item Name', 'SKU', 'Unit', 'Main Channel',
+        'Opening Qty', 'Additions Qty', 'POS Sales Qty', 'Spoilage Qty',
+        'System Closing', 'Physical Closing', 'Expected Usage', 'Actual Usage',
+        'Variance Qty', 'Cost Price (KES)', 'Expected Cost (KES)', 'Actual Cost (KES)', 'Variance Cost (KES)'
+    ];
+    lines.push(headers.map(csvCell).join(','));
+
+    rows.forEach((r: any, idx: number) => {
+        lines.push([
+            idx + 1,
+            r.item_name || '',
+            r.item_sku || '',
+            r.unit || '',
+            r.main_channel || '',
+            r.opening_qty ?? 0,
+            r.additions_qty ?? 0,
+            r.pos_sales_qty ?? 0,
+            r.spoilage_qty ?? 0,
+            r.system_closing_qty ?? 0,
+            r.physical_closing_qty ?? 0,
+            r.expected_consumption_qty ?? 0,
+            r.actual_consumption_qty ?? 0,
+            r.variance_qty ?? 0,
+            r.cost_price ?? 0,
+            r.expected_cost ?? 0,
+            r.actual_cost ?? 0,
+            r.variance_cost ?? 0,
+        ].map(csvCell).join(','));
+    });
+
+    const safeShiftNum = String(shiftNumber).replace(/[^A-Za-z0-9_-]/g, '_');
+    const safeDate = String(shiftDate).replace(/[^A-Za-z0-9_-]/g, '_');
+    const filename = `FG_DailyControls_${safeDate}_${safeShiftNum}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(lines.join('\r\n'));
+});
+
+// ── KITCHEN VARIANCE SUMMARY & EXPORT ───────────────────────────
+export async function buildKitchenVarianceSummaryReportData(query: any, user: any) {
+    const { branch_id, from_date, to_date, shift_id, status } = query;
+    const effectiveBranch = branch_id || user?.branch_id;
+
+    let q = supabase
+        .from('kitchen_shifts')
+        .select('*, store_keeper:users!store_keeper_id(first_name,last_name)')
+        .order('opened_at', { ascending: false });
+
+    if (effectiveBranch) q = q.eq('branch_id', effectiveBranch);
+    if (shift_id) q = q.eq('id', shift_id);
+    if (status && status !== 'all') q = q.eq('status', status);
+    if (from_date) q = q.gte('shift_date', from_date);
+    if (to_date) q = q.lte('shift_date', to_date);
+
+    const { data: shifts, error } = await q;
+    if (error) throw new AppError(error.message, 500);
+
+    const shiftList = shifts || [];
+    const shiftIds = shiftList.map((s: any) => s.id);
+
+    let snapshotMap = new Map<string, any>();
+    let liabilityMap = new Map<string, any>();
+    if (shiftIds.length > 0) {
+        try {
+            const [{ data: snapshots }, { data: liabilityCases }] = await Promise.all([
+                supabase
+                    .from('kitchen_shift_control_snapshots')
+                    .select('shift_id, computed_at, snapshot_data')
+                    .in('shift_id', shiftIds),
+                supabase
+                    .from('kitchen_shift_liability_cases')
+                    .select('*')
+                    .in('shift_id', shiftIds)
+            ]);
+
+            (snapshots || []).forEach((sn: any) => {
+                snapshotMap.set(sn.shift_id, sn);
+            });
+            (liabilityCases || []).forEach((lc: any) => {
+                liabilityMap.set(lc.shift_id, lc);
+            });
+        } catch (e) {
+            logger.warn('buildKitchenVarianceSummaryReportData: snapshots/liability fetch failed', e as any);
+        }
+    }
+
+    let totalExpectedCost = 0;
+    let totalActualCost = 0;
+    let totalVarianceCost = 0;
+    let totalUnfavorableVariance = 0;
+    let totalFavorableVariance = 0;
+    let totalPosSalesQty = 0;
+    let shiftsWithVariance = 0;
+    let pendingReviewsCount = 0;
+
+    const itemMap = new Map<string, {
+        item_sku: string;
+        item_name: string;
+        unit: string;
+        shifts_count: number;
+        total_expected_qty: number;
+        total_actual_qty: number;
+        total_variance_qty: number;
+        total_variance_cost: number;
+    }>();
+
+    const enrichedShifts = shiftList.map((shift: any) => {
+        const snap = snapshotMap.get(shift.id);
+        const rep = snap?.snapshot_data?.shift_report;
+        const sum = rep?.summary || {};
+        const varCost = sum.total_variance_cost != null ? n(sum.total_variance_cost) : n(shift.total_variance_cost);
+        const expCost = sum.total_expected_cost != null ? n(sum.total_expected_cost) : n(shift.total_expected_cost);
+        const actCost = sum.total_actual_cost != null ? n(sum.total_actual_cost) : n(shift.total_actual_cost);
+        const posQty = sum.total_pos_sales_qty != null ? n(sum.total_pos_sales_qty) : 0;
+        const lc = liabilityMap.get(shift.id);
+
+        totalExpectedCost += expCost;
+        totalActualCost += actCost;
+        totalVarianceCost += varCost;
+        totalPosSalesQty += posQty;
+
+        if (Math.abs(varCost) > 0.01) {
+            shiftsWithVariance++;
+            if (varCost < 0) {
+                totalUnfavorableVariance += Math.abs(varCost);
+            } else {
+                totalFavorableVariance += varCost;
+            }
+        }
+
+        if (shift.status === 'pending_accountant_review' || (!lc && Math.abs(varCost) > 0.01 && shift.status === 'closed')) {
+            pendingReviewsCount++;
+        }
+
+        const rows = Array.isArray(rep?.rows) ? rep.rows : [];
+        rows.forEach((r: any) => {
+            const rowVarCost = n(r.variance_cost);
+            const rowVarQty = n(r.variance_qty);
+            if (Math.abs(rowVarCost) > 0.01 || Math.abs(rowVarQty) > 0.001) {
+                const sku = r.item_sku || r.item_name;
+                const existing = itemMap.get(sku) || {
+                    item_sku: r.item_sku || '—',
+                    item_name: r.item_name || '—',
+                    unit: r.unit || '',
+                    shifts_count: 0,
+                    total_expected_qty: 0,
+                    total_actual_qty: 0,
+                    total_variance_qty: 0,
+                    total_variance_cost: 0,
+                };
+                existing.shifts_count += 1;
+                existing.total_expected_qty += n(r.expected_consumption_qty);
+                existing.total_actual_qty += n(r.actual_consumption_qty);
+                existing.total_variance_qty += rowVarQty;
+                existing.total_variance_cost += rowVarCost;
+                itemMap.set(sku, existing);
+            }
+        });
+
+        const topRows = rows
+            .filter((r: any) => Math.abs(n(r.variance_cost)) > 0.01)
+            .sort((a: any, b: any) => Math.abs(n(b.variance_cost)) - Math.abs(n(a.variance_cost)))
+            .slice(0, 5);
+
+        return {
+            ...shift,
+            total_variance_cost: varCost,
+            total_expected_cost: expCost,
+            total_actual_cost: actCost,
+            total_pos_sales_qty: posQty,
+            daily_control_summary: rep?.summary || null,
+            daily_control_top_variances: topRows,
+            has_snapshot: !!snap,
+            snapshot_computed_at: snap?.computed_at || null,
+            liability_case: lc || null,
+        };
+    });
+
+    const topVarianceItems = Array.from(itemMap.values())
+        .sort((a, b) => Math.abs(b.total_variance_cost) - Math.abs(a.total_variance_cost));
+
+    return {
+        summary: {
+            total_shifts: shiftList.length,
+            shifts_with_variance: shiftsWithVariance,
+            total_expected_cost: totalExpectedCost,
+            total_actual_cost: totalActualCost,
+            total_variance_cost: totalVarianceCost,
+            total_variance_exposure: totalUnfavorableVariance,
+            total_unfavorable_variance: totalUnfavorableVariance,
+            total_favorable_variance: totalFavorableVariance,
+            total_pos_sales_qty: totalPosSalesQty,
+            pending_reviews_count: pendingReviewsCount,
+            branch_id: effectiveBranch || null,
+            from_date: from_date || null,
+            to_date: to_date || null,
+        },
+        shifts: enrichedShifts,
+        top_variance_items: topVarianceItems,
+    };
+}
+
+export const getKitchenVarianceSummaryReport = asyncWrap(async (req: Request, res: Response) => {
+    const data = await buildKitchenVarianceSummaryReportData(req.query, (req as any).user);
+    res.json({ success: true, data });
+});
+
+export const exportKitchenVarianceSummaryExcel = asyncWrap(async (req: Request, res: Response) => {
+    const data = await buildKitchenVarianceSummaryReportData(req.query, (req as any).user);
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Famous Gate Hotel Management System';
+    workbook.created = new Date();
+
+    const summary = data.summary || {};
+    const shifts = Array.isArray(data.shifts) ? data.shifts : [];
+    const topItems = Array.isArray(data.top_variance_items) ? data.top_variance_items : [];
+
+    const dateScope = (summary.from_date && summary.to_date)
+        ? `${summary.from_date} to ${summary.to_date}`
+        : summary.from_date
+            ? `From ${summary.from_date}`
+            : 'All Historical Shifts';
+
+    // ── Sheet 1: Shifts Variance Overview ────────────────────────────────────
+    const wsOverview = workbook.addWorksheet('Variance Overview', {
+        views: [{ state: 'frozen', ySplit: 5 }],
+        pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
+    });
+
+    // Title Block
+    wsOverview.mergeCells('A1:L1');
+    const titleCell = wsOverview.getCell('A1');
+    titleCell.value = 'FAMOUS GATE HOTELS — KITCHEN VARIANCE & DAILY CONTROLS AUDIT';
+    titleCell.font = { name: 'Calibri', bold: true, size: 15, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsOverview.getRow(1).height = 34;
+
+    // Subtitle Block
+    wsOverview.mergeCells('A2:L2');
+    const subCell = wsOverview.getCell('A2');
+    subCell.value = `Scope: ${dateScope}  |  Generated: ${new Date().toISOString().replace('T', ' ').slice(0, 19)}  |  Total Shifts: ${summary.total_shifts}  |  Shifts with Variance: ${summary.shifts_with_variance}`;
+    subCell.font = { name: 'Calibri', italic: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A5298' } };
+    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsOverview.getRow(2).height = 20;
+
+    // KPI Summary Strip
+    wsOverview.mergeCells('A3:L3');
+    const kpiCell = wsOverview.getCell('A3');
+    kpiCell.value = `Total Expected Cost: KES ${Number(summary.total_expected_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}   |   Total Actual Cost: KES ${Number(summary.total_actual_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}   |   Total Shortage Loss: KES ${Number(summary.total_unfavorable_variance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}   |   Total Surplus Gain: KES ${Number(summary.total_favorable_variance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    kpiCell.font = { name: 'Calibri', bold: true, size: 10, color: { argb: 'FF0F172A' } };
+    kpiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    kpiCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsOverview.getRow(3).height = 22;
+
+    wsOverview.addRow([]); // Blank row 4
+
+    // Table Headers
+    const headers = [
+        '#', 'Shift Number', 'Shift Date', 'Shift Type', 'Storekeeper',
+        'Status', 'POS Items Sold', 'Expected Cost (KES)', 'Actual Cost (KES)',
+        'Variance Cost (KES)', 'Variance %', 'Liability Decision'
+    ];
+    const headerRow = wsOverview.getRow(5);
+    headers.forEach((h: string, idx: number) => {
+        const cell = headerRow.getCell(idx + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+        cell.alignment = { horizontal: idx >= 6 && idx <= 10 ? 'right' : (idx === 0 ? 'center' : 'left'), vertical: 'middle' };
+    });
+    headerRow.height = 26;
+
+    wsOverview.columns = [
+        { width: 6 },   // #
+        { width: 22 },  // Shift Number
+        { width: 14 },  // Date
+        { width: 14 },  // Shift Type
+        { width: 20 },  // Storekeeper
+        { width: 14 },  // Status
+        { width: 15 },  // POS Items Sold
+        { width: 18 },  // Expected Cost
+        { width: 18 },  // Actual Cost
+        { width: 18 },  // Variance Cost
+        { width: 14 },  // Variance %
+        { width: 24 },  // Liability Decision
+    ];
+
+    const thinBorder = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+
+    shifts.forEach((s: any, idx: number) => {
+        const rowNum = 6 + idx;
+        const row = wsOverview.getRow(rowNum);
+        const isEven = idx % 2 === 0;
+        const varCost = Number(s.total_variance_cost || 0);
+        const expCost = Number(s.total_expected_cost || 0);
+        const actCost = Number(s.total_actual_cost || 0);
+        const varPct = expCost > 0 ? (varCost / expCost) * 100 : 0;
+        const sk = s.store_keeper ? `${s.store_keeper.first_name || ''} ${s.store_keeper.last_name || ''}`.trim() : '—';
+        const lc = s.liability_case;
+        const decisionText = lc
+            ? `${(lc.liability_action || '').toUpperCase()} (${(lc.status || '').toUpperCase()})`
+            : (Math.abs(varCost) > 0.01 ? 'PENDING DECISION' : 'NO VARIANCE');
+
+        row.getCell(1).value = idx + 1;
+        row.getCell(2).value = s.shift_number || s.id;
+        row.getCell(3).value = s.shift_date || '';
+        row.getCell(4).value = (s.sub_shift_type || s.shift_type || 'SHIFT').toUpperCase();
+        row.getCell(5).value = sk || '—';
+        row.getCell(6).value = (s.status || 'OPEN').toUpperCase();
+        row.getCell(7).value = Number(s.total_pos_sales_qty || 0);
+        row.getCell(8).value = expCost;
+        row.getCell(9).value = actCost;
+        row.getCell(10).value = varCost;
+        row.getCell(11).value = `${varPct >= 0 ? '+' : ''}${varPct.toFixed(1)}%`;
+        row.getCell(12).value = decisionText;
+
+        const bg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+        for (let col = 1; col <= 12; col++) {
+            const cell = row.getCell(col);
+            cell.font = { name: 'Calibri', size: 10 };
+            cell.border = thinBorder;
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+            cell.alignment = {
+                horizontal: col >= 7 && col <= 11 ? 'right' : (col === 1 ? 'center' : 'left'),
+                vertical: 'middle'
+            };
+            if (col === 7) cell.numFmt = '#,##0';
+            if (col >= 8 && col <= 10) cell.numFmt = '#,##0.00';
+        }
+
+        // Color-code variance cost
+        const varCell = row.getCell(10);
+        if (varCost < -0.01) {
+            varCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFB91C1C' } };
+            varCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        } else if (varCost > 0.01) {
+            varCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+            varCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        }
+
+        row.height = 22;
+    });
+
+    // Totals Row
+    const totalRowIdx = 6 + shifts.length;
+    const tRow = wsOverview.getRow(totalRowIdx);
+    wsOverview.mergeCells(`A${totalRowIdx}:F${totalRowIdx}`);
+    const tLabel = tRow.getCell(1);
+    tLabel.value = 'TOTALS';
+    tLabel.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    tLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    tLabel.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    tRow.getCell(7).value = summary.total_pos_sales_qty || 0;
+    tRow.getCell(8).value = summary.total_expected_cost || 0;
+    tRow.getCell(9).value = summary.total_actual_cost || 0;
+    tRow.getCell(10).value = summary.total_variance_cost || 0;
+    tRow.getCell(11).value = '';
+    tRow.getCell(12).value = '';
+
+    for (let c = 7; c <= 12; c++) {
+        const cell = tRow.getCell(c);
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        if (c === 7) cell.numFmt = '#,##0';
+        if (c >= 8 && c <= 10) cell.numFmt = '#,##0.00';
+    }
+    tRow.height = 26;
+
+    // ── Sheet 2: Top Variance Items ──────────────────────────────────────────
+    const wsItems = workbook.addWorksheet('Top Variance Items', {
+        pageSetup: { orientation: 'portrait', fitToPage: true }
+    });
+    wsItems.columns = [
+        { width: 6 }, { width: 30 }, { width: 16 }, { width: 10 },
+        { width: 16 }, { width: 18 }, { width: 18 }, { width: 16 }, { width: 20 }, { width: 14 }
+    ];
+
+    wsItems.mergeCells('A1:J1');
+    const iTitle = wsItems.getCell('A1');
+    iTitle.value = 'TOP DISCREPANCY FOOD-CONTROL ITEMS (ACROSS FILTERED SHIFTS)';
+    iTitle.font = { name: 'Calibri', bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+    iTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3D73' } };
+    iTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+    wsItems.getRow(1).height = 30;
+
+    const itemHeaders = [
+        '#', 'Item Name', 'SKU', 'Unit', 'Shifts Affected',
+        'Expected Usage', 'Actual Usage', 'Variance Qty', 'Variance Cost (KES)', 'Discrepancy'
+    ];
+    const iHeaderRow = wsItems.getRow(3);
+    itemHeaders.forEach((h: string, idx: number) => {
+        const cell = iHeaderRow.getCell(idx + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A5298' } };
+        cell.alignment = { horizontal: idx >= 4 && idx <= 8 ? 'right' : (idx === 0 ? 'center' : 'left'), vertical: 'middle' };
+    });
+    iHeaderRow.height = 24;
+
+    topItems.forEach((it: any, idx: number) => {
+        const row = wsItems.getRow(4 + idx);
+        const isEven = idx % 2 === 0;
+        const vCost = Number(it.total_variance_cost || 0);
+
+        row.getCell(1).value = idx + 1;
+        row.getCell(2).value = it.item_name || '—';
+        row.getCell(3).value = it.item_sku || '—';
+        row.getCell(4).value = it.unit || '—';
+        row.getCell(5).value = it.shifts_count || 1;
+        row.getCell(6).value = Number(it.total_expected_qty || 0);
+        row.getCell(7).value = Number(it.total_actual_qty || 0);
+        row.getCell(8).value = Number(it.total_variance_qty || 0);
+        row.getCell(9).value = vCost;
+        row.getCell(10).value = vCost < 0 ? 'SHORTAGE' : 'SURPLUS';
+
+        const bg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+        for (let col = 1; col <= 10; col++) {
+            const cell = row.getCell(col);
+            cell.font = { name: 'Calibri', size: 10 };
+            cell.border = thinBorder;
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+            cell.alignment = {
+                horizontal: col >= 5 && col <= 8 ? 'right' : (col === 1 || col === 10 ? 'center' : 'left'),
+                vertical: 'middle'
+            };
+            if (col >= 6 && col <= 8) cell.numFmt = '#,##0.000';
+            if (col === 9) cell.numFmt = '#,##0.00';
+        }
+
+        const vCell = row.getCell(9);
+        if (vCost < -0.01) {
+            vCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFB91C1C' } };
+            vCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        } else if (vCost > 0.01) {
+            vCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+            vCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        }
+
+        row.height = 20;
+    });
+
+    const safeFrom = String(summary.from_date || 'all').replace(/[^A-Za-z0-9_-]/g, '_');
+    const safeTo = String(summary.to_date || 'all').replace(/[^A-Za-z0-9_-]/g, '_');
+    const filename = `FG_Kitchen_Variance_Summary_${safeFrom}_${safeTo}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
 });
 
 

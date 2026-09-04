@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
 import { applyBranchFilter } from '../utils/branchIsolation';
@@ -68,7 +69,8 @@ const openCreditStatuses = ['pending', 'approved', 'active', 'open', 'accountant
 // editCreditBill(). Only forward columns that actually exist on
 // `credit_bills`.
 const CREDIT_BILLS_COLUMNS = new Set([
-    'amount', 'reason', 'status',
+    'amount', 'total_amount', 'reason', 'status',
+    'amount_paid', 'balance_due', 'paid_amount', 'balance',
     'accountant_confirmed_at', 'accountant_id',
     'auditor_confirmed_at', 'auditor_id'
 ]);
@@ -89,8 +91,18 @@ async function syncLinkedCashierCreditBill(
     payload: Record<string, any>
 ) {
     if (!sourceCashierCreditBillId) return;
+    const mappedPayload: Record<string, any> = { ...payload };
+    if (payload.paid_amount !== undefined && payload.amount_paid === undefined) {
+        mappedPayload.amount_paid = payload.paid_amount;
+    }
+    if (payload.balance_amount !== undefined && payload.balance_due === undefined) {
+        mappedPayload.balance_due = payload.balance_amount;
+    }
+    if (payload.balance !== undefined && payload.balance_due === undefined) {
+        mappedPayload.balance_due = payload.balance;
+    }
     const cleaned = Object.fromEntries(
-        Object.entries(payload).filter(
+        Object.entries(mappedPayload).filter(
             ([key, value]) => value !== undefined && CREDIT_BILLS_COLUMNS.has(key)
         )
     );
@@ -216,15 +228,23 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             // Map cashier fields to staff_credit_bills field names for consistency
             amount: bill.total_amount || bill.amount || 0,
             paid_amount: bill.amount_paid || bill.paid_amount || 0,
-            balance: bill.balance_due !== null && bill.balance_due !== undefined
+                balance: bill.balance_due !== null && bill.balance_due !== undefined
                 ? bill.balance_due
                 : (bill.balance || (bill.total_amount || bill.amount || 0) - (bill.amount_paid || 0)),
             description: bill.description || `Credit bill for ${bill.customer_name || 'customer'}`,
             source_table: 'credit_bills'
         }));
 
-        // ===== MERGE AND SORT BY BILL_DATE =====
-        const allBills = [...normalizedStaffBills, ...normalizedCashierBills]
+        // ===== MERGE AND SORT BY BILL_DATE (DE-DUPLICATING LINKED ROWS) =====
+        const existingSourceCashierIds = new Set(
+            (staffCreditBills || [])
+                .map((b: any) => b.source_cashier_credit_bill_id || b.bill_number)
+                .filter(Boolean)
+        );
+        const unlinkedCashierBills = (normalizedCashierBills || []).filter(
+            (b: any) => !existingSourceCashierIds.has(b.id) && !existingSourceCashierIds.has(b.bill_number)
+        );
+        const allBills = [...normalizedStaffBills, ...unlinkedCashierBills]
             .sort((a, b) => {
                 const dateA = new Date(a.bill_date || a.created_at).getTime();
                 const dateB = new Date(b.bill_date || b.created_at).getTime();
@@ -499,7 +519,9 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
         // Only set balance/paid_amount if the columns exist (try/catch the update)
         try {
             billUpdate.paid_amount = newPaidAmount;
+            billUpdate.amount_paid = newPaidAmount;
             billUpdate.balance = Math.max(0, newBalance);
+            billUpdate.is_paid = isFullyPaid;
             if (isFullyPaid && currentShift) {
                 billUpdate.paid_in_shift_id = currentShift.id;
             }
@@ -515,7 +537,9 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
 
             await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
                 paid_amount: newPaidAmount,
+                amount_paid: newPaidAmount,
                 balance_amount: Math.max(0, newBalance),
+                balance_due: Math.max(0, newBalance),
                 status: isFullyPaid ? 'paid' : undefined
             });
 
@@ -720,7 +744,6 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
         if (paymentAmount > remainingEntryAmount + 0.001) {
             throw new AppError(`Payment amount exceeds remaining cashier paid-credit entry balance (${remainingEntryAmount})`, 400);
         }
-
         let updatedBill: any = null;
         const isAutoAllocate = !staff_credit_bill_id ||
             staff_credit_bill_id === 'auto' ||
@@ -728,12 +751,30 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             staff_credit_bill_id === 'salary_credit';
 
         if (!isAutoAllocate) {
-            const { data: bill, error: billError } = await supabase
+            let bill: any = null;
+            let isStaffTable = true;
+            const { data: sBill } = await supabase
                 .from('staff_credit_bills')
                 .select('*')
                 .eq('id', staff_credit_bill_id)
-                .single();
-            if (billError || !bill) throw new AppError('Staff credit bill not found', 404);
+                .maybeSingle();
+
+            if (sBill) {
+                bill = sBill;
+                isStaffTable = true;
+            } else {
+                const { data: cBill } = await supabase
+                    .from('credit_bills')
+                    .select('*')
+                    .eq('id', staff_credit_bill_id)
+                    .maybeSingle();
+                if (cBill) {
+                    bill = cBill;
+                    isStaffTable = false;
+                }
+            }
+
+            if (!bill) throw new AppError('Staff credit bill not found', 404);
             if (selectedEntry.staff_id && bill.staff_id && String(selectedEntry.staff_id) !== String(bill.staff_id)) {
                 throw new AppError('Paid-credit entry staff does not match selected credit bill staff', 400);
             }
@@ -741,38 +782,68 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
                 throw new AppError('Selected credit bill is not open for payment application', 400);
             }
 
-            const currentPaid = toNumber(bill.paid_amount);
-            const billAmount = toNumber(bill.amount);
+            const currentPaid = toNumber(isStaffTable ? bill.paid_amount || bill.amount_paid : bill.amount_paid || bill.paid_amount);
+            const billAmount = toNumber(isStaffTable ? bill.amount : bill.total_amount || bill.amount);
             const currentBalance = bill.balance !== null && bill.balance !== undefined
                 ? toNumber(bill.balance)
-                : Math.max(0, billAmount - currentPaid);
+                : (bill.balance_due !== null && bill.balance_due !== undefined
+                    ? toNumber(bill.balance_due)
+                    : Math.max(0, billAmount - currentPaid));
 
             const appliedToThisBill = Math.min(currentBalance, paymentAmount);
             const newPaid = Math.min(billAmount, currentPaid + appliedToThisBill);
             const newBalance = Math.max(0, currentBalance - appliedToThisBill);
-            const newStatus = newBalance <= 0 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
+            const newStatus = newBalance <= 0.001 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
 
-            const { data: uBill, error: updateError } = await supabase
-                .from('staff_credit_bills')
-                .update({
+            if (isStaffTable) {
+                const { data: uBill, error: updateError } = await supabase
+                    .from('staff_credit_bills')
+                    .update({
+                        paid_amount: newPaid,
+                        amount_paid: newPaid,
+                        balance: newBalance,
+                        is_paid: newBalance <= 0.001,
+                        status: newStatus,
+                        paid_in_shift_id: newBalance <= 0.001
+                            ? selectedShift.id
+                            : bill.paid_in_shift_id || null
+                    })
+                    .eq('id', bill.id)
+                    .select()
+                    .single();
+                if (updateError) throw updateError;
+                updatedBill = uBill;
+
+                await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
+                    amount_paid: newPaid,
                     paid_amount: newPaid,
+                    balance_due: newBalance,
                     balance: newBalance,
-                    status: newStatus,
-                    paid_in_shift_id: newBalance <= 0
-                        ? selectedShift.id
-                        : bill.paid_in_shift_id || null
-                })
-                .eq('id', bill.id)
-                .select()
-                .single();
-            if (updateError) throw updateError;
-            updatedBill = uBill;
+                    status: newBalance <= 0.001 ? 'paid' : undefined
+                });
+            } else {
+                const { data: uBill, error: updateError } = await supabase
+                    .from('credit_bills')
+                    .update({
+                        amount_paid: newPaid,
+                        balance_due: newBalance,
+                        status: newStatus
+                    })
+                    .eq('id', bill.id)
+                    .select()
+                    .single();
+                if (updateError) throw updateError;
+                updatedBill = uBill;
+            }
 
             try {
                 await supabase.from('staff_credit_bill_payments').insert({
+                    bill_id: bill.id,
                     credit_bill_id: bill.id,
                     amount: appliedToThisBill,
+                    method: selectedEntry.payment_method || 'cash',
                     payment_method: selectedEntry.payment_method || 'cash',
+                    paid_on: new Date().toISOString().split('T')[0],
                     payment_date: new Date().toISOString().split('T')[0],
                     reference: selectedEntry.reference || null,
                     notes: `Applied cashier paid-credit entry ${selectedEntry.id || entryId}${notes ? `: ${notes}` : ''}`,
@@ -782,12 +853,6 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             } catch (paymentHistoryError) {
                 logger.warn('Unable to write staff credit payment history for cashier paid-credit application', paymentHistoryError);
             }
-
-            await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
-                paid_amount: newPaid,
-                balance_amount: newBalance,
-                status: newBalance <= 0 ? 'paid' : undefined
-            });
         } else {
             const staffId = selectedEntry.staff_id;
             if (staffId) {
@@ -893,6 +958,46 @@ export const getCreditBillPayments = async (req: Request, res: Response, next: N
     }
 };
 
+// @desc    Branch-wide history of every recorded paid-bill payment (the money
+//          applied against staff credit bills), newest first. Powers the
+//          "Paid History" tab so there is one place to see all paid bills.
+// @route   GET /api/payroll/credit-bills/payments
+export const getBranchCreditBillPayments = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const branchId = (req as any).user?.branch_id ?? req.query.branch_id ?? null;
+        if (!branchId) throw new AppError('branch_id required', 400);
+        const { from_date, to_date, staff_id } = req.query;
+
+        const params: any[] = [branchId];
+        let where = 'b.branch_id = $1';
+        if (from_date) { params.push(String(from_date)); where += ` AND p.created_at::date >= $${params.length}`; }
+        if (to_date) { params.push(String(to_date)); where += ` AND p.created_at::date <= $${params.length}`; }
+        if (staff_id) { params.push(String(staff_id)); where += ` AND b.staff_id = $${params.length}`; }
+
+        const { rows } = await db.query(
+            `SELECT p.id, p.amount,
+                    COALESCE(p.payment_method, p.method) AS payment_method,
+                    p.reference, p.notes, p.created_at, p.recorded_by,
+                    b.staff_id, b.bill_number, b.description,
+                    NULLIF(TRIM(CONCAT(sp.first_name, ' ', sp.last_name)), '') AS staff_name,
+                    NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), '') AS recorded_by_name
+               FROM staff_credit_bill_payments p
+               JOIN staff_credit_bills b ON b.id = COALESCE(p.credit_bill_id, p.bill_id)
+               LEFT JOIN staff_profiles sp ON sp.id = b.staff_id
+               LEFT JOIN users u ON u.id = p.recorded_by
+              WHERE ${where}
+              ORDER BY p.created_at DESC
+              LIMIT 1000`,
+            params
+        );
+        res.status(200).json({ success: true, data: rows });
+    } catch (error: any) {
+        // Table not present yet → empty list rather than a broken screen.
+        if (error?.code === '42P01') { res.status(200).json({ success: true, data: [] }); return; }
+        next(error);
+    }
+};
+
 export const triggerPendingBillsMigration = async (
     req: Request,
     res: Response,
@@ -972,7 +1077,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         let orderHeader: any = null;
 
         // 2. Check JSON items stored directly on targetBill or cashierBill
-        const directJsonItems = targetBill.items || targetBill.items_snapshot || targetBill.order_items || cashierBill?.items || cashierBill?.items_snapshot || cashierBill?.order_items;
+        const directJsonItems = targetBill.items || targetBill.items_snapshot || targetBill.metadata?.items || targetBill.order_items || cashierBill?.items || cashierBill?.items_snapshot || cashierBill?.order_items;
         if (Array.isArray(directJsonItems) && directJsonItems.length > 0) {
             rawItems = directJsonItems;
         } else if (typeof directJsonItems === 'string') {
@@ -1166,6 +1271,54 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             } catch (_) {}
         }
 
+        // 6.5. Query kitchen shift variance items if this is a kitchen variance bill
+        const isKitchenBill = String(targetBill.bill_number || '').startsWith('CRD-KV') ||
+            String(targetBill.description || '').toLowerCase().includes('kitchen') ||
+            targetBill.metadata?.bill_type === 'kitchen_variance' ||
+            targetBill.metadata?.bill_type === 'production_shortfall';
+
+        if ((!rawItems || !rawItems.length) && (targetBill.shift_id || isKitchenBill)) {
+            try {
+                if (targetBill.shift_id) {
+                    const { getKitchenShiftVarianceItems } = await import('./kitchen-shift.controller');
+                    const kvItems = await getKitchenShiftVarianceItems(targetBill.shift_id);
+                    if (kvItems && kvItems.length > 0) {
+                        rawItems = kvItems;
+                    }
+                }
+            } catch (err: any) {
+                logger.warn('Kitchen shift variance items fetch fallback failed:', err?.message || err);
+            }
+        }
+
+        if (!orderHeader && (isKitchenBill || targetBill.shift_id)) {
+            let shiftNumber = targetBill.metadata?.shift_number || '';
+            let shiftDate = targetBill.metadata?.shift_date || targetBill.bill_date || '';
+            if (targetBill.shift_id && !shiftNumber) {
+                try {
+                    const { data: ks } = await supabase
+                        .from('kitchen_shifts')
+                        .select('shift_number, shift_date, department')
+                        .eq('id', targetBill.shift_id)
+                        .maybeSingle();
+                    if (ks) {
+                        shiftNumber = ks.shift_number || '';
+                        shiftDate = ks.shift_date || shiftDate;
+                    }
+                } catch (_) {}
+            }
+            orderHeader = {
+                order_number: targetBill.bill_number || `CRD-KV-${(targetBill.id || '').slice(0, 8)}`,
+                source: 'kitchen_variance',
+                source_type: 'Kitchen Variance Credit Bill',
+                shift_number: shiftNumber,
+                shift_date: shiftDate,
+                total_amount: targetBill.amount,
+                department: 'Kitchen',
+                notes: targetBill.description
+            };
+        }
+
         // 7. Fetch staff profile if linked
         let staffProfile: any = null;
         if (targetBill.staff_id) {
@@ -1187,9 +1340,10 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         };
 
         const formattedItems = (rawItems || []).map((item: any, idx: number) => {
-            const qty = firstNumber(item, ['quantity', 'qty', 'count']) || 1;
+            const qty = firstNumber(item, ['quantity', 'qty', 'count', 'variance_qty']) || 1;
             const price = firstNumber(item, [
                 'unit_price',
+                'cost_price',
                 'selling_price',
                 'menu_price',
                 'retail_price',
@@ -1200,6 +1354,8 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             ]);
             const total = firstNumber(item, [
                 'total_price',
+                'variance_cost',
+                'variance_value',
                 'line_total',
                 'total_amount',
                 'extended_price',
@@ -1218,11 +1374,16 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             return {
                 id: item.id || `${targetBill.id}_${idx}`,
                 name: rawItemName,
-                category: item.category || item.department || item.item_group || 'Food & Beverage',
+                item_sku: item.item_sku || item.sku || '',
+                unit: item.unit || '',
+                category: item.category || (isKitchenBill ? 'Kitchen Variance' : (item.department || item.item_group || 'Food & Beverage')),
                 quantity: qty,
+                variance_qty: item.variance_qty != null ? item.variance_qty : (isKitchenBill ? -qty : null),
                 unit_price: price,
+                cost_price: price,
                 total_price: total > 0 ? total : (qty * price),
-                notes: item.notes || item.special_instructions || '',
+                variance_cost: total > 0 ? total : (qty * price),
+                notes: item.notes || item.special_instructions || (isKitchenBill ? `Shortage: ${qty} ${item.unit || ''}` : ''),
                 is_voided: item.is_voided || item.status === 'voided' || false
             };
         });
@@ -1233,8 +1394,12 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                 bill: targetBill,
                 order_header: orderHeader,
                 items: formattedItems,
-                staff_profile: staffProfile
-            }
+                staff_profile: staffProfile,
+                is_kitchen_variance: isKitchenBill
+            },
+            items: formattedItems,
+            order_header: orderHeader,
+            bill: targetBill
         });
     } catch (error) {
         next(error);
@@ -1441,10 +1606,23 @@ export const allocateStaffCreditPayment = async (
     let remainingToApply = amount;
     const appliedBills: any[] = [];
 
+    // Collect all linked staff IDs (user ID, staff profile ID)
+    const staffIdsSet = new Set<string>([String(staffId)]);
+    try {
+        const { data: profile } = await supabase
+            .from('staff_profiles')
+            .select('id, user_id')
+            .or(`id.eq.${staffId},user_id.eq.${staffId}`)
+            .maybeSingle();
+        if (profile?.id) staffIdsSet.add(profile.id);
+        if (profile?.user_id) staffIdsSet.add(profile.user_id);
+    } catch (_) {}
+    const staffIdList = Array.from(staffIdsSet);
+
     let query = supabase
         .from('staff_credit_bills')
         .select('*')
-        .eq('staff_id', staffId)
+        .in('staff_id', staffIdList)
         .in('status', ['pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed', 'partial', 'partially_applied'])
         .order('created_at', { ascending: true });
 
@@ -1470,23 +1648,34 @@ export const allocateStaffCreditPayment = async (
         const newBalance = Math.max(0, currentBalance - applyAmt);
         const newStatus = newBalance <= 0.001 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
 
-        const { data: uBill } = await supabase
-            .from('staff_credit_bills')
-            .update({
-                paid_amount: newPaid,
-                balance: newBalance,
-                status: newStatus,
-                paid_in_shift_id: newBalance <= 0.001 ? shiftId : (bill.paid_in_shift_id || null)
-            })
-            .eq('id', bill.id)
-            .select()
-            .single();
+        // Money-critical write via the raw pg pool. The supabase/PostgREST client was
+        // intermittently returning success WITHOUT persisting this update, leaving the
+        // balance unreduced while the payment row was still written (silent data loss).
+        // rowCount from a real SQL UPDATE is authoritative.
+        const upd = await db.query(
+            `UPDATE staff_credit_bills
+                SET paid_amount = $1, amount_paid = $1, balance = $2, status = $3,
+                    is_paid = $4, paid_in_shift_id = $5, updated_at = NOW()
+              WHERE id = $6
+            RETURNING *`,
+            [newPaid, newBalance, newStatus, newBalance <= 0.001, newBalance <= 0.001 ? shiftId : (bill.paid_in_shift_id || null), bill.id]
+        );
+        if (upd.rowCount !== 1) {
+            throw new AppError(
+                `Could not reduce credit bill ${bill.id}. No payment was recorded — please try again.`,
+                500
+            );
+        }
+        const uBill = upd.rows[0];
 
         try {
             await supabase.from('staff_credit_bill_payments').insert({
+                bill_id: bill.id,
                 credit_bill_id: bill.id,
                 amount: applyAmt,
+                method: paymentMethod,
                 payment_method: paymentMethod,
+                paid_on: new Date().toISOString().split('T')[0],
                 payment_date: new Date().toISOString().split('T')[0],
                 reference: reference || null,
                 notes: notes || (reference ? `Direct paid-bill settlement (${reference})` : `Direct paid-bill credit settlement`),
@@ -1497,12 +1686,72 @@ export const allocateStaffCreditPayment = async (
 
         await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
             paid_amount: newPaid,
+            amount_paid: newPaid,
             balance_amount: newBalance,
+            balance_due: newBalance,
             status: newBalance <= 0.001 ? 'paid' : undefined
         });
 
         appliedBills.push(uBill || bill);
         remainingToApply -= applyAmt;
+    }
+
+    // If there is still remaining payment and open bills exist in credit_bills
+    if (remainingToApply > 0.001) {
+        let cQuery = supabase
+            .from('credit_bills')
+            .select('*')
+            .in('staff_id', staffIdList)
+            .in('status', ['open', 'pending', 'approved', 'partial'])
+            .order('created_at', { ascending: true });
+
+        if (branchId) {
+            cQuery = cQuery.eq('branch_id', branchId);
+        }
+
+        const { data: openCBills } = await cQuery;
+
+        for (const cb of openCBills || []) {
+            if (remainingToApply <= 0.001) break;
+            const amt = toNumber(cb.total_amount || cb.amount);
+            const currentPaid = toNumber(cb.amount_paid || cb.paid_amount);
+            const currentBal = cb.balance_due !== null && cb.balance_due !== undefined
+                ? toNumber(cb.balance_due)
+                : Math.max(0, amt - currentPaid);
+
+            if (currentBal <= 0) continue;
+
+            const applyAmt = Math.min(currentBal, remainingToApply);
+            const newPaid = Math.min(amt, currentPaid + applyAmt);
+            const newBal = Math.max(0, currentBal - applyAmt);
+            const newStatus = newBal <= 0.001 ? 'paid' : cb.status;
+
+            await db.query(
+                `UPDATE credit_bills
+                    SET amount_paid = $1, balance_due = $2, status = $3, updated_at = NOW()
+                  WHERE id = $4`,
+                [newPaid, newBal, newStatus, cb.id]
+            );
+
+            try {
+                await supabase.from('staff_credit_bill_payments').insert({
+                    bill_id: cb.id,
+                    credit_bill_id: cb.id,
+                    amount: applyAmt,
+                    method: paymentMethod,
+                    payment_method: paymentMethod,
+                    paid_on: new Date().toISOString().split('T')[0],
+                    payment_date: new Date().toISOString().split('T')[0],
+                    reference: reference || null,
+                    notes: notes || (reference ? `Direct paid-bill settlement (${reference})` : `Direct paid-bill credit settlement`),
+                    recorded_by: recordedBy,
+                    shift_id: shiftId
+                });
+            } catch (_) {}
+
+            appliedBills.push({ ...cb, amount_paid: newPaid, balance_due: newBal, status: newStatus });
+            remainingToApply -= applyAmt;
+        }
     }
 
     return {
@@ -1513,7 +1762,7 @@ export const allocateStaffCreditPayment = async (
 
 export const recordPaidBillByStaff = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, amount, payment_method, reference, reference_code, notes } = req.body;
+        const { staff_id, amount, payment_method, reference, reference_code, notes, credit_bill_id, staff_credit_bill_id } = req.body;
         const paymentAmount = toNumber(amount);
         const refCode = String(reference || reference_code || '').trim();
 
@@ -1527,6 +1776,126 @@ export const recordPaidBillByStaff = async (req: Request, res: Response, next: N
 
         const branchId = (req as any).user?.branch_id || req.query.branch_id || null;
         const recordedBy = (req as any).user?.id || null;
+
+        const targetBillId = staff_credit_bill_id || credit_bill_id;
+
+        // If target bill was specified and is not 'auto' / 'unlinked', apply directly to it
+        if (targetBillId && targetBillId !== 'auto' && targetBillId !== 'unlinked' && targetBillId !== 'salary_credit') {
+            let bill: any = null;
+            let isStaffTable = true;
+            const { data: sBill } = await supabase.from('staff_credit_bills').select('*').eq('id', targetBillId).maybeSingle();
+            if (sBill) {
+                bill = sBill;
+                isStaffTable = true;
+            } else {
+                const { data: cBill } = await supabase.from('credit_bills').select('*').eq('id', targetBillId).maybeSingle();
+                if (cBill) {
+                    bill = cBill;
+                    isStaffTable = false;
+                }
+            }
+
+            if (bill) {
+                const currentPaid = toNumber(isStaffTable ? bill.paid_amount || bill.amount_paid : bill.amount_paid || bill.paid_amount);
+                const billAmount = toNumber(isStaffTable ? bill.amount : bill.total_amount || bill.amount);
+                const currentBalance = bill.balance !== null && bill.balance !== undefined
+                    ? toNumber(bill.balance)
+                    : (bill.balance_due !== null && bill.balance_due !== undefined ? toNumber(bill.balance_due) : Math.max(0, billAmount - currentPaid));
+
+                const applyAmt = Math.min(currentBalance, paymentAmount);
+                const newPaid = Math.min(billAmount, currentPaid + applyAmt);
+                const newBalance = Math.max(0, currentBalance - applyAmt);
+                const newStatus = newBalance <= 0.001 ? 'paid' : (bill.status === 'pending' ? 'approved' : bill.status);
+
+                let uBill: any = null;
+                if (isStaffTable) {
+                    // The bill reduction MUST persist before we record the payment.
+                    // Done via the raw pg pool because the supabase/PostgREST client was
+                    // intermittently returning success WITHOUT persisting the update — the
+                    // payment row got written but the balance never went down (silent loss).
+                    // rowCount from a real SQL UPDATE is authoritative.
+                    const upd = await db.query(
+                        `UPDATE staff_credit_bills
+                            SET paid_amount = $1, amount_paid = $1, balance = $2,
+                                is_paid = $3, status = $4, updated_at = NOW()
+                          WHERE id = $5
+                        RETURNING *`,
+                        [newPaid, newBalance, newBalance <= 0.001, newStatus, bill.id]
+                    );
+                    if (upd.rowCount !== 1) {
+                        throw new AppError(
+                            'Could not apply the payment to the credit bill. No payment was recorded — please try again.',
+                            500
+                        );
+                    }
+                    uBill = upd.rows[0];
+
+                    await syncLinkedCashierCreditBill(bill.source_cashier_credit_bill_id, {
+                        amount_paid: newPaid,
+                        paid_amount: newPaid,
+                        balance_due: newBalance,
+                        balance: newBalance,
+                        status: newBalance <= 0.001 ? 'paid' : undefined
+                    });
+                } else {
+                    const upd = await db.query(
+                        `UPDATE credit_bills
+                            SET amount_paid = $1, balance_due = $2, status = $3, updated_at = NOW()
+                          WHERE id = $4
+                        RETURNING *`,
+                        [newPaid, newBalance, newStatus, bill.id]
+                    );
+                    if (upd.rowCount !== 1) {
+                        throw new AppError(
+                            'Could not apply the payment to the credit bill. No payment was recorded — please try again.',
+                            500
+                        );
+                    }
+                    uBill = upd.rows[0];
+                }
+
+                try {
+                    await supabase.from('staff_credit_bill_payments').insert({
+                        bill_id: bill.id,
+                        credit_bill_id: bill.id,
+                        amount: applyAmt,
+                        method: method,
+                        payment_method: method,
+                        paid_on: new Date().toISOString().split('T')[0],
+                        payment_date: new Date().toISOString().split('T')[0],
+                        reference: refCode || null,
+                        notes: notes || (refCode ? `Direct paid bill payment (${refCode})` : 'Direct paid bill payment'),
+                        recorded_by: recordedBy
+                    });
+                } catch (err) {
+                    logger.warn('Error inserting payment history:', err);
+                }
+
+                const remainder = Math.max(0, paymentAmount - applyAmt);
+                let furtherResult = null;
+                if (remainder > 0.001) {
+                    furtherResult = await allocateStaffCreditPayment(
+                        String(staff_id),
+                        branchId,
+                        remainder,
+                        method,
+                        recordedBy,
+                        notes,
+                        null,
+                        refCode || null
+                    );
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: `Recorded payment of KES ${paymentAmount.toLocaleString()} to staff credit bill`,
+                    data: {
+                        appliedBills: [uBill || bill, ...(furtherResult?.appliedBills || [])],
+                        remainingUnapplied: furtherResult?.remainingUnapplied || 0
+                    }
+                });
+            }
+        }
 
         const result = await allocateStaffCreditPayment(
             String(staff_id),
@@ -1548,4 +1917,3 @@ export const recordPaidBillByStaff = async (req: Request, res: Response, next: N
         next(error);
     }
 };
-

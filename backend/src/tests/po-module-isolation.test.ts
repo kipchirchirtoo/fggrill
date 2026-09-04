@@ -81,12 +81,12 @@ describe('PO Module Isolation - Access Control', () => {
         expect(modules).not.toContain(SourceModule.BRANCH_ACCOUNTING);
     });
 
-    it('should allow Branch Accountant access to branch_accounting only', () => {
+    it('should allow Branch Accountant access to branch_accounting and branch_store', () => {
         const modules = getUserModules(UserRole.BRANCH_ACCOUNTANT);
         
         expect(modules).toContain(SourceModule.BRANCH_ACCOUNTING);
+        expect(modules).toContain(SourceModule.BRANCH_STORE);
         expect(modules).not.toContain(SourceModule.CENTRAL_STORE);
-        expect(modules).not.toContain(SourceModule.BRANCH_STORE);
     });
 
     it('should allow Auditor access to all modules', () => {

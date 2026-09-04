@@ -19,6 +19,7 @@ import {
   triggerPendingBillsMigration,
   partialPayCreditBill,
   getCreditBillPayments,
+  getBranchCreditBillPayments,
   getCashierPaidCreditEntries,
   applyCashierPaidCreditEntry,
   getCreditBillContents,
@@ -128,6 +129,13 @@ router.post(
   '/credit-bills/cashier-paid-credits/:entryId/apply',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   applyCashierPaidCreditEntry
+);
+
+// Static path — must precede the dynamic /credit-bills/:id routes below.
+router.get(
+  '/credit-bills/payments',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getBranchCreditBillPayments
 );
 
 router.post(

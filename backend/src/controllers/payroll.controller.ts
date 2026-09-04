@@ -988,15 +988,37 @@ export const forceGeneratePayroll = async (
 };
 
 export const generateStatementPDFProxy = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const pythonResponse = await axios.post(
-      `${PYTHON_SERVICE_URL}/api/payroll/generate-statement-pdf`,
+  // Hosted PDF service used as a fallback when the configured (often local) one
+  // is unreachable — otherwise a dev machine without the local Python service
+  // running gets "The document is empty" on every export.
+  const HOSTED_FALLBACK = 'https://services.hirall.com';
+  const generate = async (baseUrl: string): Promise<Buffer> => {
+    const resp = await axios.post(
+      `${baseUrl}/api/payroll/generate-statement-pdf`,
       req.body,
-      { responseType: 'arraybuffer' }
+      { responseType: 'arraybuffer', timeout: 30000 }
     );
-    const pdfBuf = Buffer.from(pythonResponse.data);
-    if (!pdfBuf || pdfBuf.length < 50) {
-      throw new Error('Invalid PDF buffer returned from Python service');
+    const buf = Buffer.from(resp.data);
+    if (!buf || buf.length < 50) {
+      throw new Error(`Invalid PDF buffer returned from ${baseUrl}`);
+    }
+    return buf;
+  };
+
+  try {
+    let pdfBuf: Buffer;
+    try {
+      pdfBuf = await generate(PYTHON_SERVICE_URL);
+    } catch (primaryError) {
+      if (PYTHON_SERVICE_URL !== HOSTED_FALLBACK) {
+        logger.warn(
+          `Statement PDF: primary service ${PYTHON_SERVICE_URL} unavailable, falling back to hosted service`,
+          primaryError
+        );
+        pdfBuf = await generate(HOSTED_FALLBACK);
+      } else {
+        throw primaryError;
+      }
     }
     const title = (req.body?.title || 'Statement').replace(/[^A-Za-z0-9]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');

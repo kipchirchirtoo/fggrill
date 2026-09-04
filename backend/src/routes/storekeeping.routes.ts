@@ -14,6 +14,7 @@ import {
   getItem,
   createItem,
   updateItem,
+  updateItemClassification,
   deleteItem,
   addStock,
   previewSKUEndpoint,
@@ -269,6 +270,10 @@ router.route('/items/:id')
   .get(authorize(staffRoles), getItem)
   .put(authorize(managerRoles), updateItem)
   .delete(authorize(managerRoles), deleteItem);
+
+// Re-classify an item (Store type + Category only). Branch storekeepers may do
+// this for their own branch's stock — the controller enforces the branch scope.
+router.patch('/items/:id/classification', authorize(managerRoles), updateItemClassification);
 
 // Quick stock add endpoint (for Found mode)
 router.post('/items/:id/add-stock', authorize(staffRoles), addStock);

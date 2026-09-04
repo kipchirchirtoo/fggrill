@@ -695,7 +695,7 @@ export const deleteUser = async (
     // Check if user exists
     const { data: user, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, role')
+      .select('id, email, role, branch_id')
       .eq('id', id)
       .single();
 
@@ -714,6 +714,24 @@ export const deleteUser = async (
         message: 'You cannot delete your own account'
       });
       return;
+    }
+
+    if (isBranchManagerRequest(req)) {
+      const actorBranchId = branchIdForRequest(req);
+      if (!actorBranchId || !sameBranch(user.branch_id, actorBranchId)) {
+        res.status(403).json({
+          success: false,
+          message: 'You can only delete users in your own branch'
+        });
+        return;
+      }
+      if (!branchManagerCanAssignRole(user.role)) {
+        res.status(403).json({
+          success: false,
+          message: 'You cannot delete global administrators'
+        });
+        return;
+      }
     }
 
     // Safely un-link audit/history references so deletion is clean

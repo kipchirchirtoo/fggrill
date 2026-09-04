@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../config/database';
+import db from '../db';
 import { logger } from '../utils/logger';
 import notificationService from './notification.service';
 import { AppError } from '../middleware/errorHandler';
@@ -533,6 +534,14 @@ export async function getBranchStock(
           ? 'inventory_balances'
           : 'catalog'
     };
+  }).filter((row: any) => {
+    // Exclude POS / kitchen MENU products (prepared dishes, typically unit
+    // "portion") from branch STORE stock. The branch storekeeper's inventory
+    // holds only raw / purchasable goods that are received and counted here;
+    // menu items are produced and tracked by the kitchen, not the store.
+    const cat = String(row.category || '').toLowerCase();
+    const unit = String(row.unit_of_measure || '').toLowerCase();
+    return !(cat.includes('kitchen menu') || cat === 'kitchen' || unit.startsWith('portion'));
   });
 }
 
@@ -2077,20 +2086,40 @@ export async function getIncomingDispatches(
     .select('id, name, code')
     .in('id', branchIds) : { data: [] };
 
-  // Get dispatch items + simple item details
+  // Get dispatch items + simple item details (use db.query to bypass Supabase 1,000-row PostgREST limit)
   const dispatchIds = dispatches.map((d: any) => d.id);
-  const { data: dispatchItems } = await supabase
-    .from('dispatch_items')
-    .select('*')
-    .in('dispatch_id', dispatchIds);
+  let dispatchItems: any[] = [];
+  if (dispatchIds.length > 0) {
+    const res = await db.query(
+      `SELECT * FROM dispatch_items WHERE dispatch_id = ANY($1)`,
+      [dispatchIds]
+    );
+    dispatchItems = res.rows || [];
+
+    // Fallback to dispatch_lines if some dispatches have no rows in dispatch_items
+    const foundDispatchIds = new Set(dispatchItems.map((i: any) => i.dispatch_id));
+    const missingDispatchIds = dispatchIds.filter((id: string) => !foundDispatchIds.has(id));
+    if (missingDispatchIds.length > 0) {
+      const linesRes = await db.query(
+        `SELECT id, dispatch_id, item_sku, packed_quantity as dispatched_quantity, received_quantity, unit FROM dispatch_lines WHERE dispatch_id = ANY($1)`,
+        [missingDispatchIds]
+      );
+      if (linesRes.rows && linesRes.rows.length > 0) {
+        dispatchItems = dispatchItems.concat(linesRes.rows);
+      }
+    }
+  }
 
   // Enrich with item names from simple_items
   const skus = [...new Set((dispatchItems || []).map((i: any) => i.item_sku).filter(Boolean))];
-  const { data: itemDetails } = skus.length > 0 ? await supabase
-    .from('simple_items')
-    .select('sku, item_name, unit')
-    .in('sku', skus) : { data: [] };
-  const itemMap = new Map((itemDetails || []).map((i: any) => [i.sku, i]));
+  let itemMap = new Map<string, any>();
+  if (skus.length > 0) {
+    const itemsRes = await db.query(
+      `SELECT sku, item_name, unit FROM simple_items WHERE sku = ANY($1)`,
+      [skus]
+    );
+    itemMap = new Map((itemsRes.rows || []).map((i: any) => [i.sku, i]));
+  }
 
   return dispatches.map((dispatch: any) => ({
     ...dispatch,
@@ -2138,7 +2167,12 @@ export async function getDispatchHistory(fromBranchId: number, status?: string, 
     supabase.from('branches').select('id, name, code').in('id', toBranchIds),
     vehicleIds.length > 0 ? supabase.from('vehicles').select('id, registration_number, model').in('id', vehicleIds) : Promise.resolve({ data: [] }),
     driverIds.length > 0 ? supabase.from('drivers').select('id, name, license_number, phone').in('id', driverIds) : Promise.resolve({ data: [] }),
-    supabase.from('dispatch_items').select('id, dispatch_id, item_sku, dispatched_quantity, received_quantity, created_at').in('dispatch_id', dispatchIds)
+    dispatchIds.length > 0
+      ? db.query(
+          `SELECT id, dispatch_id, item_sku, dispatched_quantity, received_quantity, created_at FROM dispatch_items WHERE dispatch_id = ANY($1)`,
+          [dispatchIds]
+        ).then(r => ({ data: r.rows || [] }))
+      : Promise.resolve({ data: [] })
   ]);
 
   const branches = branchesRes.data || [];

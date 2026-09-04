@@ -6,7 +6,8 @@ import { recordAuditTrail } from '../../utils/audit';
 import { generateGRNPDF } from '../../services/native-pdf-reports.service';
 import { ensureInventoryLocation } from './items.controller';
 import { postGrnFoundationMovements } from '../../services/branch-inventory.service';
-import { resolveStoreContextForUser } from '../../services/inventory-warehouse.service';
+import { resolveStoreContextForUser, isWarehouseUserContext } from '../../services/inventory-warehouse.service';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 const generateGRNNumber = async (): Promise<string> => {
     const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
@@ -382,14 +383,26 @@ export const getGRNs = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { supplier_id, status, from_date, to_date, po_id } = req.query;
+        const { supplier_id, status, from_date, to_date, po_id, scope, source_module } = req.query;
+
+        const role = String(req.user?.role || '').toLowerCase();
+        const user = (req as any).user;
+        const userBranch = user?.branch_id;
+        const requestedBranch = req.query.branch_id;
+
+        const isWarehouse = isWarehouseUserContext(user) || role === 'central_storekeeper';
+        const isCentralExplicit = scope === 'central' || scope === 'global' || source_module === 'central_store';
+        const isBranchExplicit = scope === 'branch' || source_module === 'branch_store';
+
+        // Central Store scope: when explicitly requested or by central_storekeeper / warehouse user without branch params
+        const isCentralScope = isCentralExplicit || (isWarehouse && !requestedBranch && !isBranchExplicit);
 
         let query = supabase
             .from('store_grn')
             .select(`
                 *,
-                supplier:store_suppliers(id, name, supplier_code),
-                purchase_order:store_purchase_orders(id, po_number)
+                supplier:store_suppliers(id, name, supplier_code, branch_id),
+                purchase_order:store_purchase_orders(id, po_number, source_module, branch_id)
             `)
             .order('grn_date', { ascending: false });
 
@@ -399,12 +412,49 @@ export const getGRNs = async (
         if (from_date) query = query.gte('grn_date', from_date);
         if (to_date) query = query.lte('grn_date', to_date);
 
+        // Branch filtering for non-central requests
+        if (!isCentralScope && !isWarehouse) {
+            const branchToFilter = requestedBranch || userBranch;
+            if (branchToFilter !== undefined && branchToFilter !== null &&
+                String(branchToFilter) !== '' && String(branchToFilter) !== '0') {
+                query = query.eq('branch_id', branchToFilter);
+            }
+        } else if (isCentralScope && requestedBranch) {
+            query = query.eq('branch_id', requestedBranch);
+        }
+
         const { data: grns, error } = await query;
 
         if (error) throw error;
 
+        let filteredGrns = grns || [];
+
+        if (isCentralScope) {
+            // Central Store only receives from central/corporate suppliers (supplier.branch_id IS NULL).
+            // Local branch suppliers (supplier.branch_id IS NOT NULL, e.g. Kyogong branch suppliers with branch_id = 1)
+            // or branch-specific purchase orders (source_module === 'branch_store') are strictly excluded from Central Store.
+            filteredGrns = filteredGrns.filter(grn => {
+                if (grn.supplier && grn.supplier.branch_id != null) {
+                    return false;
+                }
+                if (grn.purchase_order && grn.purchase_order.source_module === 'branch_store') {
+                    return false;
+                }
+                return true;
+            });
+        } else if (isBranchExplicit || role === 'branch_storekeeper') {
+            const branchId = Number(requestedBranch || userBranch);
+            if (branchId) {
+                filteredGrns = filteredGrns.filter(grn => {
+                    const grnBranch = Number(grn.branch_id);
+                    const supBranch = grn.supplier?.branch_id != null ? Number(grn.supplier.branch_id) : null;
+                    return grnBranch === branchId || supBranch === branchId;
+                });
+            }
+        }
+
         // Transform data to flatten supplier and PO info for consistency
-        const transformedGrns = (grns || []).map(grn => ({
+        const transformedGrns = filteredGrns.map(grn => ({
             ...grn,
             supplier_name: grn.supplier?.name || 'N/A',
             po_number: grn.purchase_order?.po_number || null,

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
 
@@ -22,6 +20,7 @@ class StockTable extends StatefulWidget {
   final List<StockTakeItem> items;
   final bool isReadOnly;
   final bool isStorekeeper;
+  final bool isStoreType;
   final List<Map<String, dynamic>> staffList;
   final ValueChanged2<String, double?> onPhysicalCountChanged;
   final ValueChanged2<String, String?> onReasonChanged;
@@ -33,6 +32,7 @@ class StockTable extends StatefulWidget {
     required this.items,
     required this.isReadOnly,
     this.isStorekeeper = false,
+    this.isStoreType = false,
     this.staffList = const [],
     required this.onPhysicalCountChanged,
     required this.onReasonChanged,
@@ -356,7 +356,8 @@ class _StockTableState extends State<StockTable> {
                   ],
                 ),
               ),
-              for (int i = 0; i < 9; i++) const DataCell(SizedBox.shrink()),
+              for (int i = 0; i < (widget.isStoreType ? 8 : 9); i++)
+                const DataCell(SizedBox.shrink()),
             ],
           ),
         );
@@ -431,13 +432,14 @@ class _StockTableState extends State<StockTable> {
               ),
             ),
             DataCell(_numCell('${item.total}', isDark, bold: true)),
-            DataCell(
-              _numCell(
-                item.sales > 0 ? '-${item.sales}' : '${item.sales}',
-                isDark,
-                color: item.sales > 0 ? Colors.red.shade700 : null,
+            if (!widget.isStoreType)
+              DataCell(
+                _numCell(
+                  item.sales > 0 ? '-${item.sales}' : '${item.sales}',
+                  isDark,
+                  color: item.sales > 0 ? Colors.red.shade700 : null,
+                ),
               ),
-            ),
             DataCell(_numCell('${item.closingStock}', isDark, bold: true)),
             DataCell(
               _numCell(
@@ -488,7 +490,7 @@ class _StockTableState extends State<StockTable> {
         child: DataTable2(
           columnSpacing: 8,
           horizontalMargin: 8,
-          minWidth: 1050,
+          minWidth: widget.isStoreType ? 990 : 1050,
           dataRowHeight: _kRowH,
           headingRowHeight: 32,
           fixedTopRows: 1,
@@ -506,58 +508,59 @@ class _StockTableState extends State<StockTable> {
             top: BorderSide(color: _kGridLine, width: 0.5),
             bottom: BorderSide(color: _kGridLine, width: 0.5),
           ),
-          columns: const [
-            DataColumn2(
+          columns: [
+            const DataColumn2(
               label: Text('#'),
               size: ColumnSize.S,
               fixedWidth: 32,
               numeric: true,
             ),
-            DataColumn2(label: Text('Product'), size: ColumnSize.L),
-            DataColumn2(
+            const DataColumn2(label: Text('Product'), size: ColumnSize.L),
+            const DataColumn2(
               label: Text('Opening'),
               size: ColumnSize.S,
               fixedWidth: 70,
               numeric: true,
             ),
-            DataColumn2(
+            const DataColumn2(
               label: Text('Adds'),
               size: ColumnSize.S,
               fixedWidth: 60,
               numeric: true,
             ),
-            DataColumn2(
+            const DataColumn2(
               label: Text('Total'),
               size: ColumnSize.S,
               fixedWidth: 70,
               numeric: true,
             ),
-            DataColumn2(
-              label: Text('Sales'),
-              size: ColumnSize.S,
-              fixedWidth: 60,
-              numeric: true,
-            ),
-            DataColumn2(
+            if (!widget.isStoreType)
+              const DataColumn2(
+                label: Text('Sales'),
+                size: ColumnSize.S,
+                fixedWidth: 60,
+                numeric: true,
+              ),
+            const DataColumn2(
               label: Text('Closing'),
               size: ColumnSize.S,
               fixedWidth: 70,
               numeric: true,
             ),
-            DataColumn2(
+            const DataColumn2(
               label: Text('Count'),
               size: ColumnSize.M,
               fixedWidth: 70,
               numeric: true,
             ),
-            DataColumn2(
+            const DataColumn2(
               label: Text('Var'),
               size: ColumnSize.S,
               fixedWidth: 60,
               numeric: true,
             ),
-            DataColumn2(label: Text('Explanation'), size: ColumnSize.L),
-            DataColumn2(label: Text('Action Taken'), size: ColumnSize.L),
+            const DataColumn2(label: Text('Explanation'), size: ColumnSize.L),
+            const DataColumn2(label: Text('Action Taken'), size: ColumnSize.L),
           ],
           rows: rows,
         ),

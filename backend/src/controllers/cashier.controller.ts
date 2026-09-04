@@ -32,6 +32,7 @@ import {
     findHotelPaymentOrphans,
 } from '../services/receptionEventCashierPayment.service';
 import { autoCloseOpenKitchenShiftsForBranch } from '../services/kitchen-shift-auto-close.service';
+import { allocateStaffCreditPayment } from './credit-bills.controller';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -6517,18 +6518,41 @@ export const recordStaffPaidBill = async (
         }
 
         // Find the staff member's outstanding credit bills
-        let matchedCreditBills: any[] = [];
-        if (staff_id) {
-            const { data: creditBills } = await supabase
-                .from('staff_credit_bills')
-                .select('id, bill_number, amount, paid_amount, balance, status')
-                .eq('staff_id', staff_id)
-                .in('status', ['open', 'approved', 'pending'])
-                .gt('balance', 0)
-                .order('bill_date', { ascending: true }); // Oldest first (FIFO)
-
-            matchedCreditBills = creditBills || [];
+        let targetStaffId = staff_id ? String(staff_id) : null;
+        if (!targetStaffId && staff_name) {
+            try {
+                const { data: matchedProfile } = await supabase
+                    .from('staff_profiles')
+                    .select('id, user_id')
+                    .or(`first_name.ilike.%${staff_name}%,last_name.ilike.%${staff_name}%`)
+                    .limit(1)
+                    .maybeSingle();
+                if (matchedProfile?.id) targetStaffId = matchedProfile.id;
+            } catch (_) {}
         }
+
+        // Auto-allocate payment to lessen outstanding credit bills (FIFO) immediately
+        let allocResult: any = null;
+        if (targetStaffId) {
+            try {
+                allocResult = await allocateStaffCreditPayment(
+                    targetStaffId,
+                    shift.branch_id || null,
+                    paidAmount,
+                    method,
+                    req.user?.id || null,
+                    finalReference ? `Cashier paid bill (${finalReference})` : 'Cashier paid bill',
+                    shift.id,
+                    finalReference
+                );
+            } catch (allocErr: any) {
+                logger.warn('Auto-allocating cashier paid bill failed, proceeding with shift log entry:', allocErr?.message || allocErr);
+            }
+        }
+
+        const appliedBills = allocResult?.appliedBills || [];
+        const appliedTotal = paidAmount - (allocResult?.remainingUnapplied || 0);
+        const isFullyApplied = (allocResult?.remainingUnapplied || 0) <= 0.001 && appliedBills.length > 0;
 
         const existing = Array.isArray(shift.paid_bills_details)
             ? shift.paid_bills_details
@@ -6536,7 +6560,7 @@ export const recordStaffPaidBill = async (
 
         const entry = {
             id: `PB${Date.now()}`,
-            staff_id: staff_id || null,
+            staff_id: targetStaffId || staff_id || null,
             name: staff_name || 'Staff',
             amount: paidAmount,
             payment_method: method,
@@ -6545,12 +6569,15 @@ export const recordStaffPaidBill = async (
             cash_variance: cashVariance, // For cash: variance (should be 0, but tracks errors)
             recorded_at: new Date().toISOString(),
             recorded_by: req.user?.id || null,
-            review_status: 'pending_branch_accountant_approval',
-            matched_credit_bills: matchedCreditBills.map(cb => ({
+            review_status: isFullyApplied ? 'applied' : (appliedBills.length > 0 ? 'partially_applied' : 'pending_branch_accountant_approval'),
+            applied_bills: appliedBills.map((cb: any) => ({
                 credit_bill_id: cb.id,
                 bill_number: cb.bill_number,
-                outstanding_balance: cb.balance,
+                amount_paid: cb.paid_amount || cb.amount_paid,
+                balance: cb.balance ?? cb.balance_due,
             })),
+            applied_amount: appliedTotal,
+            remaining_unapplied: allocResult?.remainingUnapplied || 0,
             branch_id: shift.branch_id,
         };
 
@@ -6571,10 +6598,10 @@ export const recordStaffPaidBill = async (
 
         if (updateError) throw updateError;
 
-        // Build success message with cash variance alert if applicable
-        let successMessage = matchedCreditBills.length > 0
-            ? `Payment recorded. Found ${matchedCreditBills.length} outstanding credit bill(s) for this staff. Awaiting accountant approval.`
-            : 'Payment recorded. No outstanding credit bills found for this staff. Awaiting accountant approval.';
+        // Build success message with credit bill reduction details and cash variance alert if applicable
+        let successMessage = appliedBills.length > 0
+            ? `Payment of KES ${paidAmount.toLocaleString()} recorded. Lessened ${appliedBills.length} credit bill(s) (KES ${appliedTotal.toLocaleString()} applied to outstanding balance).`
+            : `Payment of KES ${paidAmount.toLocaleString()} recorded for ${staff_name || 'staff'}.`;
 
         if (method === 'cash' && cashVariance !== null && cashVariance !== 0) {
             successMessage += ` WARNING: Cash variance detected (Rendered: KES ${cashRenderedAmount?.toFixed(2)}, Payment: KES ${paidAmount.toFixed(2)}, Variance: KES ${cashVariance.toFixed(2)})`;
@@ -6588,7 +6615,7 @@ export const recordStaffPaidBill = async (
                 paid_bills_details: updated,
                 paid_bills_value: totalValue,
                 paid_bills_count: updated.length,
-                matched_credit_bills: matchedCreditBills,
+                applied_bills: appliedBills,
                 cash_variance_alert: method === 'cash' && cashVariance !== 0 ? {
                     rendered: cashRenderedAmount,
                     payment: paidAmount,
@@ -10263,6 +10290,57 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 posOrders = (fetchedPosOrders || []).filter((o: any) =>
                     wantsVoidedOrders || String(o.status || '').toLowerCase() !== 'cancelled'
                 );
+
+                if (!wantsVoidedOrders && visibleShifts.length > 0) {
+                    try {
+                        const visibleOutletIds = Array.from(new Set(visibleShifts.map((s: any) => s.outlet_id).filter(Boolean)));
+                        if (visibleOutletIds.length > 0) {
+                            const existingOrderIds = new Set(posOrders.map((o: any) => String(o.id)));
+                            const strandedRes = await db.query(
+                                `SELECT o.id, o.shift_id, o.outlet_id, o.order_number, o.short_code, o.customer_name, 
+                                        o.waiter_id, o.waiter_name, o.created_by, o.total_amount, o.amount_paid, 
+                                        o.balance_amount, o.payment_status, o.status, o.created_at, 
+                                        o.captain_printed_at, o.original_bill_printed_at, o.last_bill_printed_at, 
+                                        o.bill_reprint_count, o.void_request_status, o.void_reason, o.voided_at, o.voided_by
+                                 FROM pos_shift_orders o
+                                 WHERE o.outlet_id = ANY($1)
+                                   AND o.payment_status IN ('unpaid', 'partial')
+                                   AND o.status = 'open'
+                                   AND o.total_amount > 0
+                                   AND o.created_at >= NOW() - INTERVAL '24 hours'`,
+                                [visibleOutletIds]
+                            );
+                            const extraOrders = (strandedRes.rows || []).filter(
+                                (row: any) => !existingOrderIds.has(String(row.id))
+                            );
+                            if (extraOrders.length > 0) {
+                                const outletOpenShiftMap = new Map<string, any>();
+                                for (const shift of visibleShifts) {
+                                    outletOpenShiftMap.set(String(shift.outlet_id), shift);
+                                }
+                                for (const order of extraOrders) {
+                                    const openShift = outletOpenShiftMap.get(String(order.outlet_id));
+                                    if (openShift) {
+                                        order.shift_id = openShift.id;
+                                        shiftLookup[openShift.id] = openShift;
+                                    }
+                                    posOrders.push(order);
+                                }
+                                const orderIdsToAdopt = extraOrders.map((o: any) => o.id);
+                                for (const [outletId, openShift] of outletOpenShiftMap.entries()) {
+                                    db.query(
+                                        `UPDATE pos_shift_orders
+                                         SET shift_id = $1, updated_at = NOW()
+                                         WHERE id = ANY($2) AND outlet_id = $3`,
+                                        [openShift.id, orderIdsToAdopt, outletId]
+                                    ).catch(() => {});
+                                }
+                            }
+                        }
+                    } catch (strandedErr: any) {
+                        logger.warn('Failed to resolve stranded outlet orders for cashier clearance', strandedErr);
+                    }
+                }
 
                 if (!wantsVoidedOrders) {
                     const masterBillData = await loadOutstandingCashierMasterBills({

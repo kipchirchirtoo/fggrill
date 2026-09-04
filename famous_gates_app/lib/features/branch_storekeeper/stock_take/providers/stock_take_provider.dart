@@ -197,6 +197,11 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
         loadedItems = records.map((r) {
+          // Prefer the canonical category the backend now resolves from the
+          // drink's real catalog data; fall back to the name heuristic only
+          // when the backend didn't supply one.
+          final backendCategory =
+              '${r['category'] ?? r['item']?['category'] ?? ''}'.trim();
           final isSubmittedRow = r['physical_quantity'] != null;
           final opening = _toInt(r['opening_stock'] ?? r['opening'] ?? 0);
           final sales = _toInt(r['sales'] ?? 0);
@@ -219,7 +224,9 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
             reason: r['reason_for_variance'] ?? r['notes'],
             explanation: r['explanation'] ?? r['reason_for_variance'] ?? r['notes'],
             actionTaken: r['action_taken'],
-            category: getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
+            category: backendCategory.isNotEmpty
+                ? backendCategory
+                : getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
           );
         }).toList();
       } else {

@@ -978,12 +978,14 @@ class OutletPosRepository {
 
   /// Read-only history for the accountant/manager exchange screen.
   Future<List<ItemExchangeRequest>> getExchangeHistory({
+    int? branchId,
     String? status,
     String? direction,
     String? from,
     String? to,
   }) async {
     final response = await _dio.get('/pos/exchanges/history', queryParameters: {
+      if (branchId != null) 'branch_id': branchId,
       if (status != null && status.isNotEmpty) 'status': status,
       if (direction != null && direction.isNotEmpty) 'direction': direction,
       if (from != null && from.isNotEmpty) 'from': from,
@@ -1872,6 +1874,26 @@ class ItemVoidRequest {
   bool get isTerminal =>
       isApproved || isRejected || isCashierDeclined || isKitchenDeclined;
 
+  DateTime? get requestedAt => createdAt;
+  String? get kitchenStaffName => kitchenName;
+  String? get cashierNotes => note;
+  String? get managerStatus =>
+      (status == 'approved' || status == 'rejected') ? status : null;
+  String? get cashierStatus =>
+      cashierAction ??
+      (isCashierDeclined
+          ? 'void_cashier_declined'
+          : (isAcknowledged
+              ? 'void_acknowledged'
+              : (isPending ? 'pending_cashier' : null)));
+  String? get kitchenStatus =>
+      kitchenAction ??
+      (isKitchenDeclined
+          ? 'void_kitchen_declined'
+          : (isKitchenAcknowledged
+              ? 'void_kitchen_acknowledged'
+              : (isPending ? 'pending_kitchen' : null)));
+
   factory ItemVoidRequest.fromJson(Map<String, dynamic> json) {
     return ItemVoidRequest(
       id: '${json['id']}',
@@ -1890,27 +1912,27 @@ class ItemVoidRequest {
       orderNumber: json['order_number'] as String?,
       branchId:
           json['branch_id'] is num ? (json['branch_id'] as num).toInt() : null,
-      note: json['note'] as String?,
+      note: (json['note'] ?? json['cashier_notes']) as String?,
       requestedBy: json['requested_by'] as String?,
       requestedByName: json['requested_by_name'] as String?,
       actionedBy: json['actioned_by'] as String?,
       actionedByName: json['actioned_by_name'] as String?,
       kitchenId: json['kitchen_id'] as String?,
-      kitchenName: json['kitchen_name'] as String?,
+      kitchenName: (json['kitchen_name'] ?? json['kitchen_staff_name']) as String?,
       kitchenAcknowledgedAt:
           DateTime.tryParse('${json['kitchen_acknowledged_at'] ?? ''}'),
-      kitchenAction: json['kitchen_action'] as String?,
+      kitchenAction: (json['kitchen_action'] ?? json['kitchen_status']) as String?,
       cashierId: json['cashier_id'] as String?,
       cashierName: json['cashier_name'] as String?,
       cashierAcknowledgedAt:
           DateTime.tryParse('${json['cashier_acknowledged_at'] ?? ''}'),
-      cashierAction: json['cashier_action'] as String?,
+      cashierAction: (json['cashier_action'] ?? json['cashier_status']) as String?,
       managerId: json['manager_id'] as String?,
       managerName: json['manager_name'] as String?,
       managerReviewedAt:
           DateTime.tryParse('${json['manager_reviewed_at'] ?? ''}'),
       rejectionReason: json['rejection_reason'] as String?,
-      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
+      createdAt: DateTime.tryParse('${json['created_at'] ?? json['requested_at'] ?? ''}'),
     );
   }
 }

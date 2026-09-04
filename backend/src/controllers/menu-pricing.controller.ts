@@ -27,7 +27,7 @@ const parseBranchId = (raw: any): number | null => {
 };
 
 interface MergedPricingRow {
-  item_type: 'restaurant' | 'bar';
+  item_type: 'restaurant' | 'bar' | 'non_consumables' | string;
   item_id: string;
   name: string;
   category: string | null;
@@ -46,7 +46,7 @@ interface MergedPricingRow {
 }
 
 const buildRow = (
-  item_type: 'restaurant' | 'bar',
+  item_type: 'restaurant' | 'bar' | 'non_consumables' | string,
   item_id: string,
   name: string,
   category: string | null,
@@ -96,8 +96,10 @@ const fetchBranchPricing = async (
   typeFilter?: string,
   jwtBranchId?: number | null
 ): Promise<MergedPricingRow[]> => {
-  const wantRestaurant = !typeFilter || typeFilter === 'restaurant';
-  const wantBar = !typeFilter || typeFilter === 'bar';
+  const normType = (typeFilter || '').toLowerCase().trim();
+  const wantRestaurant = !normType || normType === 'all' || normType === 'restaurant';
+  const wantBar = !normType || normType === 'all' || normType === 'bar';
+  const wantNonConsumables = !normType || normType === 'all' || normType === 'non_consumables' || normType === 'non-consumables' || normType === 'pos_outlet_items';
 
   // Existing per-branch overrides for this branch.
   const { data: overrides, error: overrideErr } = await supabase
@@ -158,9 +160,7 @@ const fetchBranchPricing = async (
 
   // POS outlet items — covers branches (e.g. Kyogong) that manage their full
   // menu through pos_outlet_items rather than the legacy bar_drinks /
-  // restaurant_menu_items tables.
-  // Use both the URL param branchId AND the JWT branchId (jwtBranchId) to
-  // handle cases where they differ; whichever matches pos_outlets wins.
+  // restaurant_menu_items tables, plus non-consumables/amenities/spa.
   const posQueryBranchIds = Array.from(
     new Set([branchId, jwtBranchId].filter((id): id is number => typeof id === 'number' && id > 0))
   );
@@ -176,8 +176,16 @@ const fetchBranchPricing = async (
     } else {
       const relevantOutlets = (outlets || []).filter((o: any) => {
         const ot = String(o.outlet_type || '').toLowerCase();
-        if (wantBar && BAR_OUTLET_TYPES.has(ot)) return true;
-        if (wantRestaurant && !BAR_OUTLET_TYPES.has(ot)) return true;
+        const isBar = BAR_OUTLET_TYPES.has(ot);
+        const isNonConsumable =
+          ot.includes('non_consumables') ||
+          ot.includes('non-consumables') ||
+          ot.includes('spa') ||
+          ot.includes('amenities') ||
+          ot.includes('service');
+        if (wantBar && isBar) return true;
+        if (wantNonConsumables && isNonConsumable) return true;
+        if (wantRestaurant && !isBar && !isNonConsumable) return true;
         return false;
       });
 
@@ -198,7 +206,28 @@ const fetchBranchPricing = async (
           for (const it of (posItems || []) as Array<Record<string, any>>) {
             const outlet = outletMap.get(it.outlet_id) as any;
             const ot = String(outlet?.outlet_type || '').toLowerCase();
-            const itemType: 'restaurant' | 'bar' = BAR_OUTLET_TYPES.has(ot) ? 'bar' : 'restaurant';
+            const isBar = BAR_OUTLET_TYPES.has(ot);
+            const isNonConsumable =
+              ot.includes('non_consumables') ||
+              ot.includes('non-consumables') ||
+              ot.includes('spa') ||
+              ot.includes('amenities') ||
+              ot.includes('service');
+            const itemType: string = isBar
+              ? 'bar'
+              : isNonConsumable
+              ? 'non_consumables'
+              : 'restaurant';
+
+            if (
+              normType &&
+              normType !== 'all' &&
+              itemType !== normType &&
+              !(normType === 'non-consumables' && itemType === 'non_consumables')
+            ) {
+              continue;
+            }
+
             const dedupeKey = `${itemType}:${(it.name || '').toLowerCase().trim()}`;
             if (seenKeys.has(dedupeKey)) continue;
             seenKeys.add(dedupeKey);
@@ -287,8 +316,9 @@ export const upsertBranchItemPricing = async (
       return;
     }
     const { item_type, item_id, cost_price, selling_price, is_available } = req.body || {};
-    if ((item_type !== 'restaurant' && item_type !== 'bar') || !item_id) {
-      res.status(400).json({ success: false, message: 'item_type (restaurant|bar) and item_id are required' });
+    const validItemType = item_type === 'restaurant' || item_type === 'bar' || item_type === 'non_consumables' || item_type === 'non-consumables';
+    if (!validItemType || !item_id) {
+      res.status(400).json({ success: false, message: 'item_type (restaurant|bar|non_consumables) and item_id are required' });
       return;
     }
 
@@ -339,7 +369,7 @@ export const bulkUpsertBranchPricing = async (
 
     const now = new Date().toISOString();
     const rows = items
-      .filter((it: any) => (it.item_type === 'restaurant' || it.item_type === 'bar') && it.item_id)
+      .filter((it: any) => (it.item_type === 'restaurant' || it.item_type === 'bar' || it.item_type === 'non_consumables' || it.item_type === 'non-consumables') && it.item_id)
       .map((it: any) => ({
         item_type: it.item_type,
         item_id: it.item_id,
@@ -381,8 +411,9 @@ export const deleteBranchItemPricing = async (
     const branchId = parseBranchId(req.params.branchId);
     const itemType = req.params.itemType;
     const itemId = req.params.itemId;
-    if (!branchId || (itemType !== 'restaurant' && itemType !== 'bar') || !itemId) {
-      res.status(400).json({ success: false, message: 'branchId, itemType (restaurant|bar) and itemId are required' });
+    const validItemType = itemType === 'restaurant' || itemType === 'bar' || itemType === 'non_consumables' || itemType === 'non-consumables';
+    if (!branchId || !validItemType || !itemId) {
+      res.status(400).json({ success: false, message: 'branchId, itemType (restaurant|bar|non_consumables) and itemId are required' });
       return;
     }
 

@@ -982,10 +982,19 @@ export const getMasterCatalog = async (
     const { data, error } = await query;
     if (error) throw error;
 
+    // Keep the catalog to raw / purchasable goods — exclude POS/kitchen MENU
+    // products (prepared dishes, unit "portion"), which are produced by the
+    // kitchen and don't belong in the store's receivable inventory.
+    const rawGoods = (data || []).filter((it: any) => {
+      const cat = String(it.category || '').toLowerCase();
+      const unit = String(it.unit_of_measure || it.unit || '').toLowerCase();
+      return !(cat.includes('kitchen menu') || cat === 'kitchen' || unit.startsWith('portion'));
+    });
+
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data
+      count: rawGoods.length,
+      data: rawGoods
     });
   } catch (error) {
     next(error);

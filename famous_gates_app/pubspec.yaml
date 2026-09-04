@@ -2,7 +2,7 @@ name: famous_gates_app
 description: "Famous Gates Hotels Management System"
 publish_to: 'none'
 
-version: 3.9.9+75
+version: 3.9.9+80
 
 environment:
   sdk: '>=3.1.0 <4.0.0'

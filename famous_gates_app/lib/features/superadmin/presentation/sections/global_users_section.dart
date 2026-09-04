@@ -740,14 +740,21 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
         ),
       ),
     );
-    firstNameCtrl.dispose();
-    lastNameCtrl.dispose();
-    emailCtrl.dispose();
-    passwordCtrl.dispose();
-    phoneCtrl.dispose();
-    employeeCtrl.dispose();
-    departmentCtrl.dispose();
-    pinCtrl.dispose();
+    // Dispose AFTER the dialog's exit animation finishes. Popping resolves the
+    // showDialog future while the route is still animating out (and the
+    // TextFields re-subscribe to their controllers on that rebuild), so
+    // disposing synchronously here throws "TextEditingController used after
+    // being disposed". A short delay lets the route fully close first.
+    Future.delayed(const Duration(milliseconds: 400), () {
+      firstNameCtrl.dispose();
+      lastNameCtrl.dispose();
+      emailCtrl.dispose();
+      passwordCtrl.dispose();
+      phoneCtrl.dispose();
+      employeeCtrl.dispose();
+      departmentCtrl.dispose();
+      pinCtrl.dispose();
+    });
   }
 
   Future<void> _resetPassword(Map<String, dynamic> user) async {
@@ -846,8 +853,12 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       ),
     );
 
-    passwordCtrl.dispose();
-    confirmCtrl.dispose();
+    // Delay dispose past the dialog exit animation (see _showUserDialog) to
+    // avoid "TextEditingController used after being disposed".
+    Future.delayed(const Duration(milliseconds: 400), () {
+      passwordCtrl.dispose();
+      confirmCtrl.dispose();
+    });
 
     if (newPassword == null || !mounted) return;
     try {

@@ -881,13 +881,26 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                   .map((e) => Map<String, dynamic>.from(e))
                   .toList() ??
               [];
+          final rawPaidBills = (data['paid_bills'] as List?)
+                  ?.whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList() ??
+              [];
 
-          final filteredBills = rawBills.where((b) {
+          final outstandingBills = rawBills.where((b) {
             final balance = (b['balance'] as num?)?.toDouble() ?? 0.0;
-            if (_creditBillsFilter == 'outstanding') return balance > 0;
-            if (_creditBillsFilter == 'settled') return balance <= 0;
-            return true;
+            return balance > 0.001;
           }).toList();
+
+          final settledBills = rawBills.where((b) {
+            final balance = (b['balance'] as num?)?.toDouble() ?? 0.0;
+            final status = '${b['status'] ?? ''}'.toLowerCase();
+            return balance <= 0.001 || status == 'paid';
+          }).toList();
+
+          final filteredBills = _creditBillsFilter == 'outstanding'
+              ? outstandingBills
+              : (_creditBillsFilter == 'settled' ? settledBills : rawBills);
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -1104,320 +1117,726 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                 const SizedBox(height: 20),
 
                 // ── Filter Chips ──────────────────────────────────────────────
-                Row(
-                  children: [
-                    ChoiceChip(
-                      label: Text('All (${rawBills.length})'),
-                      selected: _creditBillsFilter == 'all',
-                      onSelected: (sel) {
-                        if (sel) setState(() => _creditBillsFilter = 'all');
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: Text(
-                        'Outstanding (${rawBills.where((b) => ((b['balance'] as num?) ?? 0) > 0).length})',
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ChoiceChip(
+                        label: Text('All (${rawBills.length})'),
+                        selected: _creditBillsFilter == 'all',
+                        onSelected: (sel) {
+                          if (sel) setState(() => _creditBillsFilter = 'all');
+                        },
                       ),
-                      selected: _creditBillsFilter == 'outstanding',
-                      selectedColor: Colors.amber.shade700,
-                      onSelected: (sel) {
-                        if (sel) {
-                          setState(() => _creditBillsFilter = 'outstanding');
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: Text(
-                        'Settled (${rawBills.where((b) => ((b['balance'] as num?) ?? 0) <= 0).length})',
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text(
+                          'Outstanding (${outstandingBills.length})',
+                        ),
+                        selected: _creditBillsFilter == 'outstanding',
+                        selectedColor: Colors.amber.shade700,
+                        onSelected: (sel) {
+                          if (sel) {
+                            setState(() => _creditBillsFilter = 'outstanding');
+                          }
+                        },
                       ),
-                      selected: _creditBillsFilter == 'settled',
-                      selectedColor: Colors.green.shade700,
-                      onSelected: (sel) {
-                        if (sel) {
-                          setState(() => _creditBillsFilter = 'settled');
-                        }
-                      },
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text(
+                          'Settled (${settledBills.length})',
+                        ),
+                        selected: _creditBillsFilter == 'settled',
+                        selectedColor: Colors.green.shade700,
+                        onSelected: (sel) {
+                          if (sel) {
+                            setState(() => _creditBillsFilter = 'settled');
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        avatar: const Icon(Icons.receipt_long, size: 16),
+                        label: Text(
+                          'Paid Receipts (${rawPaidBills.length})',
+                        ),
+                        selected: _creditBillsFilter == 'paid_receipts',
+                        selectedColor: Colors.green.shade700,
+                        onSelected: (sel) {
+                          if (sel) {
+                            setState(() => _creditBillsFilter = 'paid_receipts');
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
-                // ── Bill List ────────────────────────────────────────────────
-                if (filteredBills.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Text(
-                          _creditBillsFilter == 'outstanding'
-                              ? '🎉 No outstanding credit bills found!'
-                              : 'No credit bills found for this view.',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: _PosPalette.textMuted,
+                // ── Bill / Receipt Content ────────────────────────────────────
+                if (_creditBillsFilter == 'paid_receipts') ...[
+                  if (rawPaidBills.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.receipt_long_outlined,
+                                  size: 44, color: _PosPalette.textMuted),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No payment receipts found.',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: _PosPalette.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'When payments are recorded at the cashier station, official receipts will appear here.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _PosPalette.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                  )
-                else
-                  Card(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: filteredBills.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final bill = filteredBills[index];
-                        final billNo = bill['bill_number'] ?? 'CRD-BILL';
-                        final date = bill['bill_date'] ?? '';
-                        final desc = bill['description'] ?? 'Credit Bill';
-                        final amount =
-                            (bill['amount'] as num?)?.toDouble() ?? 0.0;
-                        final balance =
-                            (bill['balance'] as num?)?.toDouble() ?? 0.0;
-                        final statusStr =
-                            '${bill['status'] ?? 'open'}'.toLowerCase();
-                        final isOutstanding = balance > 0;
+                    )
+                  else
+                    Card(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: rawPaidBills.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final receipt = rawPaidBills[index];
+                          final receiptAmt =
+                              (receipt['amount'] as num?)?.toDouble() ?? 0.0;
+                          final receiptDate =
+                              (receipt['payment_date'] ?? receipt['created_at'] ?? '')
+                                  .toString();
+                          final method = (receipt['payment_method'] ?? 'cash')
+                              .toString()
+                              .toUpperCase();
+                          final refCode = (receipt['reference'] ?? '').toString();
+                          final billNumber =
+                              (receipt['bill_number'] ?? 'Credit Bill Settlement')
+                                  .toString();
+                          final notes = (receipt['notes'] ?? '').toString();
+                          final cashierName =
+                              (receipt['cashier_name'] ?? '').toString();
+                          final linkedBillId =
+                              receipt['credit_bill_id'] ?? receipt['bill_id'];
+                          final linkedBill = rawBills.firstWhere(
+                            (b) =>
+                                b['id'] == linkedBillId ||
+                                b['bill_number'] == billNumber,
+                            orElse: () => <String, dynamic>{},
+                          );
 
-                        // items for inline preview (up to 3)
-                        final billItems = (bill['items'] as List?)
-                                ?.whereType<Map>()
-                                .map((e) => Map<String, dynamic>.from(e))
-                                .toList() ??
-                            [];
-
-                        return InkWell(
-                          onTap: () => _showCreditBillDetailDialog(bill, staffName),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // ── Header row ─────────────────────────────
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor:
-                                          _PosPalette.surfaceAlt,
-                                      radius: 18,
-                                      child: Icon(
-                                        isOutstanding
-                                            ? Icons.receipt_long
-                                            : Icons.check_circle_outline,
-                                        color: isOutstanding
-                                            ? _PosPalette.accent
-                                            : Colors.green,
-                                        size: 18,
-                                      ),
+                          return InkWell(
+                            onTap: () => _showPaidReceiptDetailDialog(
+                              receipt,
+                              staffName,
+                              linkedBill.isNotEmpty ? linkedBill : null,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor:
+                                        Colors.green.withValues(alpha: 0.15),
+                                    radius: 20,
+                                    child: const Icon(
+                                      Icons.verified,
+                                      color: Colors.green,
+                                      size: 20,
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(
-                                                billNo,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 7,
-                                                        vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: isOutstanding
-                                                      ? Colors.amber
-                                                          .withValues(alpha: 0.15)
-                                                      : Colors.green
-                                                          .withValues(alpha: 0.15),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: isOutstanding
-                                                        ? Colors.amber.shade600
-                                                        : Colors.green.shade600,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  isOutstanding
-                                                      ? (statusStr == 'partial'
-                                                          ? 'PARTIAL'
-                                                          : 'OUTSTANDING')
-                                                      : 'SETTLED',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isOutstanding
-                                                        ? Colors.amber.shade700
-                                                        : Colors.green.shade700,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            desc,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: _PosPalette.textMuted,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            'Date: $date',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: _PosPalette.textMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    // ── Amount column ──────────────────────
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          'KES ${balance.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 15,
-                                            color: isOutstanding
-                                                ? _PosPalette.accent
-                                                : Colors.green,
-                                          ),
-                                        ),
-                                        Text(
-                                          'of KES ${amount.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: _PosPalette.textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.chevron_right,
-                                      color: _PosPalette.textMuted,
-                                      size: 18,
-                                    ),
-                                  ],
-                                ),
-
-                                // ── Inline items preview ───────────────────
-                                if (billItems.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: _PosPalette.canvas,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border:
-                                          Border.all(color: _PosPalette.border),
-                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          'Items in this bill:',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: _PosPalette.textMuted,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        for (int i = 0;
-                                            i <
-                                                (billItems.length > 3
-                                                    ? 3
-                                                    : billItems.length);
-                                            i++) ...[
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 4),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
+                                        Row(
+                                          children: [
+                                            Text(
+                                              refCode.isNotEmpty
+                                                  ? 'Ref: $refCode'
+                                                  : billNumber,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
                                                       horizontal: 6,
                                                       vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        _PosPalette.surfaceAlt,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            4),
-                                                  ),
-                                                  child: Text(
-                                                    '${(billItems[i]['quantity'] as num?)?.toInt() ?? 1}x',
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                    color: Colors.green.shade600),
+                                              ),
+                                              child: Text(
+                                                method,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green.shade700,
                                                 ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    '${billItems[i]['name'] ?? 'Item'}',
-                                                    style: const TextStyle(
-                                                        fontSize: 12),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  'KES ${((billItems[i]['line_total'] ?? billItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
+                                              ),
                                             ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          billNumber != refCode
+                                              ? 'For Bill: $billNumber'
+                                              : (notes.isNotEmpty
+                                                  ? notes
+                                                  : 'Credit Bill Payment'),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _PosPalette.textMuted,
                                           ),
-                                        ],
-                                        if (billItems.length > 3)
-                                          Text(
-                                            '+${billItems.length - 3} more items — tap to view all',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: _PosPalette.accent,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            if (receiptDate.isNotEmpty)
+                                              Text(
+                                                'Date: ${receiptDate.split('T')[0]}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: _PosPalette.textMuted,
+                                                ),
+                                              ),
+                                            if (cashierName.isNotEmpty) ...[
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '• Cashier: $cashierName',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: _PosPalette.textMuted,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ],
                                     ),
                                   ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'KES ${receiptAmt.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green
+                                              .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'PAID',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    color: _PosPalette.textMuted,
+                                    size: 18,
+                                  ),
                                 ],
-                              ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ] else ...[
+                  if (filteredBills.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            _creditBillsFilter == 'outstanding'
+                                ? '🎉 No outstanding credit bills found!'
+                                : 'No credit bills found for this view.',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: _PosPalette.textMuted,
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
+                        ),
+                      ),
+                    )
+                  else
+                    Card(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: filteredBills.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final bill = filteredBills[index];
+                          final billNo = bill['bill_number'] ?? 'CRD-BILL';
+                          final date = bill['bill_date'] ?? '';
+                          final desc = bill['description'] ?? 'Credit Bill';
+                          final amount =
+                              (bill['amount'] as num?)?.toDouble() ?? 0.0;
+                          final paidAmount =
+                              (bill['paid_amount'] as num?)?.toDouble() ?? 0.0;
+                          final balance =
+                              (bill['balance'] as num?)?.toDouble() ?? 0.0;
+                          final statusStr =
+                              '${bill['status'] ?? 'open'}'.toLowerCase();
+                          final isSettled =
+                              balance <= 0.001 || statusStr == 'paid';
+
+                          // items for inline preview (up to 3)
+                          final billItems = (bill['items'] as List?)
+                                  ?.whereType<Map>()
+                                  .map((e) => Map<String, dynamic>.from(e))
+                                  .toList() ??
+                              [];
+                          final payments = (bill['payments'] as List?)
+                                  ?.whereType<Map>()
+                                  .map((e) => Map<String, dynamic>.from(e))
+                                  .toList() ??
+                              [];
+
+                          return InkWell(
+                            onTap: () =>
+                                _showCreditBillDetailDialog(bill, staffName),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // ── Header row ─────────────────────────────
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: isSettled
+                                            ? Colors.green.withValues(alpha: 0.15)
+                                            : _PosPalette.surfaceAlt,
+                                        radius: 18,
+                                        child: Icon(
+                                          isSettled
+                                              ? Icons.check_circle_outline
+                                              : (paidAmount > 0
+                                                  ? Icons.receipt_long
+                                                  : Icons.receipt_long),
+                                          color: isSettled
+                                              ? Colors.green
+                                              : (paidAmount > 0
+                                                  ? Colors.orange.shade700
+                                                  : _PosPalette.accent),
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  billNo,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 7,
+                                                          vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: isSettled
+                                                        ? Colors.green
+                                                            .withValues(alpha: 0.15)
+                                                        : (paidAmount > 0
+                                                            ? Colors.orange
+                                                                .withValues(alpha: 0.15)
+                                                            : Colors.amber
+                                                                .withValues(alpha: 0.15)),
+                                                    borderRadius:
+                                                        BorderRadius.circular(4),
+                                                    border: Border.all(
+                                                      color: isSettled
+                                                          ? Colors.green.shade600
+                                                          : (paidAmount > 0
+                                                              ? Colors.orange.shade600
+                                                              : Colors.amber.shade600),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    isSettled
+                                                        ? 'SETTLED'
+                                                        : (paidAmount > 0
+                                                            ? 'PARTIAL'
+                                                            : 'OUTSTANDING'),
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: isSettled
+                                                          ? Colors.green.shade700
+                                                          : (paidAmount > 0
+                                                              ? Colors.orange.shade800
+                                                              : Colors.amber.shade700),
+                                                     ),
+                                                   ),
+                                                 ),
+                                               ],
+                                             ),
+                                             const SizedBox(height: 2),
+                                             Text(
+                                               desc,
+                                               style: TextStyle(
+                                                 fontSize: 12,
+                                                 color: _PosPalette.textMuted,
+                                               ),
+                                               maxLines: 1,
+                                               overflow: TextOverflow.ellipsis,
+                                             ),
+                                             Text(
+                                               'Date: $date',
+                                               style: TextStyle(
+                                                 fontSize: 11,
+                                                 color: _PosPalette.textMuted,
+                                               ),
+                                             ),
+                                             if (payments.isNotEmpty) ...[
+                                               const SizedBox(height: 4),
+                                               Wrap(
+                                                 spacing: 6,
+                                                 runSpacing: 4,
+                                                 children: [
+                                                   for (final p in payments.take(2))
+                                                     Container(
+                                                       padding:
+                                                           const EdgeInsets.symmetric(
+                                                               horizontal: 6,
+                                                               vertical: 2),
+                                                       decoration: BoxDecoration(
+                                                         color: Colors.green
+                                                             .withValues(alpha: 0.12),
+                                                         borderRadius:
+                                                             BorderRadius.circular(4),
+                                                         border: Border.all(
+                                                             color: Colors.green
+                                                                 .withValues(alpha: 0.3)),
+                                                       ),
+                                                       child: Row(
+                                                         mainAxisSize:
+                                                             MainAxisSize.min,
+                                                         children: [
+                                                           const Icon(Icons.check,
+                                                               size: 10,
+                                                               color: Colors.green),
+                                                           const SizedBox(width: 3),
+                                                           Text(
+                                                             'Paid KES ${(p['amount'] as num?)?.toStringAsFixed(0) ?? '0'} (${(p['payment_method'] ?? 'cash').toString().toUpperCase()})',
+                                                             style: TextStyle(
+                                                               fontSize: 10,
+                                                               fontWeight:
+                                                                   FontWeight.w600,
+                                                               color: Colors
+                                                                   .green.shade700,
+                                                             ),
+                                                           ),
+                                                         ],
+                                                       ),
+                                                     ),
+                                                 ],
+                                               ),
+                                             ],
+                                           ],
+                                         ),
+                                       ),
+                                       // ── Amount column ──────────────────────
+                                       Column(
+                                         crossAxisAlignment:
+                                             CrossAxisAlignment.end,
+                                         children: [
+                                           Text(
+                                             isSettled
+                                                 ? 'KES 0'
+                                                 : 'KES ${balance.toStringAsFixed(0)}',
+                                             style: TextStyle(
+                                               fontWeight: FontWeight.w900,
+                                               fontSize: 15,
+                                               color: isSettled
+                                                   ? Colors.green
+                                                   : (paidAmount > 0
+                                                       ? Colors.orange.shade700
+                                                       : _PosPalette.accent),
+                                             ),
+                                           ),
+                                           Text(
+                                             isSettled
+                                                 ? 'Paid KES ${(paidAmount > 0 ? paidAmount : amount).toStringAsFixed(0)} in Full'
+                                                 : (paidAmount > 0
+                                                     ? 'Paid KES ${paidAmount.toStringAsFixed(0)} of ${amount.toStringAsFixed(0)}'
+                                                     : 'of KES ${amount.toStringAsFixed(0)}'),
+                                             style: TextStyle(
+                                               fontSize: 10,
+                                               color: isSettled
+                                                   ? Colors.green.shade700
+                                                   : _PosPalette.textMuted,
+                                               fontWeight: isSettled
+                                                   ? FontWeight.w600
+                                                   : FontWeight.normal,
+                                             ),
+                                           ),
+                                         ],
+                                       ),
+                                       const SizedBox(width: 4),
+                                       Icon(
+                                         Icons.chevron_right,
+                                         color: _PosPalette.textMuted,
+                                         size: 18,
+                                       ),
+                                     ],
+                                   ),
+
+                                   // ── Inline items preview ───────────────────
+                                   if (billItems.isNotEmpty) ...[
+                                     const SizedBox(height: 10),
+                                     Container(
+                                       padding: const EdgeInsets.all(10),
+                                       decoration: BoxDecoration(
+                                         color: _PosPalette.canvas,
+                                         borderRadius: BorderRadius.circular(8),
+                                         border:
+                                             Border.all(color: _PosPalette.border),
+                                       ),
+                                       child: Column(
+                                         crossAxisAlignment:
+                                             CrossAxisAlignment.start,
+                                         children: [
+                                           Text(
+                                             'Items in this bill:',
+                                             style: TextStyle(
+                                               fontSize: 11,
+                                               fontWeight: FontWeight.bold,
+                                               color: _PosPalette.textMuted,
+                                             ),
+                                           ),
+                                           const SizedBox(height: 6),
+                                           for (int i = 0;
+                                               i <
+                                                   (billItems.length > 3
+                                                       ? 3
+                                                       : billItems.length);
+                                               i++) ...[
+                                             Padding(
+                                               padding: const EdgeInsets.only(
+                                                   bottom: 4),
+                                               child: Row(
+                                                 children: [
+                                                   Container(
+                                                     padding: const EdgeInsets
+                                                         .symmetric(
+                                                         horizontal: 6,
+                                                         vertical: 2),
+                                                     decoration: BoxDecoration(
+                                                       color:
+                                                           _PosPalette.surfaceAlt,
+                                                       borderRadius:
+                                                           BorderRadius.circular(
+                                                               4),
+                                                     ),
+                                                     child: Text(
+                                                       '${(billItems[i]['quantity'] as num?)?.toInt() ?? 1}x',
+                                                       style: const TextStyle(
+                                                         fontSize: 11,
+                                                         fontWeight:
+                                                             FontWeight.bold,
+                                                       ),
+                                                     ),
+                                                   ),
+                                                   const SizedBox(width: 8),
+                                                   Expanded(
+                                                     child: Text(
+                                                       '${billItems[i]['name'] ?? 'Item'}',
+                                                       style: const TextStyle(
+                                                           fontSize: 12),
+                                                       overflow:
+                                                           TextOverflow.ellipsis,
+                                                     ),
+                                                   ),
+                                                   Text(
+                                                     'KES ${((billItems[i]['line_total'] ?? billItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
+                                                     style: const TextStyle(
+                                                       fontSize: 12,
+                                                       fontWeight: FontWeight.w600,
+                                                     ),
+                                                   ),
+                                                 ],
+                                               ),
+                                             ),
+                                           ],
+                                           if (billItems.length > 3)
+                                             Text(
+                                               '+${billItems.length - 3} more items — tap to view all',
+                                               style: TextStyle(
+                                                 fontSize: 11,
+                                                 color: _PosPalette.accent,
+                                                 fontStyle: FontStyle.italic,
+                                               ),
+                                             ),
+                                         ],
+                                       ),
+                                     ),
+                                   ],
+                                 ],
+                               ),
+                             ),
+                           );
+                         },
+                       ),
+                     ),
+
+                   // Show payment receipts in Settled view if available
+                   if (_creditBillsFilter == 'settled' && rawPaidBills.isNotEmpty) ...[
+                     const SizedBox(height: 20),
+                     Row(
+                       children: [
+                         const Icon(Icons.receipt_long, size: 18, color: Colors.green),
+                         const SizedBox(width: 8),
+                         Text(
+                           'Recorded Payment Receipts (${rawPaidBills.length})',
+                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                 fontWeight: FontWeight.bold,
+                               ),
+                         ),
+                       ],
+                     ),
+                     const SizedBox(height: 8),
+                     Card(
+                       child: ListView.separated(
+                         shrinkWrap: true,
+                         physics: const NeverScrollableScrollPhysics(),
+                         itemCount: rawPaidBills.length,
+                         separatorBuilder: (_, __) => const Divider(height: 1),
+                         itemBuilder: (context, index) {
+                           final receipt = rawPaidBills[index];
+                           final receiptAmt =
+                               (receipt['amount'] as num?)?.toDouble() ?? 0.0;
+                           final receiptDate = (receipt['payment_date'] ??
+                                   receipt['created_at'] ?? '')
+                               .toString();
+                           final method = (receipt['payment_method'] ?? 'cash')
+                               .toString()
+                               .toUpperCase();
+                           final refCode = (receipt['reference'] ?? '').toString();
+                           final billNumber = (receipt['bill_number'] ??
+                                   'Credit Bill Settlement')
+                               .toString();
+                           final cashierName =
+                               (receipt['cashier_name'] ?? '').toString();
+                           final linkedBillId =
+                               receipt['credit_bill_id'] ?? receipt['bill_id'];
+                           final linkedBill = rawBills.firstWhere(
+                             (b) =>
+                                 b['id'] == linkedBillId ||
+                                 b['bill_number'] == billNumber,
+                             orElse: () => <String, dynamic>{},
+                           );
+
+                           return ListTile(
+                             onTap: () => _showPaidReceiptDetailDialog(
+                               receipt,
+                               staffName,
+                               linkedBill.isNotEmpty ? linkedBill : null,
+                             ),
+                             leading: CircleAvatar(
+                               backgroundColor:
+                                   Colors.green.withValues(alpha: 0.15),
+                               radius: 16,
+                               child: const Icon(
+                                 Icons.verified,
+                                 color: Colors.green,
+                                 size: 16,
+                               ),
+                             ),
+                             title: Text(
+                               refCode.isNotEmpty ? 'Ref: $refCode' : billNumber,
+                               style: const TextStyle(
+                                 fontWeight: FontWeight.bold,
+                                 fontSize: 13,
+                               ),
+                             ),
+                             subtitle: Text(
+                               '${receiptDate.split('T')[0]} • $method${cashierName.isNotEmpty ? ' • Cashier: $cashierName' : ''}',
+                               style: TextStyle(
+                                 fontSize: 11,
+                                 color: _PosPalette.textMuted,
+                               ),
+                             ),
+                             trailing: Text(
+                               '+ KES ${receiptAmt.toStringAsFixed(0)}',
+                               style: const TextStyle(
+                                 fontWeight: FontWeight.bold,
+                                 fontSize: 14,
+                                 color: Colors.green,
+                               ),
+                             ),
+                           );
+                         },
+                       ),
+                     ),
+                   ],
+                 ],
+                ],
             ),
           );
         },
@@ -1435,8 +1854,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     final balance = (bill['balance'] as num?)?.toDouble() ?? 0.0;
     final statusStr = '${bill['status'] ?? 'open'}'.toLowerCase();
     final source = bill['source'] ?? 'cashier_station';
-    final isOutstanding = balance > 0;
+    final isSettled = balance <= 0.001 || statusStr == 'paid';
+    final isOutstanding = !isSettled;
     final rawItems = (bill['items'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        [];
+    final payments = (bill['payments'] as List?)
             ?.whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList() ??
@@ -1601,6 +2026,121 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                       ],
                     ),
                   ),
+
+                  if (payments.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Row(
+                      children: [
+                        Icon(Icons.payments_outlined,
+                            size: 16, color: Colors.green),
+                        SizedBox(width: 6),
+                        Text(
+                          'RECORDED PAYMENTS & RECEIPTS',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _PosPalette.canvas,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          for (int i = 0; i < payments.length; i++) ...[
+                            if (i > 0) const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green
+                                                  .withValues(alpha: 0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${payments[i]['payment_method'] ?? 'CASH'}'
+                                                  .toUpperCase(),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.green.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '${payments[i]['payment_date'] ?? ''}'
+                                                .split('T')[0],
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: _PosPalette.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Text(
+                                        'KES ${((payments[i]['amount']) as num?)?.toStringAsFixed(0) ?? '0'}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if ((payments[i]['reference'] ?? '')
+                                      .toString()
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Ref: ${payments[i]['reference']}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                  if ((payments[i]['notes'] ?? '')
+                                      .toString()
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${payments[i]['notes']}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _PosPalette.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
                   const Text(
@@ -1821,6 +2361,222 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPaidReceiptDetailDialog(
+    Map<String, dynamic> receipt,
+    String staffName,
+    Map<String, dynamic>? linkedBill,
+  ) {
+    final refCode = (receipt['reference'] ?? '').toString();
+    final billNumber =
+        (receipt['bill_number'] ?? 'Credit Bill Settlement').toString();
+    final amount = (receipt['amount'] as num?)?.toDouble() ?? 0.0;
+    final method =
+        (receipt['payment_method'] ?? 'cash').toString().toUpperCase();
+    final date =
+        (receipt['payment_date'] ?? receipt['created_at'] ?? '').toString();
+    final notes = (receipt['notes'] ?? '').toString();
+    final cashierName = (receipt['cashier_name'] ?? '').toString();
+    final shiftNumber = (receipt['shift_number'] ?? '').toString();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _PosPalette.border),
+          ),
+          backgroundColor: _PosPalette.surface,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.verified,
+                  color: Colors.green,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      refCode.isNotEmpty ? 'Receipt: $refCode' : 'Payment Receipt',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Credit Bill Payment Voucher',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _PosPalette.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.green.shade600),
+                ),
+                child: Text(
+                  'PAID',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // Amount Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _PosPalette.canvas,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'AMOUNT PAID & SETTLED',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: _PosPalette.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'KES ${amount.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.green,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Paid via $method',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const Text(
+                    'RECEIPT & PAYMENT DETAILS',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  _detailRow('Staff Member',
+                      staffName.isEmpty ? 'Waiter / Bartender' : staffName),
+                  if (refCode.isNotEmpty) _detailRow('Reference Code', refCode),
+                  _detailRow('Linked Bill', billNumber),
+                  _detailRow('Payment Date', date.split('T')[0]),
+                  _detailRow('Payment Method', method),
+                  if (cashierName.isNotEmpty)
+                    _detailRow('Cashier', cashierName),
+                  if (shiftNumber.isNotEmpty)
+                    _detailRow('Cashier Shift', shiftNumber),
+                  if (notes.isNotEmpty) _detailRow('Notes', notes),
+
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle,
+                            size: 18, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This payment has been applied and deducted from your credit bill outstanding balance.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _PosPalette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            if (linkedBill != null)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _showCreditBillDetailDialog(linkedBill, staffName);
+                },
+                icon: const Icon(Icons.receipt_long, size: 16),
+                label: const Text('View Linked Bill Items'),
+              ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Close'),

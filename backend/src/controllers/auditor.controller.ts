@@ -6,6 +6,7 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
 import db from '../db';
+import * as BranchInventoryService from '../services/branch-inventory.service';
 
 const FG_PRIMARY = '#1a1a1a';
 const FG_SECONDARY = '#555555';
@@ -1749,11 +1750,13 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     next(error);
   }
 };
+
 export const exportStockLedger = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const ExcelJS = require('exceljs');
     const user = (req as any).user;
     const requestedBranchId = (req.body?.branch_id ?? req.query.branch_id) as string | number | undefined;
+    const exportType = String(req.body?.export_type ?? req.query.export_type ?? 'branch_stock').toLowerCase().trim();
     const branchScopedRoles = [
       UserRole.BRANCH_STOREKEEPER,
       UserRole.BRANCH_MANAGER,
@@ -1774,93 +1777,478 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
     // Fetch branch name
     let branchName = 'All Branches';
     if (branch_id && `${branch_id}` !== '0') {
-      const { data: branch , error } = await supabase.from('branches').select('name').eq('id', branch_id).single();
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
+      const { data: branch, error } = await supabase.from('branches').select('name').eq('id', branch_id).single();
+      if (!error && branch?.name) {
+        branchName = branch.name;
       }
-      if (branch) branchName = branch.name;
     }
 
-    // Fetch stock
-    let stockQuery = supabase.from('branch_stock').select('*');
-    if (branch_id && `${branch_id}` !== '0') stockQuery = stockQuery.eq('branch_id', branch_id);
-    const { data: rawStock, error: stockError } = await stockQuery;
-    if (stockError) throw stockError;
-
-    // Fetch item details
-    const itemSkus = [...new Set(rawStock?.map((s: any) => s.item_sku).filter(Boolean))];
-    const { data: items } = await supabase
-      .from('simple_items')
-      .select('id, item_name, sku, unit_of_measure, category, cost_price')
-      .in('sku', itemSkus as string[]);
-
-    const itemMap: Record<string, any> = Object.fromEntries(
-      items?.map((i: any) => [i.sku, { name: i.item_name, unit: i.unit_of_measure, category: i.category, cost_price: i.cost_price }]) || []
-    );
-
-    // Fetch 30-day movements for variance
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    let movQuery = supabase.from('branch_stock_movements').select('*').gte('created_at', thirtyDaysAgo.toISOString());
-    if (branch_id && `${branch_id}` !== '0') movQuery = movQuery.eq('branch_id', branch_id);
-    const { data: movements } = await movQuery;
-
-    // Build workbook
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FamousGate Hotels';
     workbook.created = new Date();
 
-    const ws = workbook.addWorksheet('Stock Ledger', {
-      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
+    // =========================================================================
+    // CASE C: STOCK MOVEMENT LEDGER EXPORT
+    // "Live stock movement monitor: branch receipts, department issues,
+    //  central store requests, adjustments and in-transit dispatches."
+    // =========================================================================
+    if (
+      exportType === 'movement_ledger' ||
+      exportType === 'stock_movement' ||
+      exportType === 'movements' ||
+      exportType === 'inventory_ledger'
+    ) {
+      const effectiveBranchId = Number(branch_id || requestedBranchId || userBranchId || 1);
+      const movementTypeFilter = String(req.body?.movement_type ?? req.query.movement_type ?? '').toUpperCase().trim();
+      const startDate = (req.body?.start_date ?? req.query.start_date) as string | undefined;
+      const endDate = (req.body?.end_date ?? req.query.end_date) as string | undefined;
+
+      let movQuery = supabase
+        .from('branch_stock_movements')
+        .select('*')
+        .eq('branch_id', effectiveBranchId)
+        .order('created_at', { ascending: false });
+
+      if (startDate) {
+        movQuery = movQuery.gte('created_at', new Date(startDate).toISOString());
+      }
+      if (endDate) {
+        const endD = new Date(endDate);
+        endD.setHours(23, 59, 59, 999);
+        movQuery = movQuery.lte('created_at', endD.toISOString());
+      }
+
+      const { data: rawMovements, error: movErr } = await movQuery;
+      if (movErr) throw movErr;
+
+      let movements = rawMovements || [];
+
+      // If user filtered by 'IN' or 'OUT' on the UI:
+      if (movementTypeFilter === 'IN') {
+        movements = movements.filter((m: any) => Number(m.quantity || 0) > 0);
+      } else if (movementTypeFilter === 'OUT') {
+        movements = movements.filter((m: any) => Number(m.quantity || 0) < 0);
+      }
+
+      // Fetch item names and units
+      const itemSkus = [...new Set(movements.map((m: any) => m.item_sku).filter(Boolean))];
+      let itemMap: Record<string, any> = {};
+      if (itemSkus.length > 0) {
+        const { data: items } = await supabase
+          .from('simple_items')
+          .select('sku, item_name, category, unit_of_measure')
+          .in('sku', itemSkus);
+        itemMap = Object.fromEntries(
+          (items || []).map((i: any) => [
+            String(i.sku).trim().toUpperCase(),
+            i
+          ])
+        );
+      }
+
+      // Fetch user names for performed_by
+      const performerIds = [...new Set(movements.map((m: any) => m.performed_by).filter(Boolean))];
+      let userMap: Record<string, string> = {};
+      if (performerIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('id, first_name, last_name, email')
+          .in('id', performerIds);
+        userMap = Object.fromEntries(
+          (users || []).map((u: any) => [
+            u.id,
+            [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || u.id
+          ])
+        );
+      }
+
+      const ws = workbook.addWorksheet('Stock Movement Ledger', {
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+        views: [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }]
+      });
+
+      // Pure Row/Column: Row 1 = Headers (NO BRANDING BANNER)
+      ws.columns = [
+        { key: 'dateTime',     width: 22 },
+        { key: 'type',         width: 26 },
+        { key: 'direction',    width: 14 },
+        { key: 'reference',    width: 24 },
+        { key: 'itemName',     width: 32 },
+        { key: 'sku',          width: 22 },
+        { key: 'category',     width: 18 },
+        { key: 'quantity',     width: 16 },
+        { key: 'unit',         width: 12 },
+        { key: 'prevStock',    width: 16 },
+        { key: 'newStock',     width: 16 },
+        { key: 'performedBy',  width: 22 },
+        { key: 'notes',        width: 32 },
+      ];
+
+      const headers = [
+        'Date & Time',
+        'Movement Type',
+        'Direction',
+        'Reference No.',
+        'Item Name',
+        'SKU',
+        'Category',
+        'Quantity',
+        'Unit',
+        'Previous Stock',
+        'New Stock',
+        'Performed By',
+        'Notes / Reason'
+      ];
+
+      const headerRow = ws.getRow(1);
+      headers.forEach((h, i) => {
+        const cell = headerRow.getCell(i + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } }; // Dark Navy Blue
+        cell.alignment = {
+          horizontal: [7, 9, 10].includes(i) ? 'right' : ([0, 2, 8].includes(i) ? 'center' : 'left'),
+          vertical: 'middle'
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+          bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
+          left: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+          right: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+        };
+      });
+      headerRow.height = 28;
+
+      let rowIndex = 2;
+      movements.forEach((m: any) => {
+        const qty = Number(m.quantity || 0);
+        const isIn = qty > 0;
+        const itemInfo = itemMap[String(m.item_sku).trim().toUpperCase()] || {};
+        const itemName = itemInfo.item_name || m.item_name || m.item_sku || '—';
+        const category = itemInfo.category || '—';
+        const unit = itemInfo.unit_of_measure || 'pcs';
+        const actor = userMap[m.performed_by] || m.performed_by || 'System';
+        const refNo = m.reference_number || m.reference || m.order_id || '—';
+
+        // Format movement label
+        const rawType = String(m.movement_type || '').toUpperCase();
+        let movementLabel = rawType.replace(/_/g, ' ');
+        if (rawType === 'DISPATCH_RECEIVE') movementLabel = 'Central Dispatch Receipt';
+        else if (rawType === 'SUPPLIER_RECEIPT') movementLabel = 'Supplier Receipt (GRN)';
+        else if (rawType === 'ADJUSTMENT_IN') movementLabel = 'Stock Count Increase';
+        else if (rawType === 'ADJUSTMENT_OUT') movementLabel = 'Stock Count Decrease';
+        else if (rawType === 'DISPATCH_OUT') movementLabel = 'Dispatch Transfer Out';
+        else if (rawType === 'SALE') movementLabel = 'Outlet / Bar Sale';
+        else if (rawType === 'KITCHEN_SHIFT_ADD_STOCK') movementLabel = 'Kitchen Shift Issue';
+
+        // Color coding: Green for IN (+), Red for OUT (-)
+        const rowBg = isIn ? 'FFF0FDF4' : 'FFFFEBEE'; // Soft green vs Soft red
+        const dirText = isIn ? 'STOCK IN' : 'STOCK OUT';
+        const dirTextColor = isIn ? 'FF15803D' : 'FFB71C1C';
+        const dirBgColor = isIn ? 'FFDCFCE7' : 'FFFFCDD2';
+
+        const row = ws.getRow(rowIndex);
+        const dateStr = m.created_at ? new Date(m.created_at).toLocaleString() : '—';
+        const prevStock = m.previous_stock !== null && m.previous_stock !== undefined ? Number(m.previous_stock) : null;
+        const newStock = m.new_stock !== null && m.new_stock !== undefined ? Number(m.new_stock) : null;
+
+        const values = [
+          dateStr,
+          movementLabel,
+          dirText,
+          refNo,
+          itemName,
+          m.item_sku || '',
+          category,
+          qty,
+          unit,
+          prevStock,
+          newStock,
+          actor,
+          m.notes || m.audit_notes || '—',
+        ];
+
+        values.forEach((val, i) => {
+          const cell = row.getCell(i + 1);
+          cell.value = val;
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: isIn ? 'FF14532D' : 'FF7F1D1D' } };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          };
+
+          if (i === 0) {
+            cell.alignment = { horizontal: 'center' };
+          }
+          if (i === 2) { // Direction badge
+            cell.alignment = { horizontal: 'center' };
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: dirTextColor } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: dirBgColor } };
+          }
+          if (i === 3) { // Reference
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF1D4ED8' } }; // Blue accent
+          }
+          if (i === 7) { // Quantity
+            cell.numFmt = '+#,##0.00;-#,##0.00;0.00';
+            cell.alignment = { horizontal: 'right' };
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: dirTextColor } };
+          }
+          if (i === 8) {
+            cell.alignment = { horizontal: 'center' };
+          }
+          if ((i === 9 || i === 10) && typeof val === 'number') {
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right' };
+          }
+        });
+
+        row.height = 22;
+        rowIndex++;
+      });
+
+      ws.autoFilter = 'A1:M1';
+
+      const filename = `stock_movement_ledger_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      await workbook.xlsx.write(res);
+      res.end();
+      return;
+    }
+
+    // =========================================================================
+    // CASE A: CENTRAL MASTER CATALOG EXPORT
+    // "WHEN IN CENTRAL MASTER CATALOGUE SHOULD BE MASTER INVENTORY AND ALL
+    //  ITEMS REGISTERED TO BRANCH SHOULD BE MARKED GREEN! ON THE ROWSS!!!"
+    // =========================================================================
+    if (exportType === 'central_catalog') {
+      // 1. Fetch Central Catalog (simple_items, exclude prepared kitchen dishes)
+      const { data: rawCatalog, error: catErr } = await supabase
+        .from('simple_items')
+        .select('id, sku, item_name, description, category, unit_of_measure, retail_price, cost_price, store_type')
+        .eq('is_active', true)
+        .order('item_name');
+      if (catErr) throw catErr;
+
+      const catalog = (rawCatalog || []).filter((it: any) => {
+        const cat = String(it.category || '').toLowerCase();
+        const unit = String(it.unit_of_measure || '').toLowerCase();
+        return !(cat.includes('kitchen menu') || cat === 'kitchen' || unit.startsWith('portion'));
+      });
+
+      // 2. Fetch branch registered stock to identify adopted items
+      const effectiveBranchId = Number(branch_id || requestedBranchId || userBranchId || 1);
+      const branchStockList = await BranchInventoryService.getBranchStock(effectiveBranchId);
+      const branchStockMap = new Map<string, any>(
+        (branchStockList || []).map((s: any) => [
+          String(s.item_sku || s.sku || '').trim().toUpperCase(),
+          s
+        ])
+      );
+
+      const ws = workbook.addWorksheet('Master Inventory', {
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+        views: [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }]
+      });
+
+      // Pure column/rows: Row 1 = Headers, NO Decorative Title Banner
+      ws.columns = [
+        { key: 'name',         width: 36 },
+        { key: 'sku',          width: 24 },
+        { key: 'category',     width: 22 },
+        { key: 'storeType',    width: 16 },
+        { key: 'unit',         width: 14 },
+        { key: 'costPrice',    width: 18 },
+        { key: 'branchStatus', width: 26 },
+        { key: 'branchStock',  width: 18 },
+        { key: 'reorderLevel', width: 16 },
+      ];
+
+      const headers = [
+        'Item Name',
+        'SKU',
+        'Category',
+        'Store Type',
+        'Unit',
+        'Cost Price (KES)',
+        'Branch Registration',
+        'Branch Current Stock',
+        'Reorder Level'
+      ];
+
+      const headerRow = ws.getRow(1);
+      headers.forEach((h, i) => {
+        const cell = headerRow.getCell(i + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }; // Dark Blue / Indigo
+        cell.alignment = {
+          horizontal: [5, 7, 8].includes(i) ? 'right' : ([3, 4, 6].includes(i) ? 'center' : 'left'),
+          vertical: 'middle'
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF3B82F6' } },
+          bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
+          left: { style: 'thin', color: { argb: 'FF3B82F6' } },
+          right: { style: 'thin', color: { argb: 'FF3B82F6' } },
+        };
+      });
+      headerRow.height = 28;
+
+      let rowIndex = 2;
+      catalog.forEach((item: any) => {
+        const skuKey = String(item.sku || '').trim().toUpperCase();
+        const branchStock = branchStockMap.get(skuKey);
+        const isRegistered = !!branchStock;
+        const cost = Number(item.cost_price || 0);
+        const stockQty = branchStock ? Number(branchStock.quantity || 0) : 0;
+        const reorder = branchStock ? Number(branchStock.reorder_level || 10) : 10;
+        const storeType = item.store_type === 'bar_store' ? 'Bar' : 'Food';
+
+        // ALL ITEMS REGISTERED TO BRANCH SHOULD BE MARKED GREEN! ON THE ROWS!!!
+        const rowBg = isRegistered ? 'FFDCFCE7' : (rowIndex % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF');
+
+        const row = ws.getRow(rowIndex);
+        const values = [
+          item.item_name || item.description || skuKey,
+          item.sku || '',
+          item.category || '—',
+          storeType,
+          item.unit_of_measure || 'pcs',
+          parseFloat(cost.toFixed(2)),
+          isRegistered ? '✓ REGISTERED IN BRANCH' : 'NOT REGISTERED',
+          isRegistered ? parseFloat(stockQty.toFixed(2)) : 0,
+          isRegistered ? reorder : '—',
+        ];
+
+        values.forEach((val, i) => {
+          const cell = row.getCell(i + 1);
+          cell.value = val;
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: isRegistered ? 'FF14532D' : 'FF1E293B' } };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          };
+
+          if (i === 3) {
+            cell.alignment = { horizontal: 'center' };
+            cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: storeType === 'Bar' ? 'FF7E22CE' : 'FF0369A1' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isRegistered ? 'FFBBF7D0' : (storeType === 'Bar' ? 'FFF3E8FF' : 'FFE0F2FE') } };
+          }
+          if (i === 4) {
+            cell.alignment = { horizontal: 'center' };
+          }
+          if (i === 5) {
+            cell.numFmt = '"KES "#,##0.00';
+            cell.alignment = { horizontal: 'right' };
+          }
+          if (i === 6) { // Branch Status
+            cell.alignment = { horizontal: 'center' };
+            if (isRegistered) {
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF15803D' } }; // Green
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } };
+            } else {
+              cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF64748B' } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+            }
+          }
+          if (i === 7) {
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right' };
+            if (isRegistered) {
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF15803D' } };
+            }
+          }
+          if (i === 8 && typeof val === 'number') {
+            cell.numFmt = '#,##0';
+            cell.alignment = { horizontal: 'right' };
+          }
+        });
+
+        row.height = 22;
+        rowIndex++;
+      });
+
+      ws.autoFilter = 'A1:I1';
+
+      const filename = `master_inventory_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      await workbook.xlsx.write(res);
+      res.end();
+      return;
+    }
+
+    // =========================================================================
+    // CASE B: BRANCH STOCK ONLY (Branch Inventory Tab)
+    // "SHOULD BE BRANCHH STOCK ONLY FOR BRANCH INVENTORY TAB"
+    // "TO HAVE RED, BLUE AND GREEN COLORS FOR AVAILABLE, LOW STOCK E.T.C!!"
+    // "ONLY COLUMN / ROWS NO HEADER AND BRANDING LIKE ONE USED NOW"
+    // =========================================================================
+    const effectiveBranchId = Number(branch_id || 1);
+    const branchStockList = await BranchInventoryService.getBranchStock(effectiveBranchId);
+
+    // Fetch 30-day movements for last movement date
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    let movQuery = supabase
+      .from('branch_stock_movements')
+      .select('item_sku, branch_id, created_at')
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .order('created_at', { ascending: false });
+    if (effectiveBranchId) movQuery = movQuery.eq('branch_id', effectiveBranchId);
+    const { data: movements } = await movQuery;
+
+    const ws = workbook.addWorksheet('Branch Stock', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+      views: [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }]
     });
 
-    // â”€â”€ Title block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    ws.mergeCells('A1:L1');
-    const titleCell = ws.getCell('A1');
-    titleCell.value = 'FAMOUSGATE HOTELS â€” STOCK LEDGER REPORT';
-    titleCell.font = { name: 'Calibri', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(1).height = 36;
-
-    ws.mergeCells('A2:L2');
-    const subCell = ws.getCell('A2');
-    subCell.value = `Branch: ${branchName}   |   Generated: ${new Date().toLocaleString()}   |   Period: Last 30 Days`;
-    subCell.font = { name: 'Calibri', italic: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E6DA4' } };
-    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(2).height = 22;
-
-    ws.addRow([]); // spacer row 3
-
-    // â”€â”€ Column definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Pure columns/rows starting at Row 1, NO Banner/Title Header
     ws.columns = [
-      { key: 'name',          width: 32 },
-      { key: 'sku',           width: 18 },
-      { key: 'category',      width: 18 },
-      { key: 'unit',          width: 12 },
-      { key: 'systemStock',   width: 16 },
-      { key: 'theoretical',   width: 18 },
-      { key: 'variance',      width: 14 },
-      { key: 'variancePct',   width: 14 },
-      { key: 'costPrice',     width: 14 },
-      { key: 'varianceValue', width: 18 },
-      { key: 'status',        width: 14 },
-      { key: 'lastMovement',  width: 18 },
+      { key: 'name',         width: 36 },
+      { key: 'sku',          width: 24 },
+      { key: 'category',     width: 22 },
+      { key: 'store',        width: 14 },
+      { key: 'balance',      width: 14 },
+      { key: 'unit',         width: 12 },
+      { key: 'reorder',      width: 14 },
+      { key: 'costPrice',    width: 16 },
+      { key: 'stockValue',   width: 18 },
+      { key: 'status',       width: 18 },
+      { key: 'lastMovement', width: 16 },
     ];
 
-    // â”€â”€ Header row (row 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const headers = ['Item Name', 'SKU', 'Category', 'Unit', 'System Stock', 'Theoretical Stock',
-      'Variance', 'Variance %', 'Cost Price (KES)', 'Variance Value (KES)', 'Status', 'Last Movement'];
+    const headers = [
+      'Item Name',
+      'SKU',
+      'Category',
+      'Store',
+      'Balance',
+      'Unit',
+      'Reorder Level',
+      'Cost Price (KES)',
+      'Stock Value (KES)',
+      'Status',
+      'Last Movement'
+    ];
 
-    const headerRow = ws.getRow(4);
+    const headerRow = ws.getRow(1);
     headers.forEach((h, i) => {
       const cell = headerRow.getCell(i + 1);
       cell.value = h;
       cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } }; // Clean Professional Dark Blue
+      cell.alignment = {
+        horizontal: [4, 6, 7, 8].includes(i) ? 'right' : ([3, 5, 9, 10].includes(i) ? 'center' : 'left'),
+        vertical: 'middle'
+      };
       cell.border = {
         top: { style: 'thin', color: { argb: 'FF2E6DA4' } },
         bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
@@ -1868,48 +2256,62 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
         right: { style: 'thin', color: { argb: 'FF2E6DA4' } },
       };
     });
-    headerRow.height = 30;
+    headerRow.height = 28;
 
-    // â”€â”€ Data rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    let rowIndex = 5;
-    let flaggedCount = 0;
-    let totalVarianceValue = 0;
+    let rowIndex = 2;
+    (branchStockList || []).forEach((stock: any) => {
+      const itemMovements = (movements || []).filter(
+        (m: any) => m.item_sku === stock.item_sku && (!stock.branch_id || m.branch_id === stock.branch_id)
+      );
+      const lastMov = itemMovements[0]?.created_at
+        ? new Date(itemMovements[0].created_at).toLocaleDateString()
+        : 'N/A';
 
-    (rawStock || []).forEach((stock: any) => {
-      const item = itemMap[stock.item_sku] || {};
-      const itemMovements = (movements || []).filter((m: any) => m.item_sku === stock.item_sku && m.branch_id === stock.branch_id);
+      const currentQty = Number(stock.quantity ?? 0);
+      const reorder = Number(stock.reorder_level ?? 10);
+      const costPrice = Number(stock.cost_price || stock.unit_cost || stock.item?.cost_price || 0);
+      const stockValue = currentQty * costPrice;
 
-      const wastage = itemMovements
-        .filter((m: any) => ['WASTAGE', 'DAMAGE', 'LOSS'].includes(m.movement_type?.toUpperCase()))
-        .reduce((sum: number, m: any) => sum + Number(m.quantity || 0), 0);
+      const isZero = currentQty <= 0;
+      const isLow = !isZero && currentQty <= reorder;
 
-      const currentQty = Number(stock.quantity || 0);
-      const theoreticalQty = currentQty + wastage;
-      const variance = wastage;
-      const variancePct = currentQty > 0 ? (variance / currentQty) * 100 : 0;
-      const costPrice = Number(item.cost_price || 0);
-      const varianceValue = Math.abs(variance) * costPrice;
-      const isFlagged = variance > 0;
-      const lastMov = itemMovements[0]?.created_at ? new Date(itemMovements[0].created_at).toLocaleDateString() : 'N/A';
+      // Color Coding: Red, Blue, Green
+      // Available / In Stock = Green
+      // Low Stock = Amber / Orange
+      // Zero Stock / Out of Stock = Red
+      let rowBg = 'FFF0FDF4'; // Soft light green
+      let statusText = 'AVAILABLE';
+      let statusTextColor = 'FF15803D'; // Dark Green
+      let statusBgColor = 'FFDCFCE7';   // Soft Green Badge
 
-      if (isFlagged) { flaggedCount++; totalVarianceValue += varianceValue; }
+      if (isZero) {
+        rowBg = 'FFFFEBEE'; // Soft light red
+        statusText = 'OUT OF STOCK';
+        statusTextColor = 'FFB71C1C'; // Dark Red
+        statusBgColor = 'FFFFCDD2';   // Soft Red Badge
+      } else if (isLow) {
+        rowBg = 'FFFFF8E1'; // Soft light amber/yellow
+        statusText = 'LOW STOCK';
+        statusTextColor = 'FFB45309'; // Dark Amber
+        statusBgColor = 'FFFEF3C7';   // Soft Amber Badge
+      }
 
-      const isEven = (rowIndex % 2 === 0);
-      const rowBg = isFlagged ? 'FFFFF3CD' : (isEven ? 'FFF5F9FF' : 'FFFFFFFF');
+      const storeTypeRaw = String(stock.store_type || stock.item?.store_type || 'foodstuffs').toLowerCase();
+      const isBar = storeTypeRaw.includes('bar');
+      const storeLabel = isBar ? 'Bar' : 'Food';
 
       const row = ws.getRow(rowIndex);
       const values = [
-        item.name || stock.item_sku || '',
+        stock.item_name || stock.item_sku || '',
         stock.item_sku || '',
-        item.category || 'General',
-        item.unit || 'Unit',
-        currentQty,
-        parseFloat(theoreticalQty.toFixed(2)),
-        parseFloat(variance.toFixed(2)),
-        parseFloat(variancePct.toFixed(2)),
+        stock.category || stock.item?.category || '—',
+        storeLabel,
+        parseFloat(currentQty.toFixed(2)),
+        stock.unit_of_measure || stock.unit || stock.item?.unit_of_measure || 'pcs',
+        reorder,
         parseFloat(costPrice.toFixed(2)),
-        parseFloat(varianceValue.toFixed(2)),
-        isFlagged ? 'Flagged' : 'Balanced',
+        parseFloat(stockValue.toFixed(2)),
+        statusText,
         lastMov,
       ];
 
@@ -1917,58 +2319,53 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
         const cell = row.getCell(i + 1);
         cell.value = val;
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
-        cell.font = { name: 'Calibri', size: 10 };
+        cell.font = { name: 'Calibri', size: 10, color: { argb: isZero ? 'FF7F1D1D' : (isLow ? 'FF78350F' : 'FF14532D') } };
         cell.border = {
-          top: { style: 'hair', color: { argb: 'FFD0D7E0' } },
-          bottom: { style: 'hair', color: { argb: 'FFD0D7E0' } },
-          left: { style: 'hair', color: { argb: 'FFD0D7E0' } },
-          right: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
         };
 
-        // Numeric formatting
-        if ([4, 5, 6].includes(i)) { cell.numFmt = '#,##0.00'; cell.alignment = { horizontal: 'right' }; }
-        if (i === 7) { cell.numFmt = '#,##0.00"%"'; cell.alignment = { horizontal: 'right' }; }
-        if ([8, 9].includes(i)) { cell.numFmt = '"KES "#,##0.00'; cell.alignment = { horizontal: 'right' }; }
-
-        // Status cell colour
-        if (i === 10) {
-          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: isFlagged ? 'FF9B1C1C' : 'FF166534' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isFlagged ? 'FFFEE2E2' : 'FFD1FAE5' } };
+        // Alignments and Formatting
+        if (i === 3) { // Store: Soft Blue / Purple accent
+          cell.alignment = { horizontal: 'center' };
+          cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: isBar ? 'FF7E22CE' : 'FF0369A1' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isBar ? 'FFF3E8FF' : 'FFE0F2FE' } }; // Blue accent
+        }
+        if (i === 4) { // Balance
+          cell.numFmt = '#,##0.00';
+          cell.alignment = { horizontal: 'right' };
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: isZero ? 'FFB71C1C' : (isLow ? 'FFB45309' : 'FF15803D') } };
+        }
+        if (i === 5) { // Unit
           cell.alignment = { horizontal: 'center' };
         }
-
-        // Item name left-align
-        if (i === 0) { cell.alignment = { horizontal: 'left', wrapText: true }; }
+        if (i === 6) { // Reorder Level
+          cell.numFmt = '#,##0';
+          cell.alignment = { horizontal: 'right' };
+        }
+        if (i === 7 || i === 8) { // Cost Price & Stock Value
+          cell.numFmt = '"KES "#,##0.00';
+          cell.alignment = { horizontal: 'right' };
+        }
+        if (i === 9) { // Status cell badge
+          cell.alignment = { horizontal: 'center' };
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: statusTextColor } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusBgColor } };
+        }
+        if (i === 10) { // Last Movement
+          cell.alignment = { horizontal: 'center' };
+        }
       });
 
-      row.height = 20;
+      row.height = 22;
       rowIndex++;
     });
 
-    // â”€â”€ Summary row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    ws.addRow([]);
-    rowIndex++;
-    const summaryRow = ws.getRow(rowIndex);
-    ws.mergeCells(`A${rowIndex}:D${rowIndex}`);
-    const sumLabel = summaryRow.getCell(1);
-    sumLabel.value = `SUMMARY  |  Total Items: ${rawStock?.length || 0}   Flagged: ${flaggedCount}   Balanced: ${(rawStock?.length || 0) - flaggedCount}`;
-    sumLabel.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    sumLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
-    sumLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.autoFilter = 'A1:K1';
 
-    const sumValCell = summaryRow.getCell(10);
-    sumValCell.value = parseFloat(totalVarianceValue.toFixed(2));
-    sumValCell.numFmt = '"KES "#,##0.00';
-    sumValCell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    sumValCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
-    sumValCell.alignment = { horizontal: 'right', vertical: 'middle' };
-    summaryRow.height = 26;
-
-    // â”€â”€ Freeze header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4, activeCell: 'A5' }];
-
-    // â”€â”€ Stream response â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const filename = `stock_ledger_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const filename = `branch_stock_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     await workbook.xlsx.write(res);
@@ -1976,7 +2373,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
   } catch (error) {
     next(error);
   }
-}
+};
 
 /**
  * F. Branch Orders Verification
@@ -2408,7 +2805,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const requestedBranchId = branch_id ? String(branch_id) : '';
     const userBranchId = req.user?.branch_id ? String(req.user.branch_id) : '';
     const userRole = String(req.user?.role || '');
-    const isBranchScopedUser = ['branch_manager', 'branch_accountant'].includes(userRole);
+    const isBranchScopedUser = ['branch_manager', 'branch_accountant', 'branch_storekeeper'].includes(userRole);
 
     if (isBranchScopedUser && requestedBranchId && requestedBranchId !== '0' && userBranchId && requestedBranchId !== userBranchId) {
       const error = new Error('Access denied. You can only view sold items analytics for your assigned branch.') as any;

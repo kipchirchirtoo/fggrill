@@ -644,6 +644,79 @@ export const updateItem = async (
   }
 };
 
+// @desc    Re-classify an item (Store type + Category) — the only item fields a
+//          branch storekeeper may change on their own branch's stock. Kept apart
+//          from updateItem (manager-only) so fixing a mis-typed item (e.g. a
+//          cleaner showing as "Food") never opens up editing of quantities/prices.
+// @route   PATCH /api/store/items/:id/classification   (:id = sku)
+// @access  Private (branch storekeeper for own branch; managers for any)
+export const updateItemClassification = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const sku = req.params.id;
+    const { category, store_type } = req.body;
+    const user = (req as any).user;
+    const role = String(user?.role || '');
+    const branchId = user?.branch_id ?? user?.branchId ?? null;
+
+    const VALID_STORE_TYPES = ['foodstuffs', 'bar_store', 'dry_goods', 'pastry', 'non_consumables'];
+    if (store_type !== undefined && store_type !== null && store_type !== '' &&
+        !VALID_STORE_TYPES.includes(String(store_type))) {
+      res.status(400).json({ success: false, message: `Invalid store type. Allowed: ${VALID_STORE_TYPES.join(', ')}` });
+      return;
+    }
+    if (category === undefined && store_type === undefined) {
+      res.status(400).json({ success: false, message: 'Provide a category and/or store type to update.' });
+      return;
+    }
+
+    const isGlobal = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(role);
+
+    // SKU is unique in inventory_items, so look the item up directly then check
+    // authorization. Non-global roles may re-classify their own branch's items
+    // OR shared global/legacy items (branch_id NULL, which appear in every
+    // branch's list) — but never an item owned by a different branch.
+    const { data: item, error: lookupErr } = await supabase
+      .from('inventory_items')
+      .select('id, sku, branch_id')
+      .eq('sku', sku)
+      .maybeSingle();
+    if (lookupErr) { res.status(500).json({ success: false, message: lookupErr.message }); return; }
+    if (!item) { res.status(404).json({ success: false, message: 'Item not found.' }); return; }
+    if (!isGlobal && branchId != null && item.branch_id != null &&
+        String(item.branch_id) !== String(branchId)) {
+      res.status(403).json({ success: false, message: 'This item belongs to another branch.' });
+      return;
+    }
+
+    const payload: any = { updated_at: new Date().toISOString() };
+    if (category !== undefined) payload.category = category === '' ? null : category;
+    if (store_type !== undefined) payload.store_type = store_type === '' ? null : store_type;
+
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .update(payload)
+      .eq('id', item.id)
+      .select('id, sku, item_name, category, store_type')
+      .single();
+    if (error) { res.status(500).json({ success: false, message: error.message }); return; }
+    // Confirm the write actually persisted (guards against a silent no-op).
+    if (!data ||
+        (store_type !== undefined && String(data.store_type ?? '') !== String(payload.store_type ?? '')) ||
+        (category !== undefined && String(data.category ?? '') !== String(payload.category ?? ''))) {
+      res.status(500).json({ success: false, message: 'Classification did not save — please try again.' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Add stock to existing item (FOUND mode - rapid stock-in)
 // @route   POST /api/store/items/:id/add-stock
 // @access  Private

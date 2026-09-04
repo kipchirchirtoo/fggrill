@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2329,7 +2331,11 @@ class _InventorySearchBody extends StatefulWidget {
   final List<Map<String, dynamic>> allItems;
   final String title;
   final String emptyMessage;
-  final VoidCallback onExportPdf;
+  final void Function({
+    List<Map<String, dynamic>>? filteredItems,
+    String? selectedCategory,
+    String? searchQuery,
+  }) onExportPdf;
   final VoidCallback onSyncStock;
   final VoidCallback onAddItem;
   final void Function(Map<String, dynamic>) onEditItem;
@@ -2571,7 +2577,11 @@ class _InventorySearchBodyState extends State<_InventorySearchBody> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           OutlinedButton.icon(
-              onPressed: widget.onExportPdf,
+              onPressed: () => widget.onExportPdf(
+                    filteredItems: items,
+                    selectedCategory: _selectedCategory,
+                    searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+                  ),
               icon: const Icon(Icons.picture_as_pdf, size: 14),
               label: const Text('PDF / Print')),
           const SizedBox(width: 8),
@@ -2652,7 +2662,19 @@ class _InventoryListSection extends ConsumerWidget {
               valuation: valuationAsync?.valueOrNull ?? const {},
               showValuationCards: valuationAsync != null,
               storeType: storeType,
-              onExportPdf: () => _exportPdf(context, allItems),
+              onExportPdf: ({
+                filteredItems,
+                selectedCategory,
+                searchQuery,
+              }) =>
+                  _exportPdf(
+                context,
+                allItems,
+                filteredItems: filteredItems,
+                selectedCategory: selectedCategory,
+                searchQuery: searchQuery,
+                valuation: valuationAsync?.valueOrNull ?? const {},
+              ),
               onSyncStock: () async {
                 try {
                   final result = await ref.read(adminRepositoryProvider).backfillGRNStock();
@@ -2932,35 +2954,33 @@ class _InventoryListSection extends ConsumerWidget {
 
   Future<void> _exportPdf(
     BuildContext context,
-    List<Map<String, dynamic>> items,
-  ) async {
+    List<Map<String, dynamic>> allItems, {
+    List<Map<String, dynamic>>? filteredItems,
+    String? selectedCategory,
+    String? searchQuery,
+    Map<String, dynamic> valuation = const {},
+  }) async {
+    final exportItems = (filteredItems != null && filteredItems.isNotEmpty)
+        ? filteredItems
+        : allItems;
+
+    var reportSubtitle = subtitle;
+    if (selectedCategory != null && selectedCategory.isNotEmpty) {
+      reportSubtitle += ' • Category: $selectedCategory';
+    }
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      reportSubtitle += ' • Search: "$searchQuery"';
+    }
+
     try {
-      await ReportService().generateAndPrint(
+      await ReportService().generateCentralStoreInventoryReport(
         title: title,
-        subtitle: subtitle,
-        sections: [
-          ReportSection(
-            title: 'Inventory',
-            tableHeaders: const [
-              'SKU',
-              'Item',
-              'Category',
-              'Unit',
-              'Qty',
-              'Cost'
-            ],
-            tableRows: items
-                .map((item) => [
-                      _text(item, ['sku']),
-                      _text(item, ['item_name', 'name', 'description']),
-                      _text(item, ['category']),
-                      _text(item, ['unit_of_measure', 'unit']),
-                      _num(item, ['quantity']).toStringAsFixed(0),
-                      _money(_num(item, ['cost_price', 'retail_price'])),
-                    ])
-                .toList(),
-          ),
-        ],
+        subtitle: reportSubtitle,
+        items: exportItems,
+        valuation: valuation,
+        selectedCategory: selectedCategory,
+        searchQuery: searchQuery,
+        storeType: storeType,
       );
     } catch (error) {
       if (context.mounted) {
@@ -5745,71 +5765,164 @@ Widget _supplierWorkflowTabs(WidgetRef ref, AdminSection active) {
   );
 }
 
-class GoodsReceiptGRNSection extends ConsumerWidget {
+class GoodsReceiptGRNSection extends ConsumerStatefulWidget {
   const GoodsReceiptGRNSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
+  ConsumerState<GoodsReceiptGRNSection> createState() =>
+      _GoodsReceiptGRNSectionState();
+}
+
+class _GoodsReceiptGRNSectionState
+    extends ConsumerState<GoodsReceiptGRNSection> {
+  // 0 = Current (pending approval), 1 = History (approved/posted).
+  int _tab = 0;
+  final Set<String> _busy = {};
+
+  // A GRN is "done" (History, read-only) once it has actually been signed off —
+  // i.e. it carries an approver. A 'posted' GRN with no approver is still
+  // awaiting sign-off and stays in Current. Re-approving a signed GRN would
+  // double-post stock, so only un-approved GRNs are approvable.
+  bool _grnDone(Map<String, dynamic> row) {
+    final s = _text(row, ['status'], '').toLowerCase();
+    if (s.contains('approved')) return true;
+    final approver = _text(row, ['approved_by_id', 'approved_by'], '').trim();
+    return s == 'posted' && approver.isNotEmpty;
+  }
+
+  @override
+  Widget build(BuildContext context) => _LiveSection(
         title: 'Goods Receipt (GRN)',
-        subtitle: 'Posted goods-received notes and supplier receipts',
+        subtitle: 'Supplier receipts & central-store goods-received notes',
         icon: PhosphorIcons.clipboardText(),
         child: _LiveRows(
           value: ref.watch(centralGrnsProvider),
-          data: (rows) => Column(children: [
-            _supplierWorkflowTabs(ref, AdminSection.goodsReceiptGRN),
-            const SizedBox(height: 16),
-            _RowsCard(
-              title: 'GRN Register',
-              rows: rows,
-              emptyMessage: 'No GRNs found',
-              trailing: ElevatedButton.icon(
-                onPressed: () => ref.read(adminSectionProvider.notifier).state =
-                    AdminSection.goodsReceiving,
-                icon: const Icon(Icons.add, size: 14),
-                label: const Text('Record Receipt'),
+          data: (rows) {
+            final current = rows.where((r) => !_grnDone(r)).toList();
+            final history = rows.where(_grnDone).toList();
+            final shown = _tab == 0 ? current : history;
+            return Column(children: [
+              _supplierWorkflowTabs(ref, AdminSection.goodsReceiptGRN),
+              const SizedBox(height: 12),
+              _grnSubTabs(current.length, history.length),
+              const SizedBox(height: 12),
+              _RowsCard(
+                title: _tab == 0 ? 'Pending Approval' : 'Approved GRNs',
+                rows: shown,
+                emptyMessage: _tab == 0
+                    ? 'No GRNs pending approval'
+                    : 'No approved GRNs yet',
+                trailing: ElevatedButton.icon(
+                  onPressed: () => ref
+                      .read(adminSectionProvider.notifier)
+                      .state = AdminSection.goodsReceiving,
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text('Record Receipt'),
+                ),
+                builder: (row) {
+                  final id = _id(row);
+                  final busy = _busy.contains(id);
+                  final done = _grnDone(row);
+                  return _rowTile(
+                    icon: PhosphorIcons.clipboardText(),
+                    title: _text(row, ['grn_number', 'id']),
+                    subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
+                          'po_number'
+                        ], 'Direct Receipt')}',
+                    trailing: Wrap(spacing: 6, children: [
+                      _statusChip(done ? 'approved' : _text(row, ['status'], 'draft')),
+                      OutlinedButton(
+                          onPressed: () => _showMapDetails(context,
+                              'GRN ${_text(row, ['grn_number', 'id'])}', row),
+                          child: const Text('View')),
+                      OutlinedButton(
+                          onPressed: busy ? null : () => _printGrn(context, ref, row),
+                          child: const Text('Print')),
+                      if (!done)
+                        busy
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 10),
+                                child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2)),
+                              )
+                            : ElevatedButton(
+                                onPressed: () => _approveGrn(context, ref, row),
+                                child: const Text('Approve')),
+                    ]),
+                  );
+                },
               ),
-              builder: (row) {
-                final status = _text(row, ['status'], 'pending_review');
-                return _rowTile(
-                  icon: PhosphorIcons.clipboardText(),
-                  title: _text(row, ['grn_number', 'id']),
-                  subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
-                        'po_number'
-                      ], 'Direct Receipt')}',
-                  trailing: Wrap(spacing: 6, children: [
-                    _statusChip(status),
-                    OutlinedButton(
-                        onPressed: () => _showMapDetails(context,
-                            'GRN ${_text(row, ['grn_number', 'id'])}', row),
-                        child: const Text('View')),
-                    if (!status.toLowerCase().contains('approved'))
-                      ElevatedButton(
-                          onPressed: () => _approveGrn(context, ref, row),
-                          child: const Text('Approve')),
-                  ]),
-                );
-              },
-            ),
-          ]),
+            ]);
+          },
         ),
       );
+
+  Widget _grnSubTabs(int currentN, int historyN) {
+    Widget btn(int idx, String label) {
+      final selected = _tab == idx;
+      final child = Text(label);
+      return selected
+          ? ElevatedButton(onPressed: () {}, child: child)
+          : OutlinedButton(
+              onPressed: () => setState(() => _tab = idx), child: child);
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(spacing: 8, children: [
+        btn(0, 'Current ($currentN)'),
+        btn(1, 'History ($historyN)'),
+      ]),
+    );
+  }
+
+  Future<void> _printGrn(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
+    final id = _id(row);
+    final grnNo = _text(row, ['grn_number', 'id'], 'GRN');
+    setState(() => _busy.add(id));
+    try {
+      final File file = await ref
+          .read(adminRepositoryProvider)
+          .downloadGRNPdf(id, grnNumber: grnNo);
+      final bytes = await file.readAsBytes();
+      await Printing.layoutPdf(
+        name: '$grnNo.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (context.mounted) _snack(context, 'Print failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
+  }
 
   Future<void> _approveGrn(
       BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
     final confirmed = await _confirm(
       context,
       title: 'Approve GRN',
-      message: 'Approve ${_text(row, ['grn_number', 'id'])} and update stock?',
+      message:
+          'Approve ${_text(row, ['grn_number', 'id'])}? This posts the received '
+          'stock to inventory and moves the GRN to History. This cannot be undone.',
       confirmLabel: 'Approve',
     );
     if (!confirmed) return;
+    final id = _id(row);
+    setState(() => _busy.add(id));
     try {
-      await ref.read(adminRepositoryProvider).approveGRN(_id(row));
+      await ref.read(adminRepositoryProvider).approveGRN(id);
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'GRN approved');
+      _snack(context, 'GRN approved and posted to inventory');
+      setState(() => _tab = 1); // jump to History
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
     }
   }
 }

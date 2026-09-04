@@ -186,6 +186,7 @@ class _MenuPricingSectionState extends ConsumerState<MenuPricingSection> {
             ButtonSegment(value: 'all', label: Text('All')),
             ButtonSegment(value: 'restaurant', label: Text('Restaurant')),
             ButtonSegment(value: 'bar', label: Text('Bar')),
+            ButtonSegment(value: 'non_consumables', label: Text('Non-Consumables')),
           ],
           selected: {_type},
           onSelectionChanged: (s) => setState(() {
@@ -355,6 +356,7 @@ class _PricingRowState extends State<_PricingRow> {
     final marginColor = _margin < 0
         ? Colors.red
         : (_marginPct < 15 ? Colors.orange[800]! : Colors.green[700]!);
+    final isNonConsumable = it.itemType == 'non_consumables' || it.itemType == 'non-consumables';
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -368,15 +370,28 @@ class _PricingRowState extends State<_PricingRow> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: (it.itemType == 'bar' ? Colors.purple : Colors.teal).withValues(alpha: 0.12),
+                color: (it.itemType == 'bar'
+                        ? Colors.purple
+                        : isNonConsumable
+                            ? Colors.blueGrey
+                            : Colors.teal)
+                    .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                it.itemType == 'bar' ? 'BAR' : 'FOOD',
+                it.itemType == 'bar'
+                    ? 'BAR'
+                    : isNonConsumable
+                        ? 'NON-CONSUMABLES'
+                        : 'FOOD',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: it.itemType == 'bar' ? Colors.purple : Colors.teal,
+                  color: it.itemType == 'bar'
+                      ? Colors.purple
+                      : isNonConsumable
+                          ? Colors.blueGrey[800]
+                          : Colors.teal,
                 ),
               ),
             ),

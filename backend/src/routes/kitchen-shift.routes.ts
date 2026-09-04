@@ -33,12 +33,16 @@ import {
     getBreakfastPax,
     getShiftReconciliationReport,
     getShiftDailyControlsReport,
+    exportShiftDailyControlsExcel,
+    exportShiftDailyControlsCsv,
     listPrepBatches,
     sendPrepBatch,
     receivePrepBatch,
     listDirectItems,
     createDirectItem,
-    deactivateDirectItem
+    deactivateDirectItem,
+    getKitchenVarianceSummaryReport,
+    exportKitchenVarianceSummaryExcel
 } from '../controllers/kitchen-shift.controller';
 
 const router = express.Router();
@@ -94,10 +98,16 @@ router.delete('/direct-items/:id', authorize([UserRole.SUPER_ADMIN, UserRole.BRA
 router.get('/breakfast-pax', authorize(KITCHEN_ROLES), getBreakfastPax);
 router.get('/active-cashier-shift', authorize(KITCHEN_ROLES), getActiveCashierShift);
 
+// Variance summary and reporting
+router.get('/variance-summary-report', authorize(KITCHEN_ROLES), getKitchenVarianceSummaryReport);
+router.get('/variance-summary-report/export.xlsx', authorize(KITCHEN_ROLES), exportKitchenVarianceSummaryExcel);
+
 router.get('/:shift_id', authorize(KITCHEN_ROLES), getKitchenShift);
 router.get('/:shift_id/pos-consumption', authorize(KITCHEN_ROLES), getKitchenShiftPosConsumption);
 router.get('/:shift_id/reconciliation-report', authorize(KITCHEN_ROLES), getShiftReconciliationReport);
 router.get('/:shift_id/daily-controls', authorize(KITCHEN_ROLES), getShiftDailyControlsReport);
+router.get('/:shift_id/daily-controls/export.xlsx', authorize(KITCHEN_ROLES), exportShiftDailyControlsExcel);
+router.get('/:shift_id/daily-controls/export.csv', authorize(KITCHEN_ROLES), exportShiftDailyControlsCsv);
 router.get('/:shift_id/additions', authorize(KITCHEN_ROLES), listShiftAdditions);
 router.get('/:shift_id/prep-batches', authorize(KITCHEN_ROLES), listPrepBatches);
 router.get('/:shift_id/production-summary', authorize(KITCHEN_ROLES), getProductionSummary);

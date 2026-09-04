@@ -1759,6 +1759,21 @@ class BranchAccountantRepository {
     return _getList('/payroll/credit-bills/$id/payments');
   }
 
+  /// Branch-wide history of every recorded paid-bill payment (newest first).
+  Future<List<Map<String, dynamic>>> getBranchCreditBillPayments({
+    String? fromDate,
+    String? toDate,
+    String? staffId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payroll/credit-bills/payments', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+      if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+    });
+  }
+
   Future<void> updatePayrollCreditBillStatus(String id, String status) async {
     await _dio.patch('/payroll/credit-bills/$id', data: {'status': status});
   }
@@ -2064,12 +2079,86 @@ class BranchAccountantRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getPendingKitchenShiftReviews() async {
+  Future<List<Map<String, dynamic>>> getPendingKitchenShiftReviews({
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async {
     final branchId = await getBranchId();
     return _getList('/kitchen/shifts', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
-      'status': 'pending_accountant_review',
+      if (status != null && status.isNotEmpty && status != 'all') 'status': status,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
     });
+  }
+
+  Future<Map<String, dynamic>> getKitchenVarianceSummaryReport({
+    String? fromDate,
+    String? toDate,
+    String? status,
+    String? shiftId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/kitchen/shifts/variance-summary-report', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty && status != 'all') 'status': status,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+      if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
+    });
+  }
+
+  Future<File> downloadKitchenVarianceSummaryExcel({
+    String? fromDate,
+    String? toDate,
+    String? filename,
+  }) async {
+    final branchId = await getBranchId();
+    final safeName = filename ?? 'FG_Kitchen_Variance_Summary_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$safeName';
+
+    await _dio.download(
+      '/kitchen/shifts/variance-summary-report/export.xlsx',
+      filePath,
+      queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+        if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+      },
+    );
+    return File(filePath);
+  }
+
+  Future<File> downloadShiftDailyControlsExcel(
+    String shiftId, {
+    String? filename,
+  }) async {
+    final safeName = filename ?? 'FG_DailyControls_$shiftId.xlsx';
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$safeName';
+
+    await _dio.download(
+      '/kitchen/shifts/$shiftId/daily-controls/export.xlsx',
+      filePath,
+    );
+    return File(filePath);
+  }
+
+  Future<File> downloadShiftDailyControlsCsv(
+    String shiftId, {
+    String? filename,
+  }) async {
+    final safeName = filename ?? 'FG_DailyControls_$shiftId.csv';
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$safeName';
+
+    await _dio.download(
+      '/kitchen/shifts/$shiftId/daily-controls/export.csv',
+      filePath,
+    );
+    return File(filePath);
   }
 
   Future<Map<String, dynamic>> getKitchenShiftReviewDetail(String id) async {
@@ -2134,7 +2223,7 @@ class BranchAccountantRepository {
 
   Future<List<Map<String, dynamic>>> getPurchaseOrders({String? status}) {
     return _getList('/procurement/purchase-orders', query: {
-      'source_module': 'branch_accounting',
+      'source_module': 'branch_store',
       if (status != null && status.isNotEmpty) 'status': status,
     });
   }
@@ -2170,6 +2259,7 @@ class BranchAccountantRepository {
     String? supplierId,
   }) {
     return _getList('/procurement/grn', query: {
+      'scope': 'branch',
       if (supplierId != null && supplierId.isNotEmpty)
         'supplier_id': supplierId,
     });
