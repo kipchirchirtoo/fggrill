@@ -11,6 +11,7 @@ import {
   registerTerminal,
   deviceChallenge,
   deviceToken,
+  checkDeviceStatus,
 } from '../controllers/pos-terminal.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -35,6 +36,7 @@ const VIEW_ROLES = [
 // ---------------------------------------------------------------
 router.post('/enroll/verify', verifyEnrollmentCode);
 router.post('/enroll/register', registerTerminal);
+router.get('/device/status', checkDeviceStatus);
 router.post('/device/challenge', deviceChallenge);
 router.post('/device/token', deviceToken);
 

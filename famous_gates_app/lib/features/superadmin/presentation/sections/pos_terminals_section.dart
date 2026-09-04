@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../pos_terminal/data/pos_terminal_admin_repository.dart';
+import '../../../pos_terminal/data/pos_terminal_service.dart';
 
 const _terminalTypes = <String>[
   'cashier', 'restaurant', 'main_bar', 'executive_bar', 'non_consumables',
@@ -204,6 +205,12 @@ class PosTerminalsSection extends ConsumerWidget {
               'This terminal can no longer authenticate. The computer must be re-registered to use it again.');
           if (ok == true) {
             await repo.revokeTerminal(id);
+            final localIdentity = await ref.read(posTerminalServiceProvider).loadIdentity();
+            if (localIdentity != null && localIdentity.terminalId == id) {
+              await ref.read(posTerminalServiceProvider).clear();
+              ref.invalidate(posTerminalIdentityProvider);
+              ref.read(terminalRegistrationStatusProvider.notifier).refresh();
+            }
             messenger.showSnackBar(const SnackBar(content: Text('Terminal revoked')));
           } else {
             return;
@@ -343,7 +350,7 @@ class PosTerminalsSection extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('The device binding is revoked and a new enrollment code is issued. The terminal must be re-registered at the new branch.',
+                const Text('Move this terminal to another branch. The terminal remains registered and its branch will be updated seamlessly without re-registration.',
                     style: TextStyle(fontSize: 12, color: Colors.black54)),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
@@ -378,8 +385,18 @@ class PosTerminalsSection extends ConsumerWidget {
                       try {
                         final res = await ref.read(posTerminalAdminRepositoryProvider).transferTerminal('${t['id']}', branchId!);
                         ref.invalidate(posTerminalsListProvider);
+                        final localIdentity = await ref.read(posTerminalServiceProvider).loadIdentity();
+                        if (localIdentity != null && localIdentity.terminalId == '${t['id']}') {
+                          await ref.read(posTerminalServiceProvider).verifyWithServer();
+                          ref.invalidate(posTerminalIdentityProvider);
+                          ref.read(terminalRegistrationStatusProvider.notifier).refresh();
+                        }
                         if (dctx.mounted) Navigator.pop(dctx);
-                        if (context.mounted) await _showCodeDialog(context, res, terminalName: '${t['terminalName'] ?? t['terminal_name']}');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(res['message'] ?? 'Terminal transferred successfully')),
+                          );
+                        }
                       } catch (e) {
                         setSt(() {
                           busy = false;

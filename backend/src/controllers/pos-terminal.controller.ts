@@ -263,7 +263,12 @@ export const revokeTerminal = async (req: Request, res: Response, next: NextFunc
   try {
     const { data, error } = await supabase
       .from('pos_terminals')
-      .update({ status: 'revoked', device_public_key: null, device_fingerprint: null })
+      .update({
+        status: 'revoked',
+        device_public_key: null,
+        device_fingerprint: null,
+        device_registered_at: null,
+      })
       .eq('id', req.params.id)
       .select()
       .single();
@@ -276,29 +281,65 @@ export const revokeTerminal = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// POST /pos-terminals/:id/transfer — move a terminal to another branch. Revokes
-// the old device binding and issues a fresh enrollment code (must re-register).
+// POST /pos-terminals/:id/transfer — move a terminal to another branch.
+// Keeps the existing device registration active and updates the terminal's branch.
 export const transferTerminal = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const toBranch = branchIdNum(req.body.branch_id ?? req.body.branchId);
     if (!toBranch) throw new AppError('Target branch_id is required', 400);
-    const { data: branch } = await supabase.from('branches').select('id').eq('id', toBranch).maybeSingle();
+    const { data: branch } = await supabase.from('branches').select('id, name').eq('id', toBranch).maybeSingle();
     if (!branch) throw new AppError('Target branch not found', 404);
 
     const { data: terminal, error } = await supabase
       .from('pos_terminals')
-      .update({ branch_id: toBranch, status: 'pending_registration', device_public_key: null, device_fingerprint: null, device_registered_at: null })
+      .update({ branch_id: toBranch })
       .eq('id', req.params.id)
       .select()
       .single();
     if (error) throw new AppError(error.message, 500);
 
-    const enrollment = await issueEnrollmentCode(terminal.id, toBranch, userId(req));
     logger.warn('POS terminal transferred', { terminalId: req.params.id, toBranch, by: userId(req) });
     res.json({
       success: true,
-      data: { terminal: normalizeTerminal(terminal), enrollment_code: enrollment.code, expires_at: enrollment.expiresAt },
-      message: 'Terminal transferred. It must be re-registered on the device using the new code.',
+      data: { terminal: normalizeTerminal(terminal), branch_name: branch.name },
+      message: `Terminal transferred to ${branch.name || `branch ${toBranch}`}. No re-registration required.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /pos-terminals/device/status — check whether a terminal ID is active and its current branch.
+// Public endpoint used by devices on startup / resume / heartbeat.
+export const checkDeviceStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const terminalId = String(req.query.terminal_id ?? req.query.terminalId ?? '').trim();
+    if (!terminalId) throw new AppError('terminal_id is required', 400);
+
+    const { data: terminal, error } = await supabase
+      .from('pos_terminals')
+      .select('id, terminal_code, terminal_name, terminal_type, branch_id, status, device_public_key')
+      .eq('id', terminalId)
+      .maybeSingle();
+
+    if (error) throw new AppError(error.message, 500);
+    if (!terminal) {
+      res.json({ success: true, data: { registered: false, status: 'not_found' } });
+      return;
+    }
+
+    const isActive = terminal.status === 'active' && Boolean(terminal.device_public_key);
+    res.json({
+      success: true,
+      data: {
+        registered: isActive,
+        status: terminal.status,
+        terminal_id: terminal.id,
+        terminal_code: terminal.terminal_code,
+        terminal_name: terminal.terminal_name,
+        terminal_type: terminal.terminal_type,
+        branch_id: terminal.branch_id,
+      },
     });
   } catch (error) {
     next(error);

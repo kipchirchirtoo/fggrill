@@ -33,10 +33,9 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
 
   // If this device is already registered when the screen opens (e.g. someone
   // taps the "TERMINAL: …" pill by accident), show a confirmation instead of the
-  // code form, and bounce back to the POS terminal automatically.
+  // code form, allowing them to return or re-register.
   bool _checkingExisting = true;
   PosTerminalIdentity? _existingIdentity;
-  Timer? _redirectTimer;
 
   @override
   void initState() {
@@ -45,21 +44,51 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
   }
 
   Future<void> _checkExisting() async {
-    final identity = await ref.read(posTerminalServiceProvider).loadIdentity();
+    final service = ref.read(posTerminalServiceProvider);
+    final identity = await service.loadIdentity();
+    if (!mounted) return;
+
+    if (identity == null || (identity.status.isNotEmpty && identity.status != 'active')) {
+      setState(() {
+        _existingIdentity = null;
+        _checkingExisting = false;
+      });
+      return;
+    }
+
+    // Best-effort check with server: verify terminal validity
+    try {
+      final token = await service.ensureDeviceToken();
+      if (!mounted) return;
+      if (token == null) {
+        setState(() {
+          _existingIdentity = null;
+          _checkingExisting = false;
+        });
+        return;
+      }
+    } catch (e) {
+      if (e is DioException) {
+        final statusCode = e.response?.statusCode;
+        if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+          if (!mounted) return;
+          setState(() {
+            _existingIdentity = null;
+            _checkingExisting = false;
+          });
+          return;
+        }
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       _existingIdentity = identity;
       _checkingExisting = false;
     });
-    if (identity != null) {
-      _redirectTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) _goBack();
-      });
-    }
   }
 
   void _goBack() {
-    _redirectTimer?.cancel();
     if (widget.onComplete != null) {
       widget.onComplete!();
     } else if (mounted) {
@@ -67,9 +96,22 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
     }
   }
 
+  Future<void> _reRegister() async {
+    setState(() => _busy = true);
+    await ref.read(posTerminalServiceProvider).clear();
+    ref.invalidate(posTerminalIdentityProvider);
+    await ref.read(terminalRegistrationStatusProvider.notifier).load();
+    if (mounted) {
+      setState(() {
+        _existingIdentity = null;
+        _step = _Step.enterCode;
+        _busy = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    _redirectTimer?.cancel();
     _codeController.dispose();
     super.dispose();
   }
@@ -269,16 +311,27 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
         const Icon(Icons.verified_user, color: Color(0xFF16A34A), size: 48),
         const SizedBox(height: 12),
         _buildHeader('Terminal already registered',
-            'This computer is already bound to its branch. Taking you back to the POS terminal…'),
+            'This computer is currently bound to ${id.terminalName}.'),
         _row('Terminal', id.terminalName),
         _row('Type', id.terminalType),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           height: 48,
           child: FilledButton(
-            onPressed: _goBack,
+            onPressed: _busy ? null : _goBack,
             child: const Text('BACK TO POS TERMINAL'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: OutlinedButton(
+            onPressed: _busy ? null : _reRegister,
+            child: _busy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('RE-REGISTER / ENTER NEW CODE'),
           ),
         ),
       ],
@@ -300,8 +353,8 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
             onPressed: () {
               if (widget.onComplete != null) {
                 widget.onComplete!();
-              } else if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop(true);
+              } else {
+                context.go('/terminal');
               }
             },
             child: const Text('CONTINUE TO LOGIN'),

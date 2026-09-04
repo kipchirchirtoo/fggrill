@@ -44,6 +44,18 @@ class TerminalScreen extends ConsumerWidget {
     final focusNode = ref.watch(_terminalFocusNodeProvider);
     final terminalIdentity = ref.watch(posTerminalIdentityProvider).valueOrNull;
 
+    final reg = ref.watch(terminalRegistrationStatusProvider);
+    if (kRequireTerminalRegistration && reg.loaded && !reg.registered) {
+      final authed = ref.watch(authNotifierProvider).valueOrNull != null;
+      if (!authed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            context.go('/terminal-setup');
+          }
+        });
+      }
+    }
+
     return KeyboardListener(
       focusNode: focusNode,
       autofocus: true,
@@ -366,7 +378,7 @@ class _RegistrationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final registered = identity != null;
+    final registered = identity != null && (identity!.status.isEmpty || identity!.status == 'active');
     final Color bg = registered
         ? Colors.white.withValues(alpha: 0.10)
         : const Color(0xFFB45309);

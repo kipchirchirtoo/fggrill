@@ -75,7 +75,7 @@ class PosTerminalAdminRepository {
     return _map(res.data);
   }
 
-  /// Returns {terminal, enrollment_code, expires_at}.
+  /// Moves terminal to another branch without revoking device binding.
   Future<Map<String, dynamic>> transferTerminal(String terminalId, int toBranchId) async {
     final res = await _dio.post('/pos-terminals/$terminalId/transfer', data: {'branch_id': toBranchId});
     return _map(res.data);

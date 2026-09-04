@@ -74,7 +74,12 @@ class PosTerminalService {
     try {
       final raw = await _storage.read(key: _kIdentity);
       if (raw != null && raw.trim().isNotEmpty) {
-        return PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        final id = PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        if (id.status.isNotEmpty && id.status != 'active') {
+          await clear();
+          return null;
+        }
+        return id;
       }
     } catch (_) {
       // fall through to the file backup
@@ -87,6 +92,10 @@ class PosTerminalService {
     try {
       final identity = PosTerminalIdentity.fromJson(
           Map<String, dynamic>.from(backup['identity'] as Map));
+      if (identity.status.isNotEmpty && identity.status != 'active') {
+        await clear();
+        return null;
+      }
       final seed = '${backup['seed'] ?? ''}';
       final fingerprint = '${backup['fingerprint'] ?? ''}';
       await _storage.write(key: _kIdentity, value: jsonEncode(identity.toJson()));
@@ -103,14 +112,10 @@ class PosTerminalService {
   // JSON file in the app-support directory survives updates so a registered
   // terminal is not forced to re-enroll. It holds the (sensitive) device seed,
   // so it lives only on the POS machine.
-  Future<File?> _backupFile() async {
+  static File? backupFileSync() {
     try {
+      if (kIsWeb) return null;
       final sep = Platform.pathSeparator;
-      // Prefer a FIXED, build-independent directory so the identity is shared by
-      // every build/install on this machine (installer, dev run, and updates all
-      // resolve the same file), and survives an app uninstall. getApplicationSupportDirectory
-      // is app-identity-specific and differs between debug/release/installer, so
-      // it is only a last resort.
       String? base;
       if (Platform.isWindows) {
         base = Platform.environment['LOCALAPPDATA'] ??
@@ -119,8 +124,26 @@ class PosTerminalService {
       } else {
         base = Platform.environment['HOME'];
       }
-      base ??= (await getApplicationSupportDirectory()).path;
+      if (base == null || base.trim().isEmpty) return null;
+      final dir = Directory('$base${sep}FamousGateTerminal');
+      return File('${dir.path}${sep}pos_terminal_identity.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<File?> _backupFile() async {
+    try {
+      final file = backupFileSync();
+      if (file != null) {
+        if (!await file.parent.exists()) {
+          await file.parent.create(recursive: true);
+        }
+        return file;
+      }
+      final base = (await getApplicationSupportDirectory()).path;
       if (base.trim().isEmpty) return null;
+      final sep = Platform.pathSeparator;
       final dir = Directory('$base${sep}FamousGateTerminal');
       if (!await dir.exists()) await dir.create(recursive: true);
       return File('${dir.path}${sep}pos_terminal_identity.json');
@@ -154,7 +177,10 @@ class PosTerminalService {
     }
   }
 
-  Future<bool> get isRegistered async => (await loadIdentity()) != null;
+  Future<bool> get isRegistered async {
+    final identity = await loadIdentity();
+    return identity != null && (identity.status.isEmpty || identity.status == 'active');
+  }
 
   /// Stable per-install fingerprint (generated once, then reused).
   Future<String> _fingerprint() async {
@@ -226,7 +252,7 @@ class PosTerminalService {
 
     debugPrint('[PosTerminal] ensureDeviceToken: minting via challenge/sign/token for ${identity.terminalId}');
     try {
-      final keyPair = await _ed25519.newKeyPairFromSeed(base64Decode(seedB64!));
+      final keyPair = await _ed25519.newKeyPairFromSeed(base64Decode(seedB64));
 
       final challengeRes = await _dio.post('/pos-terminals/device/challenge', data: {'terminal_id': identity.terminalId});
       final challenge = '${(challengeRes.data as Map)['data']['challenge']}';
@@ -249,7 +275,66 @@ class PosTerminalService {
       return token;
     } catch (e) {
       debugPrint('[PosTerminal] ensureDeviceToken: mint FAILED — $e');
+      if (e is DioException) {
+        final statusCode = e.response?.statusCode;
+        if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+          debugPrint('[PosTerminal] ensureDeviceToken: terminal rejected by server ($statusCode). Clearing local identity.');
+          await clear();
+        }
+      }
       rethrow;
+    }
+  }
+
+  /// Checks whether this device's registered terminal is still active on the server.
+  /// If revoked or not found, clears local identity and returns null.
+  /// If branch changed, updates local identity and cached token.
+  Future<PosTerminalIdentity?> verifyWithServer() async {
+    final identity = await loadIdentity();
+    if (identity == null) return null;
+
+    try {
+      final res = await _dio.get(
+        '/pos-terminals/device/status',
+        queryParameters: {'terminal_id': identity.terminalId},
+      );
+      final data = Map<String, dynamic>.from((res.data as Map)['data'] as Map);
+      final registered = data['registered'] == true;
+      final status = '${data['status'] ?? ''}';
+
+      if (!registered || status == 'revoked') {
+        debugPrint('[PosTerminal] verifyWithServer: terminal ${identity.terminalId} is revoked/unregistered on server. Clearing local identity.');
+        await clear();
+        return null;
+      }
+
+      // If branch or name changed on server (e.g. transfer branch):
+      final serverBranch = int.tryParse('${data['branch_id'] ?? 0}') ?? identity.branchId;
+      final serverName = '${data['terminal_name'] ?? identity.terminalName}';
+      final serverType = '${data['terminal_type'] ?? identity.terminalType}';
+      if (serverBranch != identity.branchId || serverName != identity.terminalName || serverType != identity.terminalType) {
+        debugPrint('[PosTerminal] verifyWithServer: terminal updated on server (branch $serverBranch). Updating local identity.');
+        final updated = PosTerminalIdentity(
+          terminalId: identity.terminalId,
+          terminalCode: identity.terminalCode,
+          terminalName: serverName,
+          terminalType: serverType,
+          branchId: serverBranch,
+          status: status,
+        );
+        final seedB64 = await _storage.read(key: _kSeed) ?? '';
+        final fp = await _storage.read(key: _kFingerprint) ?? '';
+        await _storage.write(key: _kIdentity, value: jsonEncode(updated.toJson()));
+        await _storage.delete(key: _kDeviceToken);
+        await _storage.delete(key: _kDeviceTokenExp);
+        await _writeBackup(updated, seedB64, fp);
+        return updated;
+      }
+
+      return identity;
+    } catch (e) {
+      debugPrint('[PosTerminal] verifyWithServer check failed (offline or network error) — $e');
+      return identity;
     }
   }
 
@@ -279,8 +364,9 @@ final posTerminalServiceProvider = Provider<PosTerminalService>((ref) {
 });
 
 /// Resolves this device's registered terminal identity (null = not registered).
-final posTerminalIdentityProvider = FutureProvider<PosTerminalIdentity?>((ref) {
-  return ref.read(posTerminalServiceProvider).loadIdentity();
+/// Verifies with the server so revoked or transferred terminals are immediately reflected.
+final posTerminalIdentityProvider = FutureProvider<PosTerminalIdentity?>((ref) async {
+  return ref.read(posTerminalServiceProvider).verifyWithServer();
 });
 
 /// When true, the app blocks all use (PIN + back-office) until this device is
@@ -288,7 +374,7 @@ final posTerminalIdentityProvider = FutureProvider<PosTerminalIdentity?>((ref) {
 /// identity + key live in OS secure storage (user profile, not the install
 /// folder), so it persists across app updates and is never asked again — only a
 /// full uninstall / credential wipe clears it.
-const bool kRequireTerminalRegistration = false;
+const bool kRequireTerminalRegistration = true;
 
 class TerminalRegistrationStatus {
   const TerminalRegistrationStatus({required this.loaded, required this.registered});
@@ -303,25 +389,60 @@ class TerminalRegistrationStatus {
 /// at startup from secure storage; refreshed after a successful registration.
 class TerminalRegistrationStatusNotifier extends StateNotifier<TerminalRegistrationStatus> {
   TerminalRegistrationStatusNotifier(this._ref)
-      : super(const TerminalRegistrationStatus(loaded: false, registered: false));
+      : super(_initialState());
 
   final Ref _ref;
 
+  static TerminalRegistrationStatus _initialState() {
+    try {
+      final file = PosTerminalService.backupFileSync();
+      if (file != null) {
+        if (!file.existsSync()) {
+          return const TerminalRegistrationStatus(loaded: true, registered: false);
+        }
+        final raw = file.readAsStringSync();
+        if (raw.trim().isNotEmpty) {
+          final backup = jsonDecode(raw);
+          if (backup is Map && backup['identity'] is Map) {
+            final identity = PosTerminalIdentity.fromJson(
+                Map<String, dynamic>.from(backup['identity'] as Map));
+            final registered = identity.status.isEmpty || identity.status == 'active';
+            return TerminalRegistrationStatus(loaded: true, registered: registered);
+          }
+        }
+      }
+    } catch (_) {}
+    return const TerminalRegistrationStatus(loaded: false, registered: false);
+  }
+
   Future<void> load() async {
     final service = _ref.read(posTerminalServiceProvider);
-    final identity = await service.loadIdentity();
-    final registered = identity != null;
+    final identity = await service.verifyWithServer();
+    final registered = identity != null && (identity.status.isEmpty || identity.status == 'active');
     if (mounted) {
       state = TerminalRegistrationStatus(loaded: true, registered: registered);
     }
     // Best-effort: mint/refresh the device token so requests carry branch
     // context. Never blocks the gate; safe offline.
     if (registered) {
-      unawaited(service.ensureDeviceToken().catchError((_) => null));
+      try {
+        await service.ensureDeviceToken();
+      } catch (e) {
+        if (e is DioException) {
+          final statusCode = e.response?.statusCode;
+          if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+            await service.clear();
+            _ref.invalidate(posTerminalIdentityProvider);
+            if (mounted) {
+              state = const TerminalRegistrationStatus(loaded: true, registered: false);
+            }
+          }
+        }
+      }
     }
   }
 
-  void refresh() => load();
+  Future<void> refresh() => load();
 }
 
 final terminalRegistrationStatusProvider =
