@@ -1272,7 +1272,8 @@ export const posLogin = async (
       });
       return;
     }
-    const scopeBranchId = terminalCtx?.branchId ?? null;
+    const isGlobalTerminal = terminalCtx?.terminalType === 'global';
+    const scopeBranchId = isGlobalTerminal ? null : (terminalCtx?.branchId ?? null);
 
     // Find user by PIN — direct column first, then metadata->>'pos_pin' fallback
     // (handles rows migrated from the old DB before the pos_pin column existed).
@@ -1313,6 +1314,19 @@ export const posLogin = async (
             .from('users')
             .update({ pos_pin: pin, updated_at: new Date().toISOString() })
             .eq('id', user.id);
+        }
+      }
+
+      // Fallback: If not found in local branch, check if a global-role user matches this PIN
+      if (!user && scopeBranchId) {
+        const { data: globalColMatches } = await supabase
+          .from('users')
+          .select('*')
+          .eq('pos_pin', pin)
+          .or('branch_id.is.null,role.in.(global,super_admin,director,general_manager,auditor)')
+          .limit(1);
+        if (globalColMatches && globalColMatches.length > 0) {
+          user = globalColMatches[0];
         }
       }
     }

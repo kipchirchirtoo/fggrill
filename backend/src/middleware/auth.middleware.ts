@@ -90,7 +90,7 @@ export const authorize = (...roles: string[]) => {
         });
       }
 
-      if (!roles.includes(profile.role)) {
+      if (!roles.includes(profile.role) && !['super_admin', 'director', 'global'].includes(profile.role)) {
         return res.status(403).json({
           success: false,
           message: 'Not authorized for this role'

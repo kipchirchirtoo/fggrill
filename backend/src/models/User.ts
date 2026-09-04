@@ -6,6 +6,7 @@ import crypto from 'crypto';
 export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   GENERAL_MANAGER = 'general_manager',
+  GLOBAL = 'global',
   BRANCH_MANAGER = 'branch_manager',
   DIRECTOR = 'director',
 

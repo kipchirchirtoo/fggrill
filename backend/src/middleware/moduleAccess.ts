@@ -24,6 +24,13 @@ const ROLE_MODULE_ACCESS: Record<string, SourceModule[]> = {
         SourceModule.BRANCH_ACCOUNTING,
         SourceModule.RESTAURANT
     ],
+    [UserRole.GLOBAL]: [
+        SourceModule.INVENTORY,
+        SourceModule.CENTRAL_STORE,
+        SourceModule.BRANCH_STORE,
+        SourceModule.BRANCH_ACCOUNTING,
+        SourceModule.RESTAURANT
+    ],
     [UserRole.GENERAL_MANAGER]: [
         SourceModule.INVENTORY,
         SourceModule.CENTRAL_STORE,

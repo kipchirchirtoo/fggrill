@@ -14,7 +14,8 @@ export const isGlobalRole = (role: string | undefined): boolean => {
         'central_operations_manager',
         'hr_manager',
         'auditor',
-        'director'
+        'director',
+        'global'
     ];
     return globalRoles.includes(role.toLowerCase());
 };

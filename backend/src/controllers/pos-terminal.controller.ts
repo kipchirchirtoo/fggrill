@@ -25,6 +25,7 @@ const MAX_ENROLLMENT_ATTEMPTS = 8;
 const KNOWN_TERMINAL_TYPES = new Set([
   'cashier', 'restaurant', 'main_bar', 'executive_bar', 'non_consumables',
   'choma_zone', 'spa', 'sports_bar', 'reception', 'pool', 'carwash',
+  'global',
 ]);
 
 const jwtSecret = (): string =>

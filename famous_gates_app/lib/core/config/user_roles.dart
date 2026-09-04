@@ -5,6 +5,7 @@ enum UserRole {
   // Admin roles
   superAdmin('super_admin'),
   director('director'),
+  global('global'),
 
   // Legacy roles - to be migrated
   generalManager('general_manager'),
@@ -102,6 +103,8 @@ enum UserRole {
     switch (this) {
       case UserRole.superAdmin:
         return 'Super Admin';
+      case UserRole.global:
+        return 'Global';
       case UserRole.generalManager:
         return 'General Manager';
       case UserRole.branchManager:
@@ -231,6 +234,7 @@ enum UserRole {
   static Set<String> get adminRoles => {
         superAdmin.value,
         generalManager.value,
+        global.value,
       };
 
   static Set<String> get cashierRoles => {
@@ -333,6 +337,7 @@ enum UserRole {
     switch (this) {
       case UserRole.superAdmin:
       case UserRole.generalManager:
+      case UserRole.global:
         return '/admin';
       case UserRole.director:
         return '/director';

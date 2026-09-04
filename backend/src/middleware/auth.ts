@@ -407,7 +407,7 @@ export const authorize = (roles: UserRole[]) => {
     
     // Global override: Super Admin and Director have universal access (except kitchen shifts module)
     const isKitchenShift = req.originalUrl && req.originalUrl.includes('/kitchen/shifts');
-    if ((userRole === 'super_admin' || userRole === 'director') && !isKitchenShift) {
+    if ((userRole === 'super_admin' || userRole === 'director' || userRole === 'global') && !isKitchenShift) {
       return next();
     }
 

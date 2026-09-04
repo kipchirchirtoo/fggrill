@@ -8,6 +8,7 @@ import '../../../pos_terminal/data/pos_terminal_admin_repository.dart';
 const _terminalTypes = <String>[
   'cashier', 'restaurant', 'main_bar', 'executive_bar', 'non_consumables',
   'choma_zone', 'spa', 'sports_bar', 'reception', 'pool', 'carwash',
+  'global',
 ];
 
 String _apiError(Object e) {
@@ -108,7 +109,6 @@ class PosTerminalsSection extends ConsumerWidget {
     final status = '${t['status'] ?? ''}';
     final branchId = int.tryParse('${t['branchId'] ?? t['branch_id'] ?? 0}') ?? 0;
     final branchName = branchNames[branchId] ?? 'Branch $branchId';
-    final id = '${t['id']}';
 
     return Card(
       elevation: 0,

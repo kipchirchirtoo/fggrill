@@ -76,6 +76,9 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                   value: 'super_admin',
                   child: Text('Super Admin', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
+                  value: 'global',
+                  child: Text('Global', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
                   value: 'general_manager',
                   child:
                       Text('General Manager', overflow: TextOverflow.ellipsis)),
@@ -208,6 +211,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
     Map<String, dynamic>? selectedStaffProfile = initialStaffProfile;
     final roles = [
       'super_admin',
+      'global',
       'general_manager',
       'director',
       'central_storekeeper',
@@ -1089,6 +1093,8 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
     switch (role.toLowerCase()) {
       case 'super_admin':
         return const Color(0xFF7c3aed);
+      case 'global':
+        return const Color(0xFF0284c7);
       case 'general_manager':
         return const Color(0xFF2563eb);
       case 'branch_manager':

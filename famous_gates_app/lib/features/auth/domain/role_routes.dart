@@ -3,6 +3,7 @@ import 'models.dart';
 String getRoleRoute(String role, {String contextType = 'branch'}) {
   switch (role) {
     case 'super_admin':
+    case 'global':
       return '/superadmin';
     case 'general_manager':
       return '/gm';

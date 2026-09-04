@@ -34,6 +34,7 @@ const SHIFT_MANAGER_ROLES = new Set([
   'branch_manager',
   'branch_accountant',
   'accountant',
+  'global',
 ]);
 
 type OutletType =

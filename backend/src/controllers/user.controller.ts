@@ -8,7 +8,7 @@ import { applyBranchFilter } from '../utils/branchIsolation';
 import { requiresPosPinForLogin } from '../utils/posPinRules';
 import { isBranchScopedPinsEnabled } from '../utils/posTerminalContext';
 
-const GLOBAL_USER_ADMIN_ROLES = new Set(['super_admin', 'general_manager']);
+const GLOBAL_USER_ADMIN_ROLES = new Set(['super_admin', 'general_manager', 'global']);
 const BRANCH_MANAGER_BLOCKED_ROLES = new Set([
   'super_admin',
   'general_manager',
@@ -16,7 +16,8 @@ const BRANCH_MANAGER_BLOCKED_ROLES = new Set([
   'auditor',
   'hr_manager',
   'central_storekeeper',
-  'finance_manager'
+  'finance_manager',
+  'global'
 ]);
 
 const roleForRequest = (req: Request): string =>

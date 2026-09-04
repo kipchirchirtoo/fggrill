@@ -88,8 +88,9 @@ enum Permission {
 class RolePermissions {
   static Set<Permission> getPermissionsForRole(UserRole role) {
     switch (role) {
-      // Super Admin - all permissions
+      // Super Admin & Global - all permissions
       case UserRole.superAdmin:
+      case UserRole.global:
         return Permission.values.toSet();
 
       // Director - most admin permissions
