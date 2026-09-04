@@ -417,12 +417,14 @@ class BranchStorekeeperRepository {
 
   Future<List<Map<String, dynamic>>> outletStock({
     String? search,
-    int limit = 250,
+    String? outletId,
+    int limit = 2000,
   }) async {
     final response = await _dio.get(
       '/inventory-foundation/outlet-stock',
       queryParameters: await _branchQuery({
         if (search != null && search.isNotEmpty) 'search': search,
+        if (outletId != null && outletId.isNotEmpty) 'outlet_id': outletId,
         'limit': limit,
       }),
       options: await _authOptions,

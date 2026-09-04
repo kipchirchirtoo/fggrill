@@ -38,7 +38,7 @@ export const getOutletStock = asyncHandler(async (req, res) => {
     branchId: branchIdFor(req),
     outletId: req.query.outlet_id as string || req.query.outletId as string || null,
     search: req.query.search as string || null,
-    limit: Number(req.query.limit || 200)
+    limit: Number(req.query.limit || 1000)
   });
   res.json({ success: true, data });
 });

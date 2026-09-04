@@ -587,7 +587,7 @@ export async function listOutletStock(filters: {
     params.push(`%${filters.search}%`);
     where.push(`(i.name ILIKE $${params.length} OR i.sku ILIKE $${params.length} OR o.name ILIKE $${params.length})`);
   }
-  params.push(Math.min(Math.max(filters.limit || 200, 1), 500));
+  params.push(Math.min(Math.max(filters.limit || 1000, 1), 5000));
 
   const result = await db.query(
     `

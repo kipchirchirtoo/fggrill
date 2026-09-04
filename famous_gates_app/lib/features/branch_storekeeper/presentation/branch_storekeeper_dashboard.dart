@@ -16006,7 +16006,7 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
       final results = await Future.wait([
         repo.posOutlets(),
-        repo.outletStock(search: _search),
+        repo.outletStock(search: _search, limit: 5000),
       ]);
       final outlets = List<Map<String, dynamic>>.from(results[0] as List)
           .where((row) {
