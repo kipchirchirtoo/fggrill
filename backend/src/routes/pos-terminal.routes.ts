@@ -49,6 +49,7 @@ router.get('/:id', protect, authorize(VIEW_ROLES), getTerminal);
 router.post('/:id/enrollment-code', protect, authorize(ADMIN_ROLES), regenerateEnrollmentCode);
 router.patch('/:id', protect, authorize(ADMIN_ROLES), updateTerminal);
 router.post('/:id/revoke', protect, authorize(ADMIN_ROLES), revokeTerminal);
+router.delete('/:id', protect, authorize(ADMIN_ROLES), revokeTerminal);
 router.post('/:id/transfer', protect, authorize(ADMIN_ROLES), transferTerminal);
 
 export default router;

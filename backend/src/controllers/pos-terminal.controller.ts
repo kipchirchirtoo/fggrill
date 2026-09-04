@@ -196,7 +196,11 @@ export const listTerminals = async (req: Request, res: Response, next: NextFunct
     const branchId = branchIdNum(req.query.branch_id ?? req.query.branchId);
     if (branchId) query = query.eq('branch_id', branchId);
     const status = String(req.query.status || '').trim().toLowerCase();
-    if (status) query = query.eq('status', status);
+    if (status) {
+      query = query.eq('status', status);
+    } else {
+      query = query.neq('status', 'revoked');
+    }
 
     const { data, error } = await query;
     if (error) throw new AppError(error.message, 500);
@@ -258,24 +262,14 @@ export const updateTerminal = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// POST /pos-terminals/:id/revoke — kill the device binding (theft / decommission).
+// POST /pos-terminals/:id/revoke — delete the terminal and unbind the device completely.
 export const revokeTerminal = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('pos_terminals')
-      .update({
-        status: 'revoked',
-        device_public_key: null,
-        device_fingerprint: null,
-        device_registered_at: null,
-      })
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (error) throw new AppError(error.message, 500);
     await supabase.from('pos_terminal_enrollments').delete().eq('terminal_id', req.params.id);
-    logger.warn('POS terminal revoked', { terminalId: req.params.id, by: userId(req) });
-    res.json({ success: true, data: normalizeTerminal(data), message: 'Terminal revoked; device can no longer authenticate.' });
+    const { error } = await supabase.from('pos_terminals').delete().eq('id', req.params.id);
+    if (error) throw new AppError(error.message, 500);
+    logger.warn('POS terminal revoked and deleted', { terminalId: req.params.id, by: userId(req) });
+    res.json({ success: true, message: 'Terminal revoked and deleted; device is unregistered.' });
   } catch (error) {
     next(error);
   }

@@ -152,7 +152,16 @@ class PosTerminalsSection extends ConsumerWidget {
                 else if (status == 'suspended')
                   const PopupMenuItem(value: 'activate', child: Text('Activate')),
                 const PopupMenuItem(value: 'transfer', child: Text('Transfer to branch…')),
-                const PopupMenuItem(value: 'revoke', child: Text('Revoke device', style: TextStyle(color: Color(0xFFDC2626)))),
+                const PopupMenuItem(
+                  value: 'revoke',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
+                      SizedBox(width: 8),
+                      Text('Revoke & Delete', style: TextStyle(color: Color(0xFFDC2626))),
+                    ],
+                  ),
+                ),
               ],
               child: const Icon(Icons.more_vert),
             ),
@@ -201,8 +210,12 @@ class PosTerminalsSection extends ConsumerWidget {
           if (context.mounted) await _showTransferDialog(context, ref, t);
           return; // dialog handles its own refresh
         case 'revoke':
-          final ok = await _confirm(context, 'Revoke device?',
-              'This terminal can no longer authenticate. The computer must be re-registered to use it again.');
+          final ok = await _confirm(
+            context,
+            'Revoke & Delete Terminal?',
+            'This terminal will be permanently deleted and removed from this list. The computer bound to it will be unregistered immediately.',
+            confirmText: 'Revoke & Delete',
+          );
           if (ok == true) {
             await repo.revokeTerminal(id);
             final localIdentity = await ref.read(posTerminalServiceProvider).loadIdentity();
@@ -211,7 +224,8 @@ class PosTerminalsSection extends ConsumerWidget {
               ref.invalidate(posTerminalIdentityProvider);
               ref.read(terminalRegistrationStatusProvider.notifier).refresh();
             }
-            messenger.showSnackBar(const SnackBar(content: Text('Terminal revoked')));
+            ref.invalidate(posTerminalsListProvider);
+            messenger.showSnackBar(const SnackBar(content: Text('Terminal deleted and device unregistered')));
           } else {
             return;
           }
@@ -472,7 +486,7 @@ class PosTerminalsSection extends ConsumerWidget {
     );
   }
 
-  Future<bool?> _confirm(BuildContext context, String title, String message) {
+  Future<bool?> _confirm(BuildContext context, String title, String message, {String confirmText = 'Revoke'}) {
     return showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
@@ -483,7 +497,7 @@ class PosTerminalsSection extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
             onPressed: () => Navigator.pop(dctx, true),
-            child: const Text('Revoke'),
+            child: Text(confirmText),
           ),
         ],
       ),
