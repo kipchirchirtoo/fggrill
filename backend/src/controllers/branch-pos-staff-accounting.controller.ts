@@ -13,7 +13,12 @@ import { isGlobalRole } from '../utils/branchIsolation';
  * rather than a new column, since no accountant sign-off state exists yet.
  */
 
-const OUTSTANDING_CREDIT_STATUSES = new Set(['pending', 'accountant_confirmed', 'auditor_confirmed']);
+// Every unpaid staff_credit_bills status. 'approved' and 'open' were missing,
+// which under-counted outstanding staff credit here just like it did on the
+// accountant's Record Paid Bill list (POS showed the full balance, this didn't).
+const OUTSTANDING_CREDIT_STATUSES = new Set([
+  'pending', 'approved', 'active', 'open', 'accountant_confirmed', 'auditor_confirmed',
+]);
 
 function parseBranchId(value: unknown): number | null {
   const parsed = Number(value);

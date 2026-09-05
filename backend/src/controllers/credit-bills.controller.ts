@@ -158,7 +158,13 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         if (staff_id) staffQuery = staffQuery.eq('staff_id', staff_id);
         if (status && status !== 'all') {
             if (status === 'outstanding') {
-                staffQuery = staffQuery.in('status', ['pending', 'accountant_confirmed', 'auditor_confirmed']);
+                // Every unpaid status, not just pending/confirmed. Omitting
+                // 'approved' and 'open' silently dropped the bulk of a staff
+                // member's outstanding credit — making the accountant's "Record
+                // Paid Bill" total (e.g. KES 800) diverge from the POS "My Credit
+                // Bills" figure (e.g. KES 6400) for the same staff. Reuse the
+                // canonical openCreditStatuses so this can't drift again.
+                staffQuery = staffQuery.in('status', openCreditStatuses);
             } else {
                 staffQuery = staffQuery.eq('status', status);
             }
