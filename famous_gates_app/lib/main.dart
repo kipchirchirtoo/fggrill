@@ -40,6 +40,21 @@ Future<void> main() async {
   // _AppWindowCloseListener.
   final container = ProviderContainer();
 
+  // Reveals the native window only once Flutter has actually painted a
+  // frame — called from the post-first-frame hook below, with a timed
+  // fallback in case that hook is ever skipped (e.g. a crash during the very
+  // first build). Idempotent: window_manager's show()/focus()/setFullScreen
+  // are safe to call more than once, but the guard keeps this from firing
+  // via both the callback and the fallback.
+  var windowShown = false;
+  Future<void> showWindowOnce() async {
+    if (windowShown || !_isDesktop) return;
+    windowShown = true;
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setFullScreen(true);
+  }
+
   // Desktop: start from a stable normal window, then enter full screen.
   // On Windows, creating the window directly in fullScreen mode can leave the
   // window with a bad restore target; pressing Esc then appears to minimize or
@@ -55,11 +70,23 @@ Future<void> main() async {
         fullScreen: true,
       ),
       () async {
-        await windowManager.show();
-        await windowManager.focus();
-        await windowManager.setFullScreen(true);
+        // Deliberately NOT calling show()/focus()/setFullScreen() here.
+        // window_manager makes the native window visible the moment this
+        // callback runs — which is BEFORE runApp() below, i.e. before
+        // Flutter's engine has painted anything at all. Whatever a brand
+        // new, unpainted D3D11/ANGLE surface happens to clear to (commonly
+        // white) is what the user sees for however long Dart bootstrap
+        // takes — on a slow machine, or if any startup step stalls, that is
+        // a real, visibly "broken" white screen with no image and no navy
+        // background, because neither has been painted yet. Showing is
+        // deferred to showWindowOnce(), invoked after the first real frame.
       },
     );
+    // Safety net: if the post-frame callback below never fires, the window
+    // must not stay invisible forever — that would look even more like the
+    // app failed to launch than a slow white screen did. Show it regardless
+    // after a short grace period.
+    unawaited(Future.delayed(const Duration(seconds: 5), showWindowOnce));
     // Intercept the OS close button so background connections (Supabase
     // Realtime's WebSocket + heartbeat, opened the moment any of the
     // cashier/kitchen/POS/bar/restaurant screens watch live data; PowerSync,
@@ -187,6 +214,15 @@ Future<void> main() async {
       child: const FamousGatesApp(),
     ),
   );
+
+  // Now that runApp has scheduled the first frame, reveal the window once
+  // that frame has actually been painted — see showWindowOnce() above for
+  // why this must not happen any earlier.
+  if (_isDesktop) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(showWindowOnce());
+    });
+  }
 }
 
 /// Runs cleanup for background connections that would otherwise keep the

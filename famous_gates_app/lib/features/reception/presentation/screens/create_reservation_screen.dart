@@ -23,6 +23,10 @@ class _CreateReservationScreenState
 
   // Guest selection
   Guest? _selectedGuest;
+  final _guestSearchController = TextEditingController();
+  List<Guest> _guestSearchResults = const [];
+  bool _searchingGuests = false;
+  bool _guestSearched = false;
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -75,6 +79,7 @@ class _CreateReservationScreenState
 
   @override
   void dispose() {
+    _guestSearchController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
@@ -84,6 +89,45 @@ class _CreateReservationScreenState
     _specialRequestsController.dispose();
     _internalNotesController.dispose();
     super.dispose();
+  }
+
+  /// Looks up an existing guest by name/phone/email/ID before falling back
+  /// to the "New Guest" fields below. Previously this step had no search at
+  /// all, so every reservation made through this wizard unconditionally
+  /// created a brand-new guest record — even for someone already in the
+  /// system — silently piling up duplicate guest profiles.
+  Future<void> _searchGuests() async {
+    final query = _guestSearchController.text.trim();
+    if (query.isEmpty) return;
+    setState(() => _searchingGuests = true);
+    try {
+      final results = await _repository.getGuests(search: query);
+      if (!mounted) return;
+      setState(() {
+        _guestSearchResults = results;
+        _guestSearched = true;
+        _searchingGuests = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _searchingGuests = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Guest search failed: $e')),
+      );
+    }
+  }
+
+  void _selectExistingGuest(Guest guest) {
+    setState(() {
+      _selectedGuest = guest;
+      _guestSearchResults = const [];
+      _guestSearched = false;
+      _guestSearchController.clear();
+    });
+  }
+
+  void _clearSelectedGuest() {
+    setState(() => _selectedGuest = null);
   }
 
   Future<void> _searchAvailableRooms() async {
@@ -285,11 +329,109 @@ class _CreateReservationScreenState
   }
 
   Widget _buildGuestStep() {
+    if (_selectedGuest != null) {
+      final guest = _selectedGuest!;
+      return Card(
+        color: AppColors.kPrimary.withValues(alpha: 0.06),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const Icon(Icons.person, color: AppColors.kPrimary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      guest.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(guest.phone ?? guest.email ?? '—',
+                        style: TextStyle(color: Colors.grey.shade700)),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _clearSelectedGuest,
+                child: const Text('Change'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Guest search/select would go here
-        const Text('New Guest', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text('Find Existing Guest',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _guestSearchController,
+                decoration: const InputDecoration(
+                  hintText: 'Search by name, phone, email or ID number',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _searchGuests(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _searchingGuests ? null : _searchGuests,
+              child: _searchingGuests
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Search'),
+            ),
+          ],
+        ),
+        if (_guestSearched) ...[
+          const SizedBox(height: 8),
+          if (_guestSearchResults.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('No matching guest found — create a new one below.',
+                  style: TextStyle(color: Colors.grey.shade600)),
+            )
+          else
+            Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _guestSearchResults.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final g = _guestSearchResults[i];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(g.name),
+                    subtitle: Text(g.phone ?? g.email ?? '—'),
+                    onTap: () => _selectExistingGuest(g),
+                  );
+                },
+              ),
+            ),
+        ],
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 8),
+        const Text('Or Create New Guest',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         TextFormField(
           controller: _firstNameController,
@@ -297,7 +439,9 @@ class _CreateReservationScreenState
             labelText: 'First Name *',
             border: OutlineInputBorder(),
           ),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          validator: (v) => _selectedGuest == null && (v == null || v.trim().isEmpty)
+              ? 'Required'
+              : null,
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -306,7 +450,9 @@ class _CreateReservationScreenState
             labelText: 'Last Name *',
             border: OutlineInputBorder(),
           ),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          validator: (v) => _selectedGuest == null && (v == null || v.trim().isEmpty)
+              ? 'Required'
+              : null,
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -316,7 +462,9 @@ class _CreateReservationScreenState
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.phone,
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          validator: (v) => _selectedGuest == null && (v == null || v.trim().isEmpty)
+              ? 'Required'
+              : null,
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -346,7 +494,9 @@ class _CreateReservationScreenState
             labelText: 'ID Number *',
             border: OutlineInputBorder(),
           ),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          validator: (v) => _selectedGuest == null && (v == null || v.trim().isEmpty)
+              ? 'Required'
+              : null,
         ),
         const SizedBox(height: 12),
         TextFormField(

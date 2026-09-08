@@ -382,21 +382,24 @@ final _navGroups = [
     label: 'Command & Overview',
     items: [
       _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
-      _NavItem(BranchAccountantSection.masterBillDisputes, 'Master Bill Disputes', Icons.gavel),
+      _NavItem(BranchAccountantSection.masterBillDisputes,
+          'Master Bill Disputes', Icons.gavel),
       _NavItem(BranchAccountantSection.search, 'Branch Search', Icons.search),
-      _NavItem(BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
-      _NavItem(BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
+      _NavItem(BranchAccountantSection.analytics, 'Branch Analytics',
+          Icons.analytics),
+      _NavItem(
+          BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
     ],
   ),
   _NavGroup(
     label: 'Cashier & Shift Operations',
     items: [
-      _NavItem(
-          BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
-      _NavItem(
-          BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
-      _NavItem(BranchAccountantSection.staffPosAccounting, 'Staff POS Accounting',
-          Icons.receipt_long),
+      _NavItem(BranchAccountantSection.shiftOpenings, 'Shift Openings',
+          Icons.lock_open),
+      _NavItem(BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks',
+          Icons.book),
+      _NavItem(BranchAccountantSection.staffPosAccounting,
+          'Staff POS Accounting', Icons.receipt_long),
       _NavItem(BranchAccountantSection.staffAccounts, 'Staff Accounts',
           Icons.account_balance_wallet),
       _NavItem(
@@ -405,10 +408,10 @@ final _navGroups = [
           Icons.fact_check_outlined),
       _NavItem(BranchAccountantSection.exchangeHistory, 'Item Exchanges',
           Icons.swap_horiz),
-      _NavItem(
-          BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
-      _NavItem(
-          BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
+      _NavItem(BranchAccountantSection.discrepancies, 'Discrepancies',
+          Icons.warning),
+      _NavItem(BranchAccountantSection.waiterAudit, 'Waiter Audit',
+          Icons.restaurant),
       _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
     ],
   ),
@@ -421,8 +424,8 @@ final _navGroups = [
           Icons.description),
       _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
           Icons.request_quote),
-      _NavItem(
-          BranchAccountantSection.eventOrders, 'Event Orders', Icons.event_note),
+      _NavItem(BranchAccountantSection.eventOrders, 'Event Orders',
+          Icons.event_note),
       _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
           Icons.payments),
       _NavItem(
@@ -430,20 +433,21 @@ final _navGroups = [
         'Corporate Accounts',
         PhosphorIcons.buildings(PhosphorIconsStyle.regular),
       ),
-      _NavItem(
-          BranchAccountantSection.financialClose, 'Daily Close', Icons.lock_clock),
+      _NavItem(BranchAccountantSection.financialClose, 'Daily Close',
+          Icons.lock_clock),
     ],
   ),
   _NavGroup(
     label: 'Stocktake & Inventory',
     items: [
-      _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
+      _NavItem(
+          BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
       _NavItem(BranchAccountantSection.inventoryJournals, 'Inventory Journals',
           Icons.account_tree),
       _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
           Icons.account_balance_wallet),
-      _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
-          Icons.liquor),
+      _NavItem(BranchAccountantSection.barStocktakeReview,
+          'Bar Stocktake Review', Icons.liquor),
       _NavItem(BranchAccountantSection.storeStocktakeReview,
           'Store Stocktake Review', Icons.warehouse),
       _NavItem(BranchAccountantSection.kitchenStocktakeReview,
@@ -459,8 +463,8 @@ final _navGroups = [
     items: [
       _NavItem(BranchAccountantSection.kitchenVariance, 'Kitchen Variance',
           Icons.soup_kitchen),
-      _NavItem(BranchAccountantSection.kitchenShiftConfig, 'Kitchen Shift Config',
-          Icons.settings_suggest),
+      _NavItem(BranchAccountantSection.kitchenShiftConfig,
+          'Kitchen Shift Config', Icons.settings_suggest),
       _NavItem(BranchAccountantSection.dailyControls, 'Daily Controls',
           Icons.analytics_outlined),
       _NavItem(BranchAccountantSection.foodControlStandards,
@@ -470,18 +474,20 @@ final _navGroups = [
   _NavGroup(
     label: 'Menus, Outlets & Staff',
     items: [
-      _NavItem(BranchAccountantSection.staffManagement, 'Staff & User Management',
-          Icons.people),
-      _NavItem(BranchAccountantSection.branchBarMenu, 'Bar Menu', Icons.local_bar),
+      _NavItem(BranchAccountantSection.staffManagement,
+          'Staff & User Management', Icons.people),
+      _NavItem(
+          BranchAccountantSection.branchBarMenu, 'Bar Menu', Icons.local_bar),
       _NavItem(BranchAccountantSection.branchRestaurantMenu, 'Restaurant Menu',
           Icons.restaurant_menu),
-      _NavItem(BranchAccountantSection.posOutletItems,
-          'Non-Consumables', Icons.inventory_2_outlined),
-      _NavItem(BranchAccountantSection.menuPricingCosting, 'Menu Pricing & Costing',
-          Icons.price_check),
-      _NavItem(BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
-      _NavItem(BranchAccountantSection.restaurantStockLink, 'Restaurant Stock Link',
-          Icons.restaurant_outlined),
+      _NavItem(BranchAccountantSection.posOutletItems, 'Non-Consumables',
+          Icons.inventory_2_outlined),
+      _NavItem(BranchAccountantSection.menuPricingCosting,
+          'Menu Pricing & Costing', Icons.price_check),
+      _NavItem(
+          BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
+      _NavItem(BranchAccountantSection.restaurantStockLink,
+          'Restaurant Stock Link', Icons.restaurant_outlined),
     ],
   ),
 ];
@@ -599,7 +605,8 @@ class _BranchAccountantSideNav extends ConsumerWidget {
                 for (int gIdx = 0; gIdx < _navGroups.length; gIdx++) ...[
                   if (!isCollapsed)
                     Padding(
-                      padding: EdgeInsets.fromLTRB(16, gIdx == 0 ? 4 : 14, 16, 4),
+                      padding:
+                          EdgeInsets.fromLTRB(16, gIdx == 0 ? 4 : 14, 16, 4),
                       child: Text(
                         _navGroups[gIdx].label.toUpperCase(),
                         style: TextStyle(
@@ -612,14 +619,15 @@ class _BranchAccountantSideNav extends ConsumerWidget {
                     )
                   else if (gIdx > 0)
                     const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Divider(height: 1),
                     ),
                   ..._navGroups[gIdx].items.map((item) {
                     final active = item.section == current;
                     final tile = Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 2),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
                         onTap: () => onChanged(item.section),
@@ -1230,11 +1238,18 @@ class _CashierClearanceSectionState
             subtitle: 'Review, approve, and flag cashier shift closures.',
             actions: [
               _DateField(
-                  value: _date, onChanged: (v) => setState(() => _date = v)),
+                  value: _date,
+                  onChanged: (v) => setState(() {
+                        _date = v;
+                        _future = _load();
+                      })),
               _Dropdown(
                 value: _status,
                 values: const ['all', 'open', 'pending', 'approved', 'flagged'],
-                onChanged: (v) => setState(() => _status = v),
+                onChanged: (v) => setState(() {
+                  _status = v;
+                  _future = _load();
+                }),
               ),
               _RefreshButton(onPressed: _refresh),
             ],
@@ -1566,9 +1581,17 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                 'Mirrors the web branch-sales analytics, filters, and PDF/CSV export actions.',
             actions: [
               _DateField(
-                  value: _start, onChanged: (v) => setState(() => _start = v)),
+                  value: _start,
+                  onChanged: (v) => setState(() {
+                        _start = v;
+                        _future = _load();
+                      })),
               _DateField(
-                  value: _end, onChanged: (v) => setState(() => _end = v)),
+                  value: _end,
+                  onChanged: (v) => setState(() {
+                        _end = v;
+                        _future = _load();
+                      })),
               OutlinedButton.icon(
                 onPressed: () => setState(() => _showFilters = !_showFilters),
                 icon: const Icon(Icons.filter_alt),
@@ -3013,8 +3036,17 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
                 'System vs verified revenue, expense categories, COGS, and net margin.',
             actions: [
               _DateField(
-                  value: _from, onChanged: (v) => setState(() => _from = v)),
-              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+                  value: _from,
+                  onChanged: (v) => setState(() {
+                        _from = v;
+                        _future = _load();
+                      })),
+              _DateField(
+                  value: _to,
+                  onChanged: (v) => setState(() {
+                        _to = v;
+                        _future = _load();
+                      })),
               _RefreshButton(onPressed: _refresh),
               OutlinedButton.icon(
                 onPressed: _exporting ? null : _exportBranded,
@@ -6753,7 +6785,9 @@ List<Map<String, dynamic>> _shiftPaymentRows(Map<String, dynamic> shift) {
 
 List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
   final rows = _list(shift['revenue_breakdown'])
-      .where((row) => _num(row['amount']) > 0 && '${row['label']}'.trim().toLowerCase() != 'other')
+      .where((row) =>
+          _num(row['amount']) > 0 &&
+          '${row['label']}'.trim().toLowerCase() != 'other')
       .toList();
   if (rows.isNotEmpty) return rows;
 
@@ -6761,7 +6795,9 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
   if (lines.isNotEmpty) {
     final Map<String, Map<String, dynamic>> aggregated = {};
     for (final line in lines) {
-      final source = '${line['source_table'] ?? line['source'] ?? ''}'.toLowerCase().trim();
+      final source = '${line['source_table'] ?? line['source'] ?? ''}'
+          .toLowerCase()
+          .trim();
       final cashierName = '${shift['cashier_name'] ?? ''}'.toUpperCase();
       String label = cashierName.contains('MAIN BAR')
           ? 'Main Bar'
@@ -6773,7 +6809,11 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
       if (source.contains('restaurant')) {
         label = 'Restaurant';
       } else if (source.contains('bar')) {
-        label = cashierName.contains('MAIN') ? 'Main Bar' : cashierName.contains('EXEC') ? 'Executive Bar' : 'Bar';
+        label = cashierName.contains('MAIN')
+            ? 'Main Bar'
+            : cashierName.contains('EXEC')
+                ? 'Executive Bar'
+                : 'Bar';
       } else if (source.contains('room')) {
         label = 'Rooms';
       } else if (source.contains('credit')) {
@@ -6795,11 +6835,25 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
   final cashierName = '${shift['cashier_name'] ?? ''}'.toUpperCase();
   final isBar = cashierName.contains('BAR');
   final isRest = cashierName.contains('RESTAURANT');
-  final barLabel = cashierName.contains('MAIN') ? 'Main Bar' : cashierName.contains('EXEC') ? 'Executive Bar' : 'Bar';
+  final barLabel = cashierName.contains('MAIN')
+      ? 'Main Bar'
+      : cashierName.contains('EXEC')
+          ? 'Executive Bar'
+          : 'Bar';
 
   return [
-    {'label': 'Restaurant', 'amount': _restaurantRevenue(shift) > 0 ? _restaurantRevenue(shift) : (isRest ? _otherRevenue(shift) : 0.0)},
-    {'label': barLabel, 'amount': _barRevenue(shift) > 0 ? _barRevenue(shift) : (isBar ? _otherRevenue(shift) : 0.0)},
+    {
+      'label': 'Restaurant',
+      'amount': _restaurantRevenue(shift) > 0
+          ? _restaurantRevenue(shift)
+          : (isRest ? _otherRevenue(shift) : 0.0)
+    },
+    {
+      'label': barLabel,
+      'amount': _barRevenue(shift) > 0
+          ? _barRevenue(shift)
+          : (isBar ? _otherRevenue(shift) : 0.0)
+    },
     {'label': 'Rooms', 'amount': _roomRevenue(shift)},
   ].where((row) => _num(row['amount']) > 0).toList();
 }
@@ -8017,8 +8071,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         children: [
                           // ── Tappable Total Sales ──────────────────────────
                           GestureDetector(
-                            onTap: () =>
-                                setSalesState(() => salesExpanded = !salesExpanded),
+                            onTap: () => setSalesState(
+                                () => salesExpanded = !salesExpanded),
                             child: Card(
                               elevation: 0,
                               margin: EdgeInsets.zero,
@@ -8039,7 +8093,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                       width: 42,
                                       height: 42,
                                       decoration: BoxDecoration(
-                                        color: Colors.green.withValues(alpha: 0.1),
+                                        color:
+                                            Colors.green.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: const Icon(Icons.point_of_sale,
@@ -8069,7 +8124,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                           ]),
                                           const SizedBox(height: 2),
                                           Text(
-                                            _money(_num(summary['total_sales'])),
+                                            _money(
+                                                _num(summary['total_sales'])),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -8155,8 +8211,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                           fontSize: 12))
                                 else
                                   ...revenue.map((r) {
-                                    final label = _text(r, ['label', 'outlet',
-                                        'source', 'name']);
+                                    final label = _text(r,
+                                        ['label', 'outlet', 'source', 'name']);
                                     final amt = _num(r['amount']);
                                     return Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -8214,13 +8270,17 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                           fontSize: 12))
                                 else
                                   ...payments.map((p) {
-                                    final method = _text(p, ['method', 'name',
-                                        'label', 'payment_method']);
+                                    final method = _text(p, [
+                                      'method',
+                                      'name',
+                                      'label',
+                                      'payment_method'
+                                    ]);
                                     final amt = _num(p['amount']);
-                                    final count = _num(p['count'] ?? p['transaction_count']);
+                                    final count = _num(
+                                        p['count'] ?? p['transaction_count']);
                                     final icon = () {
-                                      final m =
-                                          method.trim().toLowerCase();
+                                      final m = method.trim().toLowerCase();
                                       if (m.contains('cash'))
                                         return Icons.money;
                                       if (m.contains('mpesa') ||
@@ -8231,8 +8291,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                       return Icons.payment;
                                     }();
                                     final color = () {
-                                      final m =
-                                          method.trim().toLowerCase();
+                                      final m = method.trim().toLowerCase();
                                       if (m.contains('cash'))
                                         return Colors.green.shade600;
                                       if (m.contains('mpesa') ||
@@ -8255,8 +8314,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                             children: [
                                               Text(
                                                 method.isNotEmpty
-                                                    ? method
-                                                        .toUpperCase()
+                                                    ? method.toUpperCase()
                                                     : 'Unknown',
                                                 style: const TextStyle(
                                                     fontSize: 12,
@@ -8428,8 +8486,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         children: [
                           for (final e in expenses)
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 5),
+                              padding: const EdgeInsets.symmetric(vertical: 5),
                               child: Row(
                                 children: [
                                   const Icon(Icons.receipt_long_outlined,
@@ -8445,8 +8502,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                           _text(e, ['description', 'category'])
                                                   .isEmpty
                                               ? 'Expense'
-                                              : _text(
-                                                  e, ['description', 'category']),
+                                              : _text(e,
+                                                  ['description', 'category']),
                                           style: const TextStyle(
                                               fontWeight: FontWeight.w600),
                                         ),
@@ -8458,7 +8515,9 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                               _text(e, ['category']),
                                               if (_text(e, ['paid_to_name'])
                                                   .isNotEmpty)
-                                                'to ${_text(e, ['paid_to_name'])}',
+                                                'to ${_text(e, [
+                                                      'paid_to_name'
+                                                    ])}',
                                             ]
                                                 .where((v) => v.isNotEmpty)
                                                 .join(' · '),
@@ -9127,8 +9186,9 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
         final q = _historySearch.toLowerCase();
         final matchName = item.itemName.toLowerCase().contains(q);
         final matchOrder = (item.orderNumber ?? '').toLowerCase().contains(q);
-        final matchServer =
-            (item.requestedByName ?? item.requestedBy ?? '').toLowerCase().contains(q);
+        final matchServer = (item.requestedByName ?? item.requestedBy ?? '')
+            .toLowerCase()
+            .contains(q);
         final matchCashier = (item.cashierName ?? '').toLowerCase().contains(q);
         final matchReason = item.reason.toLowerCase().contains(q);
         if (!matchName &&
@@ -9478,8 +9538,8 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                               final picked = await showDateRangePicker(
                                 context: context,
                                 firstDate: DateTime(2023),
-                                lastDate: DateTime.now()
-                                    .add(const Duration(days: 1)),
+                                lastDate:
+                                    DateTime.now().add(const Duration(days: 1)),
                                 initialDateRange: _historyDateRange,
                               );
                               if (picked != null) {
@@ -9512,11 +9572,15 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                                     fontWeight: FontWeight.w600, fontSize: 13)),
                             const SizedBox(width: 4),
                             _statusChip('all', 'All (${allItems.length})'),
-                            _statusChip('approved', 'Approved ($approvedCount)'),
+                            _statusChip(
+                                'approved', 'Approved ($approvedCount)'),
                             _statusChip('rejected', 'Manager Rejected'),
-                            _statusChip('void_cashier_declined', 'Cashier Declined'),
-                            _statusChip('void_kitchen_declined', 'Kitchen Declined'),
-                            _statusChip('void_acknowledged', 'Awaiting Manager'),
+                            _statusChip(
+                                'void_cashier_declined', 'Cashier Declined'),
+                            _statusChip(
+                                'void_kitchen_declined', 'Kitchen Declined'),
+                            _statusChip(
+                                'void_acknowledged', 'Awaiting Manager'),
                           ],
                         ),
                       ),
@@ -9570,12 +9634,14 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                       'Amount': 'KES ${_fmt(r.amount)}',
                       'Reason': r.reason,
                       'Requested by': r.requestedByName ?? r.requestedBy ?? '—',
-                      'Kitchen Action': r.kitchenStatus == 'void_kitchen_declined'
+                      'Kitchen Action': r.kitchenStatus ==
+                              'void_kitchen_declined'
                           ? 'Declined by ${r.kitchenStaffName ?? 'Kitchen'}'
                           : r.kitchenStatus == 'void_kitchen_acknowledged'
                               ? 'Acknowledged by ${r.kitchenStaffName ?? 'Kitchen'}'
                               : (r.kitchenStatus ?? '—'),
-                      'Cashier Action': r.cashierStatus == 'void_cashier_declined'
+                      'Cashier Action': r.cashierStatus ==
+                              'void_cashier_declined'
                           ? 'Declined by ${r.cashierName ?? 'Cashier'}'
                           : r.cashierStatus == 'void_acknowledged'
                               ? 'Acknowledged by ${r.cashierName ?? 'Cashier'}'
@@ -9585,12 +9651,13 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                           : r.managerStatus == 'rejected'
                               ? 'Rejected: ${r.rejectionReason ?? 'No reason'}'
                               : 'Pending decision',
-                      'Logged At': r.createdAt
-                              ?.toLocal()
-                              .toString()
-                              .substring(0, 16) ??
-                          r.requestedAt?.toLocal().toString().substring(0, 16) ??
-                          '—',
+                      'Logged At':
+                          r.createdAt?.toLocal().toString().substring(0, 16) ??
+                              r.requestedAt
+                                  ?.toLocal()
+                                  .toString()
+                                  .substring(0, 16) ??
+                              '—',
                     },
                     actions: [
                       TextButton.icon(
@@ -9645,7 +9712,8 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
             Expanded(
               child: Text(
                 'Void Lifecycle: ${r.itemName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -11167,8 +11235,17 @@ class _PaymentsInvoicesSectionState
                 ),
               ),
               _DateField(
-                  value: _from, onChanged: (v) => setState(() => _from = v)),
-              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+                  value: _from,
+                  onChanged: (v) => setState(() {
+                        _from = v;
+                        _future = _load();
+                      })),
+              _DateField(
+                  value: _to,
+                  onChanged: (v) => setState(() {
+                        _to = v;
+                        _future = _load();
+                      })),
               _Dropdown(
                 value: _status,
                 values: const [
@@ -12222,8 +12299,10 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       pw.Font fontRegular;
       pw.Font fontBold;
       try {
-        final regData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
-        final boldData = await rootBundle.load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
+        final regData = await rootBundle
+            .load('assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF');
+        final boldData = await rootBundle
+            .load('assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF');
         fontRegular = pw.Font.ttf(regData);
         fontBold = pw.Font.ttf(boldData);
       } catch (_) {
@@ -12240,13 +12319,17 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
       pw.MemoryImage? logoImage;
       try {
-        final logoBytes = await rootBundle.load('assets/frontend_public/fglogo.png');
+        final logoBytes =
+            await rootBundle.load('assets/frontend_public/fglogo.png');
         logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
       } catch (_) {}
 
-      final totalAmount = items.fold<num>(0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
-      final totalPaid = items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
-      final totalBalance = items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
+      final totalAmount = items.fold<num>(
+          0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
+      final totalPaid =
+          items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
+      final totalBalance =
+          items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
       final numFormat = NumberFormat('#,##0.00', 'en_KE');
 
       pdf.addPage(
@@ -12269,11 +12352,15 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text('FamousGate Hotels',
-                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15)),
+                            style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold, fontSize: 15)),
                         pw.Text('Bomet, Kenya  -  Tel: 0706782828',
-                            style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
-                        pw.Text('Email: famousgatesbmt@gmail.com  -  www.famousgatehotels.com',
-                            style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey600)),
+                            style: const pw.TextStyle(
+                                fontSize: 8.5, color: PdfColors.grey700)),
+                        pw.Text(
+                            'Email: famousgatesbmt@gmail.com  -  www.famousgatehotels.com',
+                            style: const pw.TextStyle(
+                                fontSize: 8.5, color: PdfColors.grey600)),
                       ],
                     ),
                   ),
@@ -12281,11 +12368,16 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
                       pw.Text('CREDIT LEDGER REPORT',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.blue800)),
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 12,
+                              color: PdfColors.blue800)),
                       pw.Text('Period: $_from to $_to',
-                          style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                          style: const pw.TextStyle(
+                              fontSize: 8.5, color: PdfColors.grey700)),
                       pw.Text('${items.length} Record(s)',
-                          style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey600)),
+                          style: const pw.TextStyle(
+                              fontSize: 8.5, color: PdfColors.grey600)),
                     ],
                   ),
                 ],
@@ -12293,74 +12385,117 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               pw.SizedBox(height: 6),
               pw.Divider(thickness: 1, color: PdfColors.grey400),
               pw.SizedBox(height: 8),
-
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                 children: [
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
                     decoration: pw.BoxDecoration(
                       color: PdfColors.blue50,
                       borderRadius: pw.BorderRadius.circular(6),
-                      border: pw.Border.all(color: PdfColors.blue700, width: 0.5),
+                      border:
+                          pw.Border.all(color: PdfColors.blue700, width: 0.5),
                     ),
                     child: pw.Column(
                       children: [
-                        pw.Text('Total Credit Granted', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.blue800, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Total Credit Granted',
+                            style: pw.TextStyle(
+                                fontSize: 7.5,
+                                color: PdfColors.blue800,
+                                fontWeight: pw.FontWeight.bold)),
                         pw.SizedBox(height: 2),
-                        pw.Text('KES ${numFormat.format(totalAmount)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.blue900, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('KES ${numFormat.format(totalAmount)}',
+                            style: pw.TextStyle(
+                                fontSize: 10.5,
+                                color: PdfColors.blue900,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
                     decoration: pw.BoxDecoration(
                       color: PdfColors.green50,
                       borderRadius: pw.BorderRadius.circular(6),
-                      border: pw.Border.all(color: PdfColors.green700, width: 0.5),
+                      border:
+                          pw.Border.all(color: PdfColors.green700, width: 0.5),
                     ),
                     child: pw.Column(
                       children: [
-                        pw.Text('Total Paid/Applied', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.green800, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Total Paid/Applied',
+                            style: pw.TextStyle(
+                                fontSize: 7.5,
+                                color: PdfColors.green800,
+                                fontWeight: pw.FontWeight.bold)),
                         pw.SizedBox(height: 2),
-                        pw.Text('KES ${numFormat.format(totalPaid)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.green900, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('KES ${numFormat.format(totalPaid)}',
+                            style: pw.TextStyle(
+                                fontSize: 10.5,
+                                color: PdfColors.green900,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
                     decoration: pw.BoxDecoration(
                       color: PdfColors.orange50,
                       borderRadius: pw.BorderRadius.circular(6),
-                      border: pw.Border.all(color: PdfColors.orange700, width: 0.5),
+                      border:
+                          pw.Border.all(color: PdfColors.orange700, width: 0.5),
                     ),
                     child: pw.Column(
                       children: [
-                        pw.Text('Net Outstanding Balance', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.orange800, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Net Outstanding Balance',
+                            style: pw.TextStyle(
+                                fontSize: 7.5,
+                                color: PdfColors.orange800,
+                                fontWeight: pw.FontWeight.bold)),
                         pw.SizedBox(height: 2),
-                        pw.Text('KES ${numFormat.format(totalBalance)}', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.orange900, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('KES ${numFormat.format(totalBalance)}',
+                            style: pw.TextStyle(
+                                fontSize: 10.5,
+                                color: PdfColors.orange900,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   ),
                 ],
               ),
               pw.SizedBox(height: 12),
-
               pw.Table.fromTextArray(
-                headers: ['Staff / Customer', 'Description', 'Amount', 'Paid', 'Balance', 'Status'],
-                data: items.map((it) => [
-                  _cleanPdfText(_staffName(it)),
-                  _cleanPdfText(_text(it, ['description'])),
-                  _money(_num(it['amount'] ?? it['total_amount'])),
-                  _money(_num(it['paid_amount'])),
-                  _money(_staffCreditBalance(it)),
-                  _cleanPdfText(_text(it, ['status'])),
-                ]).toList(),
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.black),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headers: [
+                  'Staff / Customer',
+                  'Description',
+                  'Amount',
+                  'Paid',
+                  'Balance',
+                  'Status'
+                ],
+                data: items
+                    .map((it) => [
+                          _cleanPdfText(_staffName(it)),
+                          _cleanPdfText(_text(it, ['description'])),
+                          _money(_num(it['amount'] ?? it['total_amount'])),
+                          _money(_num(it['paid_amount'])),
+                          _money(_staffCreditBalance(it)),
+                          _cleanPdfText(_text(it, ['status'])),
+                        ])
+                    .toList(),
+                border:
+                    pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                headerStyle: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 8,
+                    color: PdfColors.black),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.grey200),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
-                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                cellPadding:
+                    const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 columnWidths: const {
                   0: pw.FlexColumnWidth(2.5),
                   1: pw.FlexColumnWidth(3.0),
@@ -12379,12 +12514,13 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 },
               ),
               pw.SizedBox(height: 20),
-
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Prepared By: Branch Accountant ________________', style: const pw.TextStyle(fontSize: 9)),
-                  pw.Text('Approved By: Internal Auditor ________________', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Prepared By: Branch Accountant ________________',
+                      style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Approved By: Internal Auditor ________________',
+                      style: const pw.TextStyle(fontSize: 9)),
                 ],
               ),
             ];
@@ -12402,9 +12538,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   }
 
   void _printCreditBillsPdfReport(List<Map<String, dynamic>> items) {
-    final totalAmount = items.fold<num>(0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
-    final totalPaid = items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
-    final totalBalance = items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
+    final totalAmount = items.fold<num>(
+        0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
+    final totalPaid =
+        items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
+    final totalBalance =
+        items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
 
     showDialog(
       context: context,
@@ -12426,9 +12565,17 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 Center(
                   child: Column(
                     children: [
-                      const Text('FAMOUSGATE HOTELS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const Text('BRANCH ACCOUNTANT — CREDIT LEDGER REPORT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
-                      Text('Period: $_from to $_to', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                      const Text('FAMOUSGATE HOTELS',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text('BRANCH ACCOUNTANT — CREDIT LEDGER REPORT',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey)),
+                      Text('Period: $_from to $_to',
+                          style: const TextStyle(
+                              fontSize: 12, fontStyle: FontStyle.italic)),
                       const Divider(height: 24),
                     ],
                   ),
@@ -12436,9 +12583,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _printSummaryChip('Total Credit Granted', _money(totalAmount), Colors.blue),
-                    _printSummaryChip('Total Paid/Applied', _money(totalPaid), Colors.green),
-                    _printSummaryChip('Net Outstanding Balance', _money(totalBalance), Colors.orange),
+                    _printSummaryChip('Total Credit Granted',
+                        _money(totalAmount), Colors.blue),
+                    _printSummaryChip(
+                        'Total Paid/Applied', _money(totalPaid), Colors.green),
+                    _printSummaryChip('Net Outstanding Balance',
+                        _money(totalBalance), Colors.orange),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -12456,22 +12606,52 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     TableRow(
                       decoration: BoxDecoration(color: Colors.grey.shade200),
                       children: const [
-                        Padding(padding: EdgeInsets.all(6), child: Text('Staff Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Padding(padding: EdgeInsets.all(6), child: Text('Description', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Padding(padding: EdgeInsets.all(6), child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Padding(padding: EdgeInsets.all(6), child: Text('Paid', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Padding(padding: EdgeInsets.all(6), child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold))),
-                        Padding(padding: EdgeInsets.all(6), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Staff Name',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Description',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Amount',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Paid',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Balance',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Text('Status',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
                     ),
                     ...items.map((it) => TableRow(
                           children: [
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_staffName(it))),
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_text(it, ['description']))),
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['amount'])))),
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['paid_amount'])))),
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_staffCreditBalance(it)))),
-                            Padding(padding: const EdgeInsets.all(6), child: Text(_text(it, ['status']))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_staffName(it))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_text(it, ['description']))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_money(_num(it['amount'])))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_money(_num(it['paid_amount'])))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_money(_staffCreditBalance(it)))),
+                            Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Text(_text(it, ['status']))),
                           ],
                         )),
                   ],
@@ -12480,8 +12660,10 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: const [
-                    Text('Prepared By: Branch Accountant ________________', style: TextStyle(fontSize: 11)),
-                    Text('Approved By: Internal Auditor ________________', style: TextStyle(fontSize: 11)),
+                    Text('Prepared By: Branch Accountant ________________',
+                        style: TextStyle(fontSize: 11)),
+                    Text('Approved By: Internal Auditor ________________',
+                        style: TextStyle(fontSize: 11)),
                   ],
                 ),
               ],
@@ -12489,7 +12671,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Close')),
           FilledButton.icon(
             onPressed: () async {
               Navigator.pop(dialogCtx);
@@ -12513,8 +12697,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       ),
       child: Column(
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
-          Text(value, style: TextStyle(fontSize: 14, color: color, fontWeight: FontWeight.bold)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 14, color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -12527,7 +12715,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
     try {
-      final res = await ref.read(branchAccountantRepositoryProvider).getPayrollCreditBillContents(billId);
+      final res = await ref
+          .read(branchAccountantRepositoryProvider)
+          .getPayrollCreditBillContents(billId);
       if (mounted) Navigator.pop(context); // dismiss loader
       final data = res['data'] ?? {};
       var items = (data['items'] as List?) ?? [];
@@ -12548,8 +12738,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           title: Row(
             children: [
               Icon(
-                isKitchenVariance ? Icons.soup_kitchen_outlined : Icons.receipt_long,
-                color: isKitchenVariance ? Colors.orange.shade800 : AppColors.kPrimary,
+                isKitchenVariance
+                    ? Icons.soup_kitchen_outlined
+                    : Icons.receipt_long,
+                color: isKitchenVariance
+                    ? Colors.orange.shade800
+                    : AppColors.kPrimary,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -12557,7 +12751,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                   isKitchenVariance
                       ? 'Kitchen Variance Credit Bill — ${_staffName(bill)}'
                       : 'POS Bill Contents — ${_staffName(bill)}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -12572,9 +12767,13 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isKitchenVariance ? Colors.orange.shade50 : Colors.grey.shade100,
+                      color: isKitchenVariance
+                          ? Colors.orange.shade50
+                          : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(8),
-                      border: isKitchenVariance ? Border.all(color: Colors.orange.shade300) : null,
+                      border: isKitchenVariance
+                          ? Border.all(color: Colors.orange.shade300)
+                          : null,
                     ),
                     child: Column(
                       children: [
@@ -12582,14 +12781,22 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Bill #: ${_text(bill, ['bill_number', 'description', 'credit_number', 'id'])}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              'Bill #: ${_text(bill, [
+                                    'bill_number',
+                                    'description',
+                                    'credit_number',
+                                    'id'
+                                  ])}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(
                               'Total Billed: ${_money(_num(bill['amount']))}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: isKitchenVariance ? Colors.red.shade700 : AppColors.kPrimary,
+                                color: isKitchenVariance
+                                    ? Colors.red.shade700
+                                    : AppColors.kPrimary,
                               ),
                             ),
                           ],
@@ -12601,21 +12808,27 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                             children: [
                               Text(
                                 'Shift: ${orderHeader['shift_number'] ?? bill['shift_id'] ?? 'Kitchen Shift'}',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                               Text(
                                 'Type: Kitchen Shortage Liability',
-                                style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade900,
+                                    fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
-                          if ('${orderHeader['shift_date'] ?? bill['bill_date'] ?? ''}'.isNotEmpty) ...[
+                          if ('${orderHeader['shift_date'] ?? bill['bill_date'] ?? ''}'
+                              .isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
                                 'Date: ${orderHeader['shift_date'] ?? bill['bill_date']}',
-                                style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54),
                               ),
                             ),
                           ],
@@ -12624,8 +12837,10 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Table/Outlet: ${orderHeader['table_name'] ?? orderHeader['outlet_name'] ?? 'N/A'}'),
-                              Text('Waiter: ${orderHeader['waiter_name'] ?? 'N/A'}'),
+                              Text(
+                                  'Table/Outlet: ${orderHeader['table_name'] ?? orderHeader['outlet_name'] ?? 'N/A'}'),
+                              Text(
+                                  'Waiter: ${orderHeader['waiter_name'] ?? 'N/A'}'),
                             ],
                           ),
                         ]
@@ -12637,7 +12852,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     isKitchenVariance
                         ? 'Items with Variance (Shortage Breakdown):'
                         : 'Line Items Purchased:',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
                   if (items.isEmpty)
@@ -12650,7 +12866,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.amber.shade800),
+                          Icon(Icons.info_outline,
+                              color: Colors.amber.shade800),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -12660,14 +12877,18 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                                   isKitchenVariance
                                       ? 'Kitchen Variance Summary'
                                       : 'Summary Credit Bill Entry',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.amber.shade900),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   isKitchenVariance
                                       ? 'Kitchen Variance Credit Bill for shift ${orderHeader['shift_number'] ?? bill['shift_id'] ?? ''}. Total Shortage Liability: ${_money(_num(bill['amount']))}\n${bill['description'] ?? ''}'
                                       : 'This bill was logged as a shift credit tab without individual cart itemization. Total Amount: ${_money(_num(bill['amount']))}',
-                                  style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.amber.shade900),
                                 ),
                               ],
                             ),
@@ -12683,22 +12904,43 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                         2: FlexColumnWidth(1.8),
                         3: FlexColumnWidth(2),
                       },
-                      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+                      border: TableBorder.all(
+                          color: Colors.grey.shade300, width: 1),
                       children: [
                         TableRow(
-                          decoration: BoxDecoration(color: Colors.orange.shade100),
+                          decoration:
+                              BoxDecoration(color: Colors.orange.shade100),
                           children: const [
-                            Padding(padding: EdgeInsets.all(6), child: Text('Variance Item', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Shortage', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Unit Cost', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Total Loss', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Variance Item',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Shortage',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Unit Cost',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Total Loss',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
                           ],
                         ),
                         ...items.map((it) {
                           final unit = '${it['unit'] ?? ''}';
-                          final num qty = _num(it['quantity'] ?? it['variance_qty']);
-                          final num unitCost = _num(it['unit_price'] ?? it['cost_price']);
-                          final num varianceCost = _num(it['total_price'] ?? it['variance_cost']);
+                          final num qty =
+                              _num(it['quantity'] ?? it['variance_qty']);
+                          final num unitCost =
+                              _num(it['unit_price'] ?? it['cost_price']);
+                          final num varianceCost =
+                              _num(it['total_price'] ?? it['variance_cost']);
                           return TableRow(
                             children: [
                               Padding(
@@ -12706,9 +12948,15 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('${it['name'] ?? it['item_name'] ?? 'Item'}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    Text(
+                                        '${it['name'] ?? it['item_name'] ?? 'Item'}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600)),
                                     if ('${it['item_sku'] ?? ''}'.isNotEmpty)
-                                      Text('${it['item_sku']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                      Text('${it['item_sku']}',
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey)),
                                   ],
                                 ),
                               ),
@@ -12716,11 +12964,19 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                                 padding: const EdgeInsets.all(6),
                                 child: Text(
                                   '-${qty.toStringAsFixed(2)}${unit.isNotEmpty ? ' $unit' : ''}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red),
                                 ),
                               ),
-                              Padding(padding: const EdgeInsets.all(6), child: Text(_money(unitCost))),
-                              Padding(padding: const EdgeInsets.all(6), child: Text(_money(varianceCost > 0 ? varianceCost : qty * unitCost))),
+                              Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Text(_money(unitCost))),
+                              Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Text(_money(varianceCost > 0
+                                      ? varianceCost
+                                      : qty * unitCost))),
                             ],
                           );
                         }),
@@ -12734,23 +12990,51 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                         2: FlexColumnWidth(2),
                         3: FlexColumnWidth(2),
                       },
-                      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+                      border: TableBorder.all(
+                          color: Colors.grey.shade300, width: 1),
                       children: [
                         TableRow(
-                          decoration: BoxDecoration(color: Colors.grey.shade200),
+                          decoration:
+                              BoxDecoration(color: Colors.grey.shade200),
                           children: const [
-                            Padding(padding: EdgeInsets.all(6), child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Subtotal', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Item Name',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Qty',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Price',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
+                            Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Text('Subtotal',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold))),
                           ],
                         ),
                         ...items.map((it) => TableRow(
                               children: [
-                                Padding(padding: const EdgeInsets.all(6), child: Text('${it['name']}')),
-                                Padding(padding: const EdgeInsets.all(6), child: Text('${it['quantity']}')),
-                                Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['unit_price'])))),
-                                Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['total_price'])))),
+                                Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Text('${it['name']}')),
+                                Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Text('${it['quantity']}')),
+                                Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child:
+                                        Text(_money(_num(it['unit_price'])))),
+                                Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child:
+                                        Text(_money(_num(it['total_price'])))),
                               ],
                             )),
                       ],
@@ -12788,7 +13072,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Transfer bill of ${_money(_num(bill['amount']))} currently under ${_staffName(bill)} to another staff or customer.'),
+              Text(
+                  'Transfer bill of ${_money(_num(bill['amount']))} currently under ${_staffName(bill)} to another staff or customer.'),
               const SizedBox(height: 12),
               TextField(
                 controller: targetStaffController,
@@ -12809,7 +13094,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
               if (reasonController.text.trim().isEmpty) return;
@@ -12826,7 +13113,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
     if (result == null || !mounted) return;
     try {
-      await ref.read(branchAccountantRepositoryProvider).transferPayrollCreditBill('${bill['id']}', result);
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .transferPayrollCreditBill('${bill['id']}', result);
       if (mounted) _notify(context, 'Credit bill transferred successfully');
       _refresh();
     } catch (e) {
@@ -12837,7 +13126,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   Future<void> _rejectPayrollCreditBill(Map<String, dynamic> bill) async {
     final reasonController = TextEditingController();
     bool isPaid = false;
-    final paidAmountController = TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
+    final paidAmountController =
+        TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
     String paymentMethod = 'cash';
 
     final result = await showDialog<Map<String, dynamic>>(
@@ -12851,19 +13141,22 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Voiding credit bill of ${_money(_num(bill['amount']))} for ${_staffName(bill)}.'),
+                Text(
+                    'Voiding credit bill of ${_money(_num(bill['amount']))} for ${_staffName(bill)}.'),
                 const SizedBox(height: 12),
                 TextField(
                   controller: reasonController,
                   decoration: const InputDecoration(
                     labelText: 'Rejection & Void Reason (Required)',
-                    hintText: 'e.g. Duplicate entry / Customer paid cash directly',
+                    hintText:
+                        'e.g. Duplicate entry / Customer paid cash directly',
                   ),
                 ),
                 const SizedBox(height: 12),
                 CheckboxListTile(
                   title: const Text('Record Paid Bill Entry for this Void'),
-                  subtitle: const Text('Check if payment was received to show and enter paid bill'),
+                  subtitle: const Text(
+                      'Check if payment was received to show and enter paid bill'),
                   value: isPaid,
                   onChanged: (v) => setDialogState(() => isPaid = v ?? false),
                 ),
@@ -12872,7 +13165,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                   TextField(
                     controller: paidAmountController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Paid Amount (KES)'),
+                    decoration:
+                        const InputDecoration(labelText: 'Paid Amount (KES)'),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -12881,17 +13175,22 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                       DropdownMenuItem(value: 'cash', child: Text('Cash')),
                       DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
                       DropdownMenuItem(value: 'card', child: Text('Card')),
-                      DropdownMenuItem(value: 'bank_transfer', child: Text('Bank Transfer')),
+                      DropdownMenuItem(
+                          value: 'bank_transfer', child: Text('Bank Transfer')),
                     ],
-                    onChanged: (v) => setDialogState(() => paymentMethod = v ?? 'cash'),
-                    decoration: const InputDecoration(labelText: 'Payment Method'),
+                    onChanged: (v) =>
+                        setDialogState(() => paymentMethod = v ?? 'cash'),
+                    decoration:
+                        const InputDecoration(labelText: 'Payment Method'),
                   ),
                 ]
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
               onPressed: () {
@@ -12912,7 +13211,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
     if (result == null || !mounted) return;
     try {
-      await ref.read(branchAccountantRepositoryProvider).rejectPayrollCreditBill('${bill['id']}', result);
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .rejectPayrollCreditBill('${bill['id']}', result);
       if (mounted) _notify(context, 'Credit bill voided and rejected');
       _refresh();
     } catch (e) {
@@ -12921,9 +13222,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   }
 
   Future<void> _editPayrollCreditBill(Map<String, dynamic> bill) async {
-    final amountController = TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
-    final descController = TextEditingController(text: _text(bill, ['description']));
-    final deptController = TextEditingController(text: _text(bill, ['department']));
+    final amountController =
+        TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
+    final descController =
+        TextEditingController(text: _text(bill, ['description']));
+    final deptController =
+        TextEditingController(text: _text(bill, ['department']));
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -12953,7 +13257,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
               final amt = _num(amountController.text);
@@ -12972,7 +13278,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
     if (result == null || !mounted) return;
     try {
-      await ref.read(branchAccountantRepositoryProvider).editPayrollCreditBill('${bill['id']}', result);
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .editPayrollCreditBill('${bill['id']}', result);
       if (mounted) _notify(context, 'Credit bill updated successfully');
       _refresh();
     } catch (e) {
@@ -13408,10 +13716,10 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       await ref
           .read(branchAccountantRepositoryProvider)
           .addChargeToCustomerBill(
-        '${bill['id']}',
-        amount: amount,
-        description: '${data['description'] ?? ''}'.trim(),
-      );
+            '${bill['id']}',
+            amount: amount,
+            description: '${data['description'] ?? ''}'.trim(),
+          );
       if (mounted) _notify(context, 'Charge billed to customer account');
       _refresh();
     } catch (e) {
@@ -14500,9 +14808,10 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     } else if (grnTotalVal > 0) {
       amountOwed = grnTotalVal > paidVal ? (grnTotalVal - paidVal) : 0;
     } else {
-      final receivedPos = supplierPos.where((e) =>
-          ['received', 'fully_received', 'partially_received']
-              .contains(_text(e, ['status']).toLowerCase())).toList();
+      final receivedPos = supplierPos
+          .where((e) => ['received', 'fully_received', 'partially_received']
+              .contains(_text(e, ['status']).toLowerCase()))
+          .toList();
       final receivedVal = receivedPos.fold<num>(
           0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']));
       amountOwed = receivedVal > paidVal ? (receivedVal - paidVal) : 0;
@@ -16894,24 +17203,19 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                   _downloadSingleSupplierStatementPdf(
                     supplier: targetSupplier,
                     pos: pos
-                        .where((e) =>
-                            _recordSupplierId(e) == chosenSupplierId)
+                        .where((e) => _recordSupplierId(e) == chosenSupplierId)
                         .toList(),
                     grns: grns
-                        .where((e) =>
-                            _recordSupplierId(e) == chosenSupplierId)
+                        .where((e) => _recordSupplierId(e) == chosenSupplierId)
                         .toList(),
                     readyToBill: readyToBill
-                        .where((e) =>
-                            _recordSupplierId(e) == chosenSupplierId)
+                        .where((e) => _recordSupplierId(e) == chosenSupplierId)
                         .toList(),
                     invoices: invoices
-                        .where((e) =>
-                            _recordSupplierId(e) == chosenSupplierId)
+                        .where((e) => _recordSupplierId(e) == chosenSupplierId)
                         .toList(),
                     payments: payments
-                        .where((e) =>
-                            _recordSupplierId(e) == chosenSupplierId)
+                        .where((e) => _recordSupplierId(e) == chosenSupplierId)
                         .toList(),
                   );
                 }
@@ -17104,8 +17408,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
       // Sort by date descending
       transactionRows.sort((a, b) => b[0].compareTo(a[0]));
 
-      final cleanName =
-          supplierName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final cleanName = supplierName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
       final file = await _exportPdf(
         filename: 'Supplier_Statement_${cleanName}_${_today()}.pdf',
         title: 'SUPPLIER ACCOUNT STATEMENT',
@@ -17137,14 +17440,12 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                 _text(supplier, ['tax_id', 'kra_pin', 'pin']).isEmpty
                     ? '-'
                     : _text(supplier, ['tax_id', 'kra_pin', 'pin']),
-            'Payment Terms':
-                _text(supplier, ['payment_terms', 'terms']).isEmpty
-                    ? '30 Days'
-                    : '${_text(supplier, ['payment_terms', 'terms'])} Days',
-            'Account Status':
-                _text(supplier, ['status', 'is_active']).isEmpty
-                    ? 'Active'
-                    : _text(supplier, ['status', 'is_active']),
+            'Payment Terms': _text(supplier, ['payment_terms', 'terms']).isEmpty
+                ? '30 Days'
+                : '${_text(supplier, ['payment_terms', 'terms'])} Days',
+            'Account Status': _text(supplier, ['status', 'is_active']).isEmpty
+                ? 'Active'
+                : _text(supplier, ['status', 'is_active']),
           },
         },
         tableHeaders: const [
@@ -17165,7 +17466,8 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
             'Supplier statement prepared for $supplierName: ${file.path}');
       }
     } catch (e) {
-      if (mounted) _notify(context, 'Failed to generate supplier statement: $e');
+      if (mounted)
+        _notify(context, 'Failed to generate supplier statement: $e');
     }
   }
 
@@ -17955,7 +18257,8 @@ class _KitchenVarianceSection extends ConsumerStatefulWidget {
 
 class _KitchenVarianceSectionState
     extends ConsumerState<_KitchenVarianceSection> {
-  String _filterTab = 'all'; // 'all', 'has_variance', 'losses', 'surpluses', 'pending', 'settled'
+  String _filterTab =
+      'all'; // 'all', 'has_variance', 'losses', 'surpluses', 'pending', 'settled'
   String _dateFilter = 'all'; // 'all', 'today', 'yesterday', '7days', '30days'
   final _searchCtrl = TextEditingController();
   final Set<String> _expandedShiftIds = <String>{};
@@ -17981,14 +18284,17 @@ class _KitchenVarianceSectionState
         final todayStr = DateFormat('yyyy-MM-dd').format(now);
         return (todayStr, todayStr);
       case 'yesterday':
-        final yestStr = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
+        final yestStr = DateFormat('yyyy-MM-dd')
+            .format(now.subtract(const Duration(days: 1)));
         return (yestStr, yestStr);
       case '7days':
-        final fromStr = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 7)));
+        final fromStr = DateFormat('yyyy-MM-dd')
+            .format(now.subtract(const Duration(days: 7)));
         final toStr = DateFormat('yyyy-MM-dd').format(now);
         return (fromStr, toStr);
       case '30days':
-        final fromStr = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 30)));
+        final fromStr = DateFormat('yyyy-MM-dd')
+            .format(now.subtract(const Duration(days: 30)));
         final toStr = DateFormat('yyyy-MM-dd').format(now);
         return (fromStr, toStr);
       case 'all':
@@ -17999,14 +18305,18 @@ class _KitchenVarianceSectionState
 
   Future<Map<String, dynamic>> _load() {
     final (from, to) = _computeDateParams();
-    return ref.read(branchAccountantRepositoryProvider).getKitchenVarianceSummaryReport(
+    return ref
+        .read(branchAccountantRepositoryProvider)
+        .getKitchenVarianceSummaryReport(
           fromDate: from,
           toDate: to,
         );
   }
 
   void _refresh() {
-    setState(() { _future = _load(); });
+    setState(() {
+      _future = _load();
+    });
   }
 
   @override
@@ -18023,7 +18333,8 @@ class _KitchenVarianceSectionState
         snapshot: snap,
         onRefresh: _refresh,
         builder: (data) {
-          final summary = Map<String, dynamic>.from(data['summary'] as Map? ?? const {});
+          final summary =
+              Map<String, dynamic>.from(data['summary'] as Map? ?? const {});
           final rawShifts = ((data['shifts'] as List?) ?? const [])
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
@@ -18038,8 +18349,10 @@ class _KitchenVarianceSectionState
             if (search.isNotEmpty) {
               final shiftNum = '${s['shift_number'] ?? ''}'.toLowerCase();
               final shiftDate = '${s['shift_date'] ?? ''}'.toLowerCase();
-              final skFirst = '${s['store_keeper']?['first_name'] ?? ''}'.toLowerCase();
-              final skLast = '${s['store_keeper']?['last_name'] ?? ''}'.toLowerCase();
+              final skFirst =
+                  '${s['store_keeper']?['first_name'] ?? ''}'.toLowerCase();
+              final skLast =
+                  '${s['store_keeper']?['last_name'] ?? ''}'.toLowerCase();
               if (!shiftNum.contains(search) &&
                   !shiftDate.contains(search) &&
                   !skFirst.contains(search) &&
@@ -18053,8 +18366,10 @@ class _KitchenVarianceSectionState
             final isLoss = varCost < -0.01;
             final isSurplus = varCost > 0.01;
             final lc = s['liability_case'];
-            final isPending = s['status'] == 'pending_accountant_review' || (hasVar && lc == null);
-            final isSettled = lc != null || (!hasVar && s['status'] == 'closed');
+            final isPending = s['status'] == 'pending_accountant_review' ||
+                (hasVar && lc == null);
+            final isSettled =
+                lc != null || (!hasVar && s['status'] == 'closed');
 
             switch (_filterTab) {
               case 'has_variance':
@@ -18073,7 +18388,8 @@ class _KitchenVarianceSectionState
             }
           }).toList();
 
-          final totalExposure = _num(summary['total_variance_exposure'] ?? summary['total_unfavorable_variance']);
+          final totalExposure = _num(summary['total_variance_exposure'] ??
+              summary['total_unfavorable_variance']);
           final totalLosses = _num(summary['total_unfavorable_variance']);
           final totalSurpluses = _num(summary['total_favorable_variance']);
           final shiftsWithVar = _num(summary['shifts_with_variance']);
@@ -18124,7 +18440,9 @@ class _KitchenVarianceSectionState
                   'Pending Decisions',
                   '$pendingCount',
                   Icons.pending_actions,
-                  pendingCount > 0 ? Colors.orange.shade800 : Colors.green.shade700,
+                  pendingCount > 0
+                      ? Colors.orange.shade800
+                      : Colors.green.shade700,
                 ),
               ]),
               const SizedBox(height: 12),
@@ -18140,14 +18458,16 @@ class _KitchenVarianceSectionState
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.blueGrey.shade400, size: 32),
+                            Icon(Icons.info_outline,
+                                color: Colors.blueGrey.shade400, size: 32),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 _filterTab == 'all'
                                     ? 'No kitchen shifts recorded for this period yet.'
                                     : 'No shifts match the "$_filterTab" filter. Try switching to "All Shifts" or adjusting the date range.',
-                                style: const TextStyle(fontSize: 14, color: Colors.black87),
+                                style: const TextStyle(
+                                    fontSize: 14, color: Colors.black87),
                               ),
                             ),
                           ],
@@ -18178,14 +18498,20 @@ class _KitchenVarianceSectionState
   }
 
   Widget _buildFilterBar(List<Map<String, dynamic>> allShifts) {
-    final hasVarCount = allShifts.where((s) => _num(s['total_variance_cost']).abs() > 0.01).length;
-    final lossCount = allShifts.where((s) => _num(s['total_variance_cost']) < -0.01).length;
-    final surplusCount = allShifts.where((s) => _num(s['total_variance_cost']) > 0.01).length;
+    final hasVarCount = allShifts
+        .where((s) => _num(s['total_variance_cost']).abs() > 0.01)
+        .length;
+    final lossCount =
+        allShifts.where((s) => _num(s['total_variance_cost']) < -0.01).length;
+    final surplusCount =
+        allShifts.where((s) => _num(s['total_variance_cost']) > 0.01).length;
     final pendingCount = allShifts.where((s) {
       final varCost = _num(s['total_variance_cost']);
-      return s['status'] == 'pending_accountant_review' || (varCost.abs() > 0.01 && s['liability_case'] == null);
+      return s['status'] == 'pending_accountant_review' ||
+          (varCost.abs() > 0.01 && s['liability_case'] == null);
     }).length;
-    final settledCount = allShifts.where((s) => s['liability_case'] != null).length;
+    final settledCount =
+        allShifts.where((s) => s['liability_case'] != null).length;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -18206,15 +18532,20 @@ class _KitchenVarianceSectionState
                     children: [
                       _tabChip('all', 'All Shifts', allShifts.length),
                       const SizedBox(width: 8),
-                      _tabChip('has_variance', 'With Variance', hasVarCount, color: Colors.blue.shade700),
+                      _tabChip('has_variance', 'With Variance', hasVarCount,
+                          color: Colors.blue.shade700),
                       const SizedBox(width: 8),
-                      _tabChip('losses', 'Shortages', lossCount, color: Colors.red.shade700),
+                      _tabChip('losses', 'Shortages', lossCount,
+                          color: Colors.red.shade700),
                       const SizedBox(width: 8),
-                      _tabChip('surpluses', 'Surpluses', surplusCount, color: Colors.green.shade700),
+                      _tabChip('surpluses', 'Surpluses', surplusCount,
+                          color: Colors.green.shade700),
                       const SizedBox(width: 8),
-                      _tabChip('pending', 'Pending Decision', pendingCount, color: Colors.orange.shade800),
+                      _tabChip('pending', 'Pending Decision', pendingCount,
+                          color: Colors.orange.shade800),
                       const SizedBox(width: 8),
-                      _tabChip('settled', 'Settled / Reviewed', settledCount, color: Colors.teal.shade700),
+                      _tabChip('settled', 'Settled / Reviewed', settledCount,
+                          color: Colors.teal.shade700),
                     ],
                   ),
                 ),
@@ -18229,17 +18560,21 @@ class _KitchenVarianceSectionState
                 child: TextField(
                   controller: _searchCtrl,
                   decoration: InputDecoration(
-                    hintText: 'Search by shift #, date (YYYY-MM-DD), or storekeeper...',
+                    hintText:
+                        'Search by shift #, date (YYYY-MM-DD), or storekeeper...',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: _searchCtrl.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () => setState(() => _searchCtrl.clear()),
+                            onPressed: () =>
+                                setState(() => _searchCtrl.clear()),
                           )
                         : null,
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -18253,15 +18588,23 @@ class _KitchenVarianceSectionState
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Date Scope',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All Historical Shifts', overflow: TextOverflow.ellipsis)),
+                    DropdownMenuItem(
+                        value: 'all',
+                        child: Text('All Historical Shifts',
+                            overflow: TextOverflow.ellipsis)),
                     DropdownMenuItem(value: 'today', child: Text('Today')),
-                    DropdownMenuItem(value: 'yesterday', child: Text('Yesterday')),
-                    DropdownMenuItem(value: '7days', child: Text('Last 7 Days')),
-                    DropdownMenuItem(value: '30days', child: Text('Last 30 Days')),
+                    DropdownMenuItem(
+                        value: 'yesterday', child: Text('Yesterday')),
+                    DropdownMenuItem(
+                        value: '7days', child: Text('Last 7 Days')),
+                    DropdownMenuItem(
+                        value: '30days', child: Text('Last 30 Days')),
                   ],
                   onChanged: (v) {
                     if (v == null || v == _dateFilter) return;
@@ -18310,7 +18653,9 @@ class _KitchenVarianceSectionState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: active ? Colors.white.withOpacity(0.25) : Colors.grey.shade300,
+                color: active
+                    ? Colors.white.withOpacity(0.25)
+                    : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -18332,9 +18677,12 @@ class _KitchenVarianceSectionState
     final shiftId = '${s['id'] ?? ''}';
     final shiftNum = '${s['shift_number'] ?? 'Shift'}';
     final shiftDate = _text(s, ['shift_date']);
-    final shiftType = (s['sub_shift_type'] ?? s['shift_type'] ?? 'SHIFT').toString().toUpperCase();
+    final shiftType = (s['sub_shift_type'] ?? s['shift_type'] ?? 'SHIFT')
+        .toString()
+        .toUpperCase();
     final skName = s['store_keeper'] != null
-        ? '${s['store_keeper']?['first_name'] ?? ''} ${s['store_keeper']?['last_name'] ?? ''}'.trim()
+        ? '${s['store_keeper']?['first_name'] ?? ''} ${s['store_keeper']?['last_name'] ?? ''}'
+            .trim()
         : '—';
     final varCost = _num(s['total_variance_cost']);
     final expCost = _num(s['total_expected_cost']);
@@ -18342,10 +18690,11 @@ class _KitchenVarianceSectionState
     final posQty = _num(s['total_pos_sales_qty']);
     final spoilCost = _num(s['total_spoilage_cost']);
     final isExpanded = _expandedShiftIds.contains(shiftId);
-    final topVariances = ((s['daily_control_top_variances'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    final topVariances =
+        ((s['daily_control_top_variances'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
     final lc = s['liability_case'] as Map<String, dynamic>?;
     final status = '${s['status'] ?? 'open'}'.toUpperCase();
     final hasSnapshot = s['has_snapshot'] == true;
@@ -18423,7 +18772,8 @@ class _KitchenVarianceSectionState
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(6),
@@ -18442,7 +18792,8 @@ class _KitchenVarianceSectionState
                           const SizedBox(height: 4),
                           Text(
                             'Storekeeper: $skName  •  Department: ${s['department'] ?? 'KITCHEN'}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600),
                           ),
                         ],
                       ),
@@ -18456,26 +18807,33 @@ class _KitchenVarianceSectionState
                         _StatusPill(status),
                         if (hasSnapshot)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: const Color(0xFFECFDF5),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFA7F3D0)),
+                              border:
+                                  Border.all(color: const Color(0xFFA7F3D0)),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.lock_outline, size: 12, color: Color(0xFF047857)),
+                                Icon(Icons.lock_outline,
+                                    size: 12, color: Color(0xFF047857)),
                                 SizedBox(width: 4),
                                 Text(
                                   'Daily Controls Frozen',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF047857)),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF047857)),
                                 ),
                               ],
                             ),
                           ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: varCost < -0.01
                                 ? const Color(0xFFFEF2F2)
@@ -18502,11 +18860,13 @@ class _KitchenVarianceSectionState
                         ),
                         if (lc != null)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF0FDF4),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                              border:
+                                  Border.all(color: const Color(0xFFBBF7D0)),
                             ),
                             child: Text(
                               'Liability: ${(lc['liability_action'] ?? '').toUpperCase()}',
@@ -18519,11 +18879,13 @@ class _KitchenVarianceSectionState
                           )
                         else if (varCost.abs() > 0.01)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFFFBEB),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFDE68A)),
+                              border:
+                                  Border.all(color: const Color(0xFFFDE68A)),
                             ),
                             child: const Text(
                               'Liability Pending',
@@ -18548,18 +18910,27 @@ class _KitchenVarianceSectionState
                   ),
                   child: Row(
                     children: [
-                      _shiftMetricTile('POS Sales Portions', '${posQty.toInt()}', 'Expected Std: ${_money(expCost)}'),
+                      _shiftMetricTile(
+                          'POS Sales Portions',
+                          '${posQty.toInt()}',
+                          'Expected Std: ${_money(expCost)}'),
                       _shiftMetricDivider(),
-                      _shiftMetricTile('Actual Cost', _money(actCost), 'Ingredients consumed'),
+                      _shiftMetricTile('Actual Cost', _money(actCost),
+                          'Ingredients consumed'),
                       _shiftMetricDivider(),
                       _shiftMetricTile(
                         'Net Variance',
-                        varCost < 0 ? '-${_money(varCost.abs())}' : '+${_money(varCost)}',
-                        expCost > 0 ? '${((varCost / expCost) * 100).toStringAsFixed(1)}% of std' : '—',
+                        varCost < 0
+                            ? '-${_money(varCost.abs())}'
+                            : '+${_money(varCost)}',
+                        expCost > 0
+                            ? '${((varCost / expCost) * 100).toStringAsFixed(1)}% of std'
+                            : '—',
                         valueColor: varColor,
                       ),
                       _shiftMetricDivider(),
-                      _shiftMetricTile('Spoilage Cost', _money(spoilCost), 'Kitchen recorded wastage'),
+                      _shiftMetricTile('Spoilage Cost', _money(spoilCost),
+                          'Kitchen recorded wastage'),
                     ],
                   ),
                 ),
@@ -18576,12 +18947,19 @@ class _KitchenVarianceSectionState
                           }
                         });
                       },
-                      icon: Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 18),
-                      label: Text(isExpanded ? 'Hide Daily Controls' : 'Daily Control Breakdown'),
+                      icon: Icon(
+                          isExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 18),
+                      label: Text(isExpanded
+                          ? 'Hide Daily Controls'
+                          : 'Daily Control Breakdown'),
                     ),
                     const SizedBox(width: 10),
                     OutlinedButton.icon(
-                      onPressed: () => widget.onNavigateToDailyControls?.call(shiftId),
+                      onPressed: () =>
+                          widget.onNavigateToDailyControls?.call(shiftId),
                       icon: const Icon(Icons.open_in_new, size: 16),
                       label: const Text('Open Full Sheet'),
                     ),
@@ -18591,9 +18969,12 @@ class _KitchenVarianceSectionState
                     FilledButton.icon(
                       onPressed: () => _review(s),
                       icon: const Icon(Icons.fact_check_outlined, size: 16),
-                      label: Text(lc != null ? 'Update Liability' : 'Review & Decide'),
+                      label: Text(
+                          lc != null ? 'Update Liability' : 'Review & Decide'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: lc != null ? const Color(0xFF475569) : const Color(0xFF1E3D73),
+                        backgroundColor: lc != null
+                            ? const Color(0xFF475569)
+                            : const Color(0xFF1E3D73),
                       ),
                     ),
                   ],
@@ -18607,19 +18988,30 @@ class _KitchenVarianceSectionState
     );
   }
 
-  Widget _shiftMetricTile(String label, String value, String sub, {Color? valueColor}) {
+  Widget _shiftMetricTile(String label, String value, String sub,
+      {Color? valueColor}) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w600)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600)),
           const SizedBox(height: 3),
           Text(
             value,
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: valueColor ?? const Color(0xFF0F172A)),
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 2),
-          Text(sub, style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(sub,
+              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -18634,7 +19026,8 @@ class _KitchenVarianceSectionState
     );
   }
 
-  Widget _buildShiftExpandedDetails(Map<String, dynamic> s, List<Map<String, dynamic>> topVariances) {
+  Widget _buildShiftExpandedDetails(
+      Map<String, dynamic> s, List<Map<String, dynamic>> topVariances) {
     final shiftId = '${s['id'] ?? ''}';
     final shiftNum = '${s['shift_number'] ?? ''}';
     return Container(
@@ -18653,10 +19046,14 @@ class _KitchenVarianceSectionState
             children: [
               const Text(
                 'Discrepancy Items from Food Control Standards',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1E3D73)),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E3D73)),
               ),
               TextButton.icon(
-                onPressed: () => widget.onNavigateToDailyControls?.call(shiftId),
+                onPressed: () =>
+                    widget.onNavigateToDailyControls?.call(shiftId),
                 icon: const Icon(Icons.arrow_forward, size: 16),
                 label: Text('Open Full Daily Controls Sheet ($shiftNum)'),
               ),
@@ -18673,9 +19070,11 @@ class _KitchenVarianceSectionState
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+                  Icon(Icons.check_circle_outline,
+                      color: Colors.green, size: 20),
                   SizedBox(width: 8),
-                  Text('No item-level variances detected for this shift in Daily Controls.'),
+                  Text(
+                      'No item-level variances detected for this shift in Daily Controls.'),
                 ],
               ),
             )
@@ -18718,24 +19117,34 @@ class _KitchenVarianceSectionState
 
                       return TableRow(
                         decoration: BoxDecoration(
-                          color: isShortage ? const Color(0xFFFFF5F5) : Colors.white,
-                          border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                          color: isShortage
+                              ? const Color(0xFFFFF5F5)
+                              : Colors.white,
+                          border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade100)),
                         ),
                         children: [
-                          _td('${it['item_name'] ?? it['item_sku'] ?? '—'}', bold: true),
+                          _td('${it['item_name'] ?? it['item_sku'] ?? '—'}',
+                              bold: true),
                           _td('${it['unit'] ?? ''}', align: TextAlign.center),
-                          _td(expQty.toStringAsFixed(2), align: TextAlign.right),
-                          _td(actQty.toStringAsFixed(2), align: TextAlign.right),
+                          _td(expQty.toStringAsFixed(2),
+                              align: TextAlign.right),
+                          _td(actQty.toStringAsFixed(2),
+                              align: TextAlign.right),
                           _td(
                             '${vQty >= 0 ? '+' : ''}${vQty.toStringAsFixed(2)}',
                             align: TextAlign.right,
-                            color: isShortage ? Colors.red.shade700 : Colors.green.shade700,
+                            color: isShortage
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
                             bold: true,
                           ),
                           _td(
                             '${vCost < 0 ? '-' : '+'}${_money(vCost.abs())}',
                             align: TextAlign.right,
-                            color: isShortage ? Colors.red.shade700 : Colors.green.shade700,
+                            color: isShortage
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
                             bold: true,
                           ),
                         ],
@@ -18756,12 +19165,14 @@ class _KitchenVarianceSectionState
       child: Text(
         label,
         textAlign: align,
-        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
+        style: const TextStyle(
+            fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
       ),
     );
   }
 
-  static Widget _td(String label, {TextAlign align = TextAlign.left, Color? color, bool bold = false}) {
+  static Widget _td(String label,
+      {TextAlign align = TextAlign.left, Color? color, bool bold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Text(
@@ -18788,7 +19199,8 @@ class _KitchenVarianceSectionState
         if (action == 'excel') {
           _exportExcelReport();
         } else if (action == 'pdf') {
-          _printKitchenVarianceReport(summary: summary, shifts: shifts, topItems: topItems);
+          _printKitchenVarianceReport(
+              summary: summary, shifts: shifts, topItems: topItems);
         }
       },
       itemBuilder: (context) => const [
@@ -18796,14 +19208,19 @@ class _KitchenVarianceSectionState
           value: 'excel',
           child: Row(
             children: [
-              Icon(Icons.table_chart_rounded, color: Color(0xFF107C41), size: 20),
+              Icon(Icons.table_chart_rounded,
+                  color: Color(0xFF107C41), size: 20),
               SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Export Variance Summary (.xlsx)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  Text('Multi-sheet Excel report of all shifts & discrepancy items', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                  Text('Export Variance Summary (.xlsx)',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  Text(
+                      'Multi-sheet Excel report of all shifts & discrepancy items',
+                      style: TextStyle(fontSize: 11, color: Colors.black54)),
                 ],
               ),
             ],
@@ -18820,8 +19237,12 @@ class _KitchenVarianceSectionState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Print / Preview PDF Audit Report', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  Text('Official branded hotel variance audit sheet with signature blocks', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                  Text('Print / Preview PDF Audit Report',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  Text(
+                      'Official branded hotel variance audit sheet with signature blocks',
+                      style: TextStyle(fontSize: 11, color: Colors.black54)),
                 ],
               ),
             ],
@@ -18834,21 +19255,28 @@ class _KitchenVarianceSectionState
           color: const Color(0xFF107C41),
           borderRadius: BorderRadius.circular(9),
           boxShadow: const [
-            BoxShadow(color: Color(0x33107C41), blurRadius: 6, offset: Offset(0, 2)),
+            BoxShadow(
+                color: Color(0x33107C41), blurRadius: 6, offset: Offset(0, 2)),
           ],
         ),
         child: _isExporting
             ? const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
               )
             : const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.file_download_outlined, color: Colors.white, size: 18),
+                  Icon(Icons.file_download_outlined,
+                      color: Colors.white, size: 18),
                   SizedBox(width: 6),
-                  Text('Export Variance Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                  Text('Export Variance Report',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
                   SizedBox(width: 4),
                   Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
                 ],
@@ -18872,7 +19300,8 @@ class _KitchenVarianceSectionState
           value: 'excel',
           child: Row(
             children: [
-              Icon(Icons.table_chart_rounded, color: Color(0xFF107C41), size: 18),
+              Icon(Icons.table_chart_rounded,
+                  color: Color(0xFF107C41), size: 18),
               SizedBox(width: 8),
               Text('Shift Daily Controls (.xlsx)'),
             ],
@@ -18882,7 +19311,8 @@ class _KitchenVarianceSectionState
           value: 'csv',
           child: Row(
             children: [
-              Icon(Icons.description_outlined, color: Color(0xFF1E3D73), size: 18),
+              Icon(Icons.description_outlined,
+                  color: Color(0xFF1E3D73), size: 18),
               SizedBox(width: 8),
               Text('Shift Daily Controls (.csv)'),
             ],
@@ -18901,7 +19331,11 @@ class _KitchenVarianceSectionState
           children: [
             Icon(Icons.download, size: 15, color: Color(0xFF1E3D73)),
             SizedBox(width: 4),
-            Text('Export Shift', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E3D73))),
+            Text('Export Shift',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3D73))),
             SizedBox(width: 2),
             Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF1E3D73)),
           ],
@@ -18915,7 +19349,9 @@ class _KitchenVarianceSectionState
     setState(() => _isExporting = true);
     try {
       final (from, to) = _computeDateParams();
-      final file = await ref.read(branchAccountantRepositoryProvider).downloadKitchenVarianceSummaryExcel(
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadKitchenVarianceSummaryExcel(
             fromDate: from,
             toDate: to,
           );
@@ -18930,7 +19366,9 @@ class _KitchenVarianceSectionState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Excel export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Excel export failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -18940,21 +19378,28 @@ class _KitchenVarianceSectionState
 
   Future<void> _exportSingleShiftExcel(Map<String, dynamic> s) async {
     final shiftId = '${s['id'] ?? ''}';
-    final shiftNum = '${s['shift_number'] ?? 'Shift'}'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final shiftNum = '${s['shift_number'] ?? 'Shift'}'
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     try {
-      final file = await ref.read(branchAccountantRepositoryProvider).downloadShiftDailyControlsExcel(
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadShiftDailyControlsExcel(
             shiftId,
             filename: 'FG_DailyControls_${s['shift_date']}_$shiftNum.xlsx',
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Excel exported: ${file.path}'), backgroundColor: const Color(0xFF107C41)),
+          SnackBar(
+              content: Text('Excel exported: ${file.path}'),
+              backgroundColor: const Color(0xFF107C41)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Shift export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Shift export failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -18962,21 +19407,28 @@ class _KitchenVarianceSectionState
 
   Future<void> _exportSingleShiftCsv(Map<String, dynamic> s) async {
     final shiftId = '${s['id'] ?? ''}';
-    final shiftNum = '${s['shift_number'] ?? 'Shift'}'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final shiftNum = '${s['shift_number'] ?? 'Shift'}'
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     try {
-      final file = await ref.read(branchAccountantRepositoryProvider).downloadShiftDailyControlsCsv(
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadShiftDailyControlsCsv(
             shiftId,
             filename: 'FG_DailyControls_${s['shift_date']}_$shiftNum.csv',
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('CSV exported: ${file.path}'), backgroundColor: const Color(0xFF1E3D73)),
+          SnackBar(
+              content: Text('CSV exported: ${file.path}'),
+              backgroundColor: const Color(0xFF1E3D73)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Shift CSV export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Shift CSV export failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -19000,7 +19452,8 @@ class _KitchenVarianceSectionState
         header: (ctx) => pw.Container(
           padding: const pw.EdgeInsets.only(bottom: 12),
           decoration: const pw.BoxDecoration(
-            border: pw.Border(bottom: pw.BorderSide(color: borderCol, width: 1)),
+            border:
+                pw.Border(bottom: pw.BorderSide(color: borderCol, width: 1)),
           ),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -19009,7 +19462,10 @@ class _KitchenVarianceSectionState
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text('FAMOUS GATE HOTELS',
-                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: primary)),
+                      style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: primary)),
                   pw.Text('Daily Controls & Kitchen Variance Audit Report',
                       style: const pw.TextStyle(fontSize: 11, color: textDark)),
                 ],
@@ -19017,8 +19473,11 @@ class _KitchenVarianceSectionState
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Branch: Kyogong', style: const pw.TextStyle(fontSize: 10, color: textDark)),
-                  pw.Text('Generated: $nowStr', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  pw.Text('Branch: Kyogong',
+                      style: const pw.TextStyle(fontSize: 10, color: textDark)),
+                  pw.Text('Generated: $nowStr',
+                      style: const pw.TextStyle(
+                          fontSize: 9, color: PdfColors.grey700)),
                 ],
               ),
             ],
@@ -19036,17 +19495,27 @@ class _KitchenVarianceSectionState
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
                 _pdfKpiTile('Total Shifts', '${shifts.length}'),
-                _pdfKpiTile('With Variance', '${summary['shifts_with_variance'] ?? 0}'),
-                _pdfKpiTile('Expected Cost', _money(_num(summary['total_expected_cost']))),
-                _pdfKpiTile('Actual Cost', _money(_num(summary['total_actual_cost']))),
-                _pdfKpiTile('Shortage Loss', _money(_num(summary['total_unfavorable_variance'])), color: PdfColors.red900),
-                _pdfKpiTile('Surplus Gain', _money(_num(summary['total_favorable_variance'])), color: PdfColors.green900),
+                _pdfKpiTile(
+                    'With Variance', '${summary['shifts_with_variance'] ?? 0}'),
+                _pdfKpiTile('Expected Cost',
+                    _money(_num(summary['total_expected_cost']))),
+                _pdfKpiTile(
+                    'Actual Cost', _money(_num(summary['total_actual_cost']))),
+                _pdfKpiTile('Shortage Loss',
+                    _money(_num(summary['total_unfavorable_variance'])),
+                    color: PdfColors.red900),
+                _pdfKpiTile('Surplus Gain',
+                    _money(_num(summary['total_favorable_variance'])),
+                    color: PdfColors.green900),
               ],
             ),
           ),
           pw.SizedBox(height: 16),
           pw.Text('Shift Variance Breakdown',
-              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: primary)),
+              style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primary)),
           pw.SizedBox(height: 6),
           pw.TableHelper.fromTextArray(
             headers: [
@@ -19071,28 +19540,50 @@ class _KitchenVarianceSectionState
                 '$idx',
                 '${s['shift_number'] ?? '—'}',
                 '${s['shift_date'] ?? '—'}',
-                (s['sub_shift_type'] ?? s['shift_type'] ?? '').toString().toUpperCase(),
+                (s['sub_shift_type'] ?? s['shift_type'] ?? '')
+                    .toString()
+                    .toUpperCase(),
                 '${s['store_keeper']?['first_name'] ?? '—'}',
                 '${s['status'] ?? 'OPEN'}'.toUpperCase(),
                 '${_num(s['total_pos_sales_qty']).toInt()} pcs',
                 _money(_num(s['total_expected_cost'])),
                 _money(_num(s['total_actual_cost'])),
                 '${varCost < 0 ? '-' : '+'}${_money(varCost.abs())}',
-                lc != null ? '${(lc['liability_action'] ?? '').toUpperCase()}' : (varCost.abs() > 0.01 ? 'PENDING' : 'BALANCED'),
+                lc != null
+                    ? '${(lc['liability_action'] ?? '').toUpperCase()}'
+                    : (varCost.abs() > 0.01 ? 'PENDING' : 'BALANCED'),
               ];
             }).toList(),
-            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerStyle: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white),
             headerDecoration: pw.BoxDecoration(color: primary),
             cellStyle: const pw.TextStyle(fontSize: 8.5),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           ),
           if (topItems.isNotEmpty) ...[
             pw.SizedBox(height: 16),
             pw.Text('Top Discrepancy Items (Across All Controlled Shifts)',
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: primary)),
+                style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                    color: primary)),
             pw.SizedBox(height: 6),
             pw.TableHelper.fromTextArray(
-              headers: ['#', 'Item Name', 'SKU', 'Unit', 'Shifts', 'Expected Qty', 'Actual Qty', 'Variance Qty', 'Variance Cost', 'Status'],
+              headers: [
+                '#',
+                'Item Name',
+                'SKU',
+                'Unit',
+                'Shifts',
+                'Expected Qty',
+                'Actual Qty',
+                'Variance Qty',
+                'Variance Cost',
+                'Status'
+              ],
               data: topItems.take(15).toList().asMap().entries.map((entry) {
                 final idx = entry.key + 1;
                 final it = entry.value;
@@ -19110,10 +19601,15 @@ class _KitchenVarianceSectionState
                   vCost < 0 ? 'SHORTAGE' : 'SURPLUS',
                 ];
               }).toList(),
-              headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFF2A5298)),
+              headerStyle: pw.TextStyle(
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white),
+              headerDecoration:
+                  pw.BoxDecoration(color: PdfColor.fromInt(0xFF2A5298)),
               cellStyle: const pw.TextStyle(fontSize: 8.5),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+              cellPadding:
+                  const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
             ),
           ],
           pw.SizedBox(height: 24),
@@ -19123,21 +19619,27 @@ class _KitchenVarianceSectionState
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Prepared By: Branch Accountant', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Prepared By: Branch Accountant',
+                      style: const pw.TextStyle(fontSize: 9)),
                   pw.SizedBox(height: 20),
                   pw.Container(width: 180, height: 1, color: PdfColors.grey600),
                   pw.SizedBox(height: 4),
-                  pw.Text('Signature & Date', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                  pw.Text('Signature & Date',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
                 ],
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Approved By: Internal Auditor / GM', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Approved By: Internal Auditor / GM',
+                      style: const pw.TextStyle(fontSize: 9)),
                   pw.SizedBox(height: 20),
                   pw.Container(width: 180, height: 1, color: PdfColors.grey600),
                   pw.SizedBox(height: 4),
-                  pw.Text('Signature & Date', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                  pw.Text('Signature & Date',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
                 ],
               ),
             ],
@@ -19155,9 +19657,14 @@ class _KitchenVarianceSectionState
   static pw.Widget _pdfKpiTile(String label, String value, {PdfColor? color}) {
     return pw.Column(
       children: [
-        pw.Text(label, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+        pw.Text(label,
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
         pw.SizedBox(height: 2),
-        pw.Text(value, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: color ?? PdfColors.black)),
+        pw.Text(value,
+            style: pw.TextStyle(
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+                color: color ?? PdfColors.black)),
       ],
     );
   }
@@ -19225,10 +19732,13 @@ class _KitchenVarianceReviewDialogState
   List<Map<String, dynamic>> get _detailBranchStaff {
     final raw = widget.detail['branch_staff'];
     if (raw is List) {
-      return raw.map((e) {
-        if (e is Map) return Map<String, dynamic>.from(e);
-        return <String, dynamic>{};
-      }).where((m) => m.isNotEmpty).toList();
+      return raw
+          .map((e) {
+            if (e is Map) return Map<String, dynamic>.from(e);
+            return <String, dynamic>{};
+          })
+          .where((m) => m.isNotEmpty)
+          .toList();
     }
     return [];
   }
@@ -19236,10 +19746,13 @@ class _KitchenVarianceReviewDialogState
   List<Map<String, dynamic>> get _shiftStaff {
     final raw = widget.detail['shift_staff'];
     if (raw is List) {
-      return raw.map((e) {
-        if (e is Map) return Map<String, dynamic>.from(e);
-        return <String, dynamic>{};
-      }).where((m) => m.isNotEmpty).toList();
+      return raw
+          .map((e) {
+            if (e is Map) return Map<String, dynamic>.from(e);
+            return <String, dynamic>{};
+          })
+          .where((m) => m.isNotEmpty)
+          .toList();
     }
     return [];
   }
@@ -19260,9 +19773,8 @@ class _KitchenVarianceReviewDialogState
       }
     }
     final list = unique.values.toList();
-    list.sort((a, b) => _staffName(a)
-        .toLowerCase()
-        .compareTo(_staffName(b).toLowerCase()));
+    list.sort((a, b) =>
+        _staffName(a).toLowerCase().compareTo(_staffName(b).toLowerCase()));
     return list;
   }
 
@@ -19277,7 +19789,8 @@ class _KitchenVarianceReviewDialogState
 
   String _staffRole(Map<String, dynamic>? s) {
     if (s == null) return '';
-    final role = '${s['role'] ?? s['position'] ?? s['department'] ?? ''}'.trim();
+    final role =
+        '${s['role'] ?? s['position'] ?? s['department'] ?? ''}'.trim();
     return role.replaceAll('_', ' ').toUpperCase();
   }
 
@@ -19317,8 +19830,7 @@ class _KitchenVarianceReviewDialogState
       final repo = ref.read(branchAccountantRepositoryProvider);
       final list = await repo.getBranchStaff();
       if (mounted && list.isNotEmpty) {
-        final safeList =
-            list.map((e) => Map<String, dynamic>.from(e)).toList();
+        final safeList = list.map((e) => Map<String, dynamic>.from(e)).toList();
         setState(() {
           _branchStaff = safeList;
           _loadingStaff = false;
@@ -19345,8 +19857,12 @@ class _KitchenVarianceReviewDialogState
             final name = _staffName(s).toLowerCase();
             final role = _staffRole(s).toLowerCase();
             final dept = '${s['department'] ?? ''}'.toLowerCase();
-            final idStr = '${s['id'] ?? ''} ${s['national_id'] ?? ''}'.toLowerCase();
-            return name.contains(q) || role.contains(q) || dept.contains(q) || idStr.contains(q);
+            final idStr =
+                '${s['id'] ?? ''} ${s['national_id'] ?? ''}'.toLowerCase();
+            return name.contains(q) ||
+                role.contains(q) ||
+                dept.contains(q) ||
+                idStr.contains(q);
           }).toList();
 
           return GestureDetector(
@@ -19359,7 +19875,8 @@ class _KitchenVarianceReviewDialogState
                   behavior: HitTestBehavior.opaque,
                   onTap: () {},
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 580, maxHeight: 600),
+                    constraints:
+                        const BoxConstraints(maxWidth: 580, maxHeight: 600),
                     child: Material(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -19375,10 +19892,13 @@ class _KitchenVarianceReviewDialogState
                               children: [
                                 const Row(
                                   children: [
-                                    Icon(Icons.people_alt, color: Color(0xFF2563EB)),
+                                    Icon(Icons.people_alt,
+                                        color: Color(0xFF2563EB)),
                                     SizedBox(width: 8),
                                     Text('Select Branch Staff Member',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700)),
                                   ],
                                 ),
                                 IconButton(
@@ -19393,17 +19913,20 @@ class _KitchenVarianceReviewDialogState
                               autofocus: true,
                               decoration: InputDecoration(
                                 prefixIcon: const Icon(Icons.search),
-                                hintText: 'Search by name, role (waiter, chef...), department...',
+                                hintText:
+                                    'Search by name, role (waiter, chef...), department...',
                                 isDense: true,
                                 border: const OutlineInputBorder(),
                                 suffixIcon: query.isNotEmpty
                                     ? IconButton(
                                         icon: const Icon(Icons.clear, size: 18),
-                                        onPressed: () => setDlgState(() => query = ''),
+                                        onPressed: () =>
+                                            setDlgState(() => query = ''),
                                       )
                                     : null,
                               ),
-                              onChanged: (v) => setDlgState(() => query = v.trim()),
+                              onChanged: (v) =>
+                                  setDlgState(() => query = v.trim()),
                             ),
                             const SizedBox(height: 10),
                             Row(
@@ -19411,7 +19934,10 @@ class _KitchenVarianceReviewDialogState
                               children: [
                                 Text(
                                   'Showing ${filtered.length} of ${_allSelectableStaff.length} branch staff',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black54),
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black54),
                                 ),
                                 if (_loadingStaff)
                                   const Row(
@@ -19419,10 +19945,14 @@ class _KitchenVarianceReviewDialogState
                                       SizedBox(
                                         width: 12,
                                         height: 12,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
                                       ),
                                       SizedBox(width: 6),
-                                      Text('Updating...', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      Text('Updating...',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey)),
                                     ],
                                   ),
                               ],
@@ -19433,48 +19963,74 @@ class _KitchenVarianceReviewDialogState
                               child: filtered.isEmpty
                                   ? Center(
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.search_off, size: 40, color: Colors.grey.shade400),
+                                          Icon(Icons.search_off,
+                                              size: 40,
+                                              color: Colors.grey.shade400),
                                           const SizedBox(height: 8),
-                                          Text(query.isEmpty ? 'No staff found in this branch' : 'No staff matching "$query"'),
+                                          Text(query.isEmpty
+                                              ? 'No staff found in this branch'
+                                              : 'No staff matching "$query"'),
                                         ],
                                       ),
                                     )
                                   : ListView.separated(
                                       itemCount: filtered.length,
-                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      separatorBuilder: (_, __) =>
+                                          const Divider(height: 1),
                                       itemBuilder: (context, i) {
                                         final s = filtered[i];
                                         final role = _staffRole(s);
-                                        final dept = '${s['department'] ?? ''}'.trim().toUpperCase();
+                                        final dept = '${s['department'] ?? ''}'
+                                            .trim()
+                                            .toUpperCase();
                                         return ListTile(
                                           dense: true,
                                           leading: CircleAvatar(
                                             radius: 16,
-                                            backgroundColor: const Color(0xFFEFF6FF),
-                                            child: const Icon(Icons.person, size: 18, color: Color(0xFF2563EB)),
+                                            backgroundColor:
+                                                const Color(0xFFEFF6FF),
+                                            child: const Icon(Icons.person,
+                                                size: 18,
+                                                color: Color(0xFF2563EB)),
                                           ),
                                           title: Text(_staffName(s),
                                               style: const TextStyle(
-                                                  fontSize: 14, fontWeight: FontWeight.w600)),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600)),
                                           subtitle: Text(
-                                            role.isNotEmpty && dept.isNotEmpty && role != dept
+                                            role.isNotEmpty &&
+                                                    dept.isNotEmpty &&
+                                                    role != dept
                                                 ? '$role • $dept'
-                                                : (role.isNotEmpty ? role : dept),
-                                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                : (role.isNotEmpty
+                                                    ? role
+                                                    : dept),
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.black54),
                                           ),
                                           trailing: ElevatedButton(
-                                            onPressed: () => Navigator.pop(dialogCtx, s),
+                                            onPressed: () =>
+                                                Navigator.pop(dialogCtx, s),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF2563EB),
+                                              backgroundColor:
+                                                  const Color(0xFF2563EB),
                                               foregroundColor: Colors.white,
-                                              visualDensity: VisualDensity.compact,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 4),
                                             ),
-                                            child: const Text('Select', style: TextStyle(fontSize: 12)),
+                                            child: const Text('Select',
+                                                style: TextStyle(fontSize: 12)),
                                           ),
-                                          onTap: () => Navigator.pop(dialogCtx, s),
+                                          onTap: () =>
+                                              Navigator.pop(dialogCtx, s),
                                         );
                                       },
                                     ),
@@ -19520,9 +20076,8 @@ class _KitchenVarianceReviewDialogState
     final rawStockTake = widget.detail['stock_take'];
     final stockTake = (rawStockTake is List)
         ? rawStockTake
-            .map((e) => e is Map
-                ? Map<String, dynamic>.from(e)
-                : <String, dynamic>{})
+            .map((e) =>
+                e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{})
             .where((m) => m.isNotEmpty)
             .toList()
         : <Map<String, dynamic>>[];
@@ -19557,7 +20112,8 @@ class _KitchenVarianceReviewDialogState
                             children: [
                               Text('${shift['shift_number'] ?? 'Shift'}',
                                   style: const TextStyle(
-                                      fontSize: 18, fontWeight: FontWeight.w700)),
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700)),
                               Text(
                                   '${shift['shift_date'] ?? ''}  •  Variance cost ${_money(_totalVariance)}',
                                   style: const TextStyle(color: Colors.grey)),
@@ -19578,19 +20134,23 @@ class _KitchenVarianceReviewDialogState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Variance Breakdown',
-                                    style: TextStyle(fontWeight: FontWeight.w600)),
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 6),
                                 ...stockTake.map((st) {
                                   final variance = _num(st['variance']);
-                                  if (variance == 0) return const SizedBox.shrink();
+                                  if (variance == 0)
+                                    return const SizedBox.shrink();
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 2),
                                     child: Row(
                                       children: [
                                         Expanded(
                                             child: Text(
                                                 '${st['item_name'] ?? st['item_sku']}',
-                                                style: const TextStyle(fontSize: 13))),
+                                                style: const TextStyle(
+                                                    fontSize: 13))),
                                         Text(
                                           '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(2)}  (${_money(_num(st['variance_value']).abs())})',
                                           style: TextStyle(
@@ -19607,23 +20167,25 @@ class _KitchenVarianceReviewDialogState
                                 }),
                                 const Divider(height: 20),
                                 const Text('Liability Decision',
-                                    style: TextStyle(fontWeight: FontWeight.w600)),
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 8),
                                 _liabilityRadio('approve_only',
                                     'Approve only (no charge to staff)'),
-                                _liabilityRadio(
-                                    'single_staff', 'Charge a single staff member'),
+                                _liabilityRadio('single_staff',
+                                    'Charge a single staff member'),
                                 if (_liabilityAction == 'single_staff')
                                   _singleStaffPicker(),
-                                _liabilityRadio(
-                                    'custom_split', 'Split liability (custom amounts)'),
+                                _liabilityRadio('custom_split',
+                                    'Split liability (custom amounts)'),
                                 if (_liabilityAction == 'custom_split')
                                   _customSplitInputs(),
-                                _liabilityRadio(
-                                    'split_shift', 'Split equally across whole shift'),
+                                _liabilityRadio('split_shift',
+                                    'Split equally across whole shift'),
                                 if (_liabilityAction == 'split_shift')
                                   _splitShiftPreview(),
-                                _liabilityRadio('write_off', 'Write off (no recovery)'),
+                                _liabilityRadio(
+                                    'write_off', 'Write off (no recovery)'),
                                 if (_liabilityAction == 'write_off')
                                   Padding(
                                     padding: const EdgeInsets.only(
@@ -19631,7 +20193,8 @@ class _KitchenVarianceReviewDialogState
                                     child: TextField(
                                       controller: _writeOffReasonCtrl,
                                       decoration: const InputDecoration(
-                                        labelText: 'Write-off reason (required)',
+                                        labelText:
+                                            'Write-off reason (required)',
                                         border: OutlineInputBorder(),
                                         isDense: true,
                                       ),
@@ -19658,21 +20221,26 @@ class _KitchenVarianceReviewDialogState
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: _posting ? null : _penalize,
-                              icon: const Icon(Icons.gavel_rounded, color: Color(0xFFB91C1C)),
+                              icon: const Icon(Icons.gavel_rounded,
+                                  color: Color(0xFFB91C1C)),
                               label: const Text(
                                 'Penalize Staff',
-                                style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700),
+                                style: TextStyle(
+                                    color: Color(0xFFB91C1C),
+                                    fontWeight: FontWeight.w700),
                               ),
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFB91C1C)),
+                                side:
+                                    const BorderSide(color: Color(0xFFB91C1C)),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: FilledButton.icon(
-                              onPressed:
-                                  _posting ? null : () => _submit(approved: true),
+                              onPressed: _posting
+                                  ? null
+                                  : () => _submit(approved: true),
                               icon: _posting
                                   ? const SizedBox(
                                       width: 16,
@@ -19680,9 +20248,10 @@ class _KitchenVarianceReviewDialogState
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2, color: Colors.white))
                                   : const Icon(Icons.check_circle_outline),
-                              label: Text(_posting ? 'Submitting...' : 'Approve'),
-                              style:
-                                  FilledButton.styleFrom(backgroundColor: Colors.green),
+                              label:
+                                  Text(_posting ? 'Submitting...' : 'Approve'),
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.green),
                             ),
                           ),
                         ],
@@ -19787,15 +20356,18 @@ class _KitchenVarianceReviewDialogState
               onTap: _chooseStaffFromList,
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                  border:
+                      Border.all(color: const Color(0xFF3B82F6), width: 1.5),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.person_search, color: Color(0xFF2563EB), size: 22),
+                    const Icon(Icons.person_search,
+                        color: Color(0xFF2563EB), size: 22),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -19977,8 +20549,8 @@ class _KitchenVarianceReviewDialogState
                       width: 120,
                       child: TextField(
                         controller: _splitCtrls[key],
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
                             prefixText: 'KES ',
@@ -20004,7 +20576,6 @@ class _KitchenVarianceReviewDialogState
                 ),
               );
             }),
-
           const SizedBox(height: 6),
           Row(
             children: [
@@ -20017,8 +20588,8 @@ class _KitchenVarianceReviewDialogState
                         .map((s) => '${s['id'] ?? s['user_id']}')
                         .toSet();
                     final available = _allSelectableStaff
-                        .where((s) =>
-                            !existingKeys.contains('${s['id'] ?? s['user_id']}'))
+                        .where((s) => !existingKeys
+                            .contains('${s['id'] ?? s['user_id']}'))
                         .toList();
                     if (q.isEmpty) {
                       return available.take(15);
@@ -20027,7 +20598,9 @@ class _KitchenVarianceReviewDialogState
                       final name = _staffName(s).toLowerCase();
                       final role = _staffRole(s).toLowerCase();
                       final dept = '${s['department'] ?? ''}'.toLowerCase();
-                      return name.contains(q) || role.contains(q) || dept.contains(q);
+                      return name.contains(q) ||
+                          role.contains(q) ||
+                          dept.contains(q);
                     }).take(20);
                   },
                   onSelected: (s) {
@@ -20066,13 +20639,14 @@ class _KitchenVarianceReviewDialogState
                         elevation: 6,
                         borderRadius: BorderRadius.circular(8),
                         child: ConstrainedBox(
-                          constraints:
-                              const BoxConstraints(maxHeight: 200, maxWidth: 450),
+                          constraints: const BoxConstraints(
+                              maxHeight: 200, maxWidth: 450),
                           child: ListView.separated(
                             padding: EdgeInsets.zero,
                             shrinkWrap: true,
                             itemCount: options.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, i) {
                               final s = options.elementAt(i);
                               return ListTile(
@@ -20085,7 +20659,8 @@ class _KitchenVarianceReviewDialogState
                                 ),
                                 title: Text(_staffName(s),
                                     style: const TextStyle(
-                                        fontSize: 12, fontWeight: FontWeight.w600)),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600)),
                                 subtitle: Text(_staffRole(s),
                                     style: const TextStyle(
                                         fontSize: 10, color: Colors.grey)),
@@ -20119,7 +20694,6 @@ class _KitchenVarianceReviewDialogState
               ),
             ],
           ),
-
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -20199,8 +20773,7 @@ class _KitchenVarianceReviewDialogState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: _shiftStaff
-            .map((st) => Text(
-                '${_staffFullLabel(st)} — ${_money(each)}',
+            .map((st) => Text('${_staffFullLabel(st)} — ${_money(each)}',
                 style: const TextStyle(fontSize: 13)))
             .toList(),
       ),
@@ -20274,20 +20847,18 @@ class _KitchenVarianceReviewDialogState
             return;
           }
           final each = _totalVariance / _shiftStaff.length;
-          allocations = _shiftStaff
-              .map((st) {
-                final key = '${st['id'] ?? st['user_id']}';
-                final staffName = _staffName(st);
-                return {
-                  'staff_profile_id': st['id'] ?? key,
-                  'staff_id': st['id'] ?? key,
-                  'user_id': st['user_id'] ?? st['id'] ?? key,
-                  'amount': each,
-                  'description':
-                      'Kitchen Variance Credit Bill — equal shift split — ${(widget.detail['shift'] as Map?)?['shift_number'] ?? ''}${staffName.isNotEmpty ? ' ($staffName)' : ''}',
-                };
-              })
-              .toList();
+          allocations = _shiftStaff.map((st) {
+            final key = '${st['id'] ?? st['user_id']}';
+            final staffName = _staffName(st);
+            return {
+              'staff_profile_id': st['id'] ?? key,
+              'staff_id': st['id'] ?? key,
+              'user_id': st['user_id'] ?? st['id'] ?? key,
+              'amount': each,
+              'description':
+                  'Kitchen Variance Credit Bill — equal shift split — ${(widget.detail['shift'] as Map?)?['shift_number'] ?? ''}${staffName.isNotEmpty ? ' ($staffName)' : ''}',
+            };
+          }).toList();
           break;
         case 'write_off':
           writeOffReason = _writeOffReasonCtrl.text.trim();
@@ -23484,22 +24055,76 @@ class _RefreshButton extends StatelessWidget {
   }
 }
 
-class _DateField extends StatelessWidget {
+/// Date filter field used across the accountant dashboard's report sections.
+///
+/// Was previously a `TextFormField(initialValue: value)` with a purely
+/// decorative calendar icon and no picker wired up — `initialValue` is only
+/// applied by Flutter on the field's very first build, so once the internal
+/// controller exists it never reflects a later `value` change coming from the
+/// parent, and the calendar icon did nothing when tapped. Reporting on
+/// "date filtering doesn't work" traced back to this: users tapping the icon
+/// (the obvious affordance) got no picker, and any external correction to
+/// `value` (e.g. a validity clamp) silently failed to show. Now a stateful
+/// widget with its own controller that resyncs via [didUpdateWidget] whenever
+/// `value` changes for a reason other than this field's own edits, and the
+/// whole field opens a real [showDatePicker] on tap.
+class _DateField extends StatefulWidget {
   const _DateField({required this.value, required this.onChanged});
   final String value;
   final ValueChanged<String> onChanged;
+
+  @override
+  State<_DateField> createState() => _DateFieldState();
+}
+
+class _DateFieldState extends State<_DateField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(covariant _DateField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value && widget.value != _controller.text) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final parsed = DateTime.tryParse(_controller.text) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: parsed,
+      firstDate: DateTime(2023),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    final formatted = _date(picked);
+    _controller.text = formatted;
+    widget.onChanged(formatted);
+  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 160,
       child: TextFormField(
-        initialValue: value,
-        decoration: const InputDecoration(
-          prefixIcon: Icon(Icons.calendar_today, size: 18),
+        controller: _controller,
+        decoration: InputDecoration(
+          prefixIcon: IconButton(
+            icon: const Icon(Icons.calendar_today, size: 18),
+            tooltip: 'Pick a date',
+            onPressed: _pickDate,
+          ),
           hintText: 'YYYY-MM-DD',
         ),
-        onFieldSubmitted: onChanged,
+        onTap: _pickDate,
+        readOnly: true,
       ),
     );
   }
@@ -25826,9 +26451,9 @@ class _BranchStaffManagementSectionState
         matchingUser = userByStaffId[sId];
       } else if (uId.isNotEmpty) {
         matchingUser = _users.cast<Map<String, dynamic>?>().firstWhere(
-          (u) => '${u?['id'] ?? ''}'.trim() == uId,
-          orElse: () => null,
-        );
+              (u) => '${u?['id'] ?? ''}'.trim() == uId,
+              orElse: () => null,
+            );
       } else if (sEmail.isNotEmpty && userByEmail.containsKey(sEmail)) {
         matchingUser = userByEmail[sEmail];
       }
@@ -25843,8 +26468,12 @@ class _BranchStaffManagementSectionState
         '_staff_profile': s,
         '_user_account': matchingUser,
         'has_user': matchingUser != null,
-        'user_status': matchingUser?['status'] ?? s['status'] ?? s['employment_status'] ?? 'active',
-        'effective_role': matchingUser?['role'] ?? s['position'] ?? s['role'] ?? 'employee',
+        'user_status': matchingUser?['status'] ??
+            s['status'] ??
+            s['employment_status'] ??
+            'active',
+        'effective_role':
+            matchingUser?['role'] ?? s['position'] ?? s['role'] ?? 'employee',
         'effective_email': matchingUser?['email'] ?? s['email'] ?? '',
       });
     }
@@ -25890,11 +26519,15 @@ class _BranchStaffManagementSectionState
 
       // Search query
       if (q.isNotEmpty) {
-        final name = '${item['first_name'] ?? ''} ${item['last_name'] ?? ''} ${item['name'] ?? ''}'.toLowerCase();
+        final name =
+            '${item['first_name'] ?? ''} ${item['last_name'] ?? ''} ${item['name'] ?? ''}'
+                .toLowerCase();
         final dept = '${item['department'] ?? ''}'.toLowerCase();
-        final phone = '${item['phone'] ?? item['phone_number'] ?? ''}'.toLowerCase();
+        final phone =
+            '${item['phone'] ?? item['phone_number'] ?? ''}'.toLowerCase();
         final email = '${item['effective_email'] ?? ''}'.toLowerCase();
-        final empId = '${item['employee_number'] ?? item['employee_id'] ?? ''}'.toLowerCase();
+        final empId = '${item['employee_number'] ?? item['employee_id'] ?? ''}'
+            .toLowerCase();
         final match = name.contains(q) ||
             role.contains(q) ||
             dept.contains(q) ||
@@ -25996,8 +26629,9 @@ class _BranchStaffManagementSectionState
       selectedStatus = 'active';
     }
 
-    String? selectedStaffProfileId =
-        staffProfile == null ? null : '${staffProfile['id'] ?? staffProfile['staff_id'] ?? ''}';
+    String? selectedStaffProfileId = staffProfile == null
+        ? null
+        : '${staffProfile['id'] ?? staffProfile['staff_id'] ?? ''}';
     Map<String, dynamic>? selectedStaff = staffProfile;
 
     bool obscurePass = true;
@@ -26039,7 +26673,8 @@ class _BranchStaffManagementSectionState
                   // Branch Badge
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(8),
@@ -26047,12 +26682,16 @@ class _BranchStaffManagementSectionState
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.business_outlined, size: 16, color: Color(0xFF475569)),
+                        const Icon(Icons.business_outlined,
+                            size: 16, color: Color(0xFF475569)),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
                             'Branch Scoped: User access is restricted to this branch only.',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF334155)),
                           ),
                         ),
                       ],
@@ -26072,34 +26711,52 @@ class _BranchStaffManagementSectionState
                           '${s['first_name'] ?? ''} ${s['last_name'] ?? ''} (${s['department'] ?? s['position'] ?? 'Staff'})',
                       optionsBuilder: (textEditingValue) {
                         final q = textEditingValue.text.trim().toLowerCase();
+                        // Blank query -> no suggestions at all. This field is
+                        // "Optional" and used from the generic "Add User /
+                        // Login" button with nothing pre-linked — showing all
+                        // ~98 staff the instant it's focused (previously
+                        // `if (q.isEmpty) return true`) looked like the field
+                        // had auto-filled/pre-selected someone instead of
+                        // being a blank box waiting to be searched.
+                        if (q.isEmpty) return const Iterable.empty();
                         return _staff.where((s) {
-                          if (q.isEmpty) return true;
-                          final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.toLowerCase();
+                          final name =
+                              '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                  .toLowerCase();
                           final dept = '${s['department'] ?? ''}'.toLowerCase();
-                          final pos = '${s['position'] ?? s['role'] ?? ''}'.toLowerCase();
-                          return name.contains(q) || dept.contains(q) || pos.contains(q);
+                          final pos = '${s['position'] ?? s['role'] ?? ''}'
+                              .toLowerCase();
+                          return name.contains(q) ||
+                              dept.contains(q) ||
+                              pos.contains(q);
                         }).take(20);
                       },
                       onSelected: (s) {
                         setDlgState(() {
                           selectedStaff = s;
-                          selectedStaffProfileId = '${s['id'] ?? s['staff_id'] ?? ''}';
+                          selectedStaffProfileId =
+                              '${s['id'] ?? s['staff_id'] ?? ''}';
                           if (firstNameCtrl.text.trim().isEmpty) {
                             firstNameCtrl.text = '${s['first_name'] ?? ''}';
                           }
                           if (lastNameCtrl.text.trim().isEmpty) {
                             lastNameCtrl.text = '${s['last_name'] ?? ''}';
                           }
-                          if (emailCtrl.text.trim().isEmpty && s['email'] != null) {
+                          if (emailCtrl.text.trim().isEmpty &&
+                              s['email'] != null) {
                             emailCtrl.text = '${s['email']}';
                           }
-                          if (phoneCtrl.text.trim().isEmpty && s['phone'] != null) {
+                          if (phoneCtrl.text.trim().isEmpty &&
+                              s['phone'] != null) {
                             phoneCtrl.text = '${s['phone']}';
                           }
-                          if (departmentCtrl.text.trim().isEmpty && s['department'] != null) {
+                          if (departmentCtrl.text.trim().isEmpty &&
+                              s['department'] != null) {
                             departmentCtrl.text = '${s['department']}';
                           }
-                          final pos = (s['position'] ?? s['role'] ?? '').toString().toLowerCase();
+                          final pos = (s['position'] ?? s['role'] ?? '')
+                              .toString()
+                              .toLowerCase();
                           if (_roles.contains(pos)) {
                             selectedRole = pos;
                           }
@@ -26182,8 +26839,11 @@ class _BranchStaffManagementSectionState
                         prefixIcon: const Icon(Icons.lock_outlined),
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
-                          icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () => setDlgState(() => obscurePass = !obscurePass),
+                          icon: Icon(obscurePass
+                              ? Icons.visibility_off
+                              : Icons.visibility),
+                          onPressed: () =>
+                              setDlgState(() => obscurePass = !obscurePass),
                         ),
                       ),
                     ),
@@ -26196,19 +26856,26 @@ class _BranchStaffManagementSectionState
                       Expanded(
                         child: Autocomplete<String>(
                           initialValue: TextEditingValue(
-                            text: selectedRole.replaceAll('_', ' ').toUpperCase(),
+                            text:
+                                selectedRole.replaceAll('_', ' ').toUpperCase(),
                           ),
                           displayStringForOption: (r) =>
                               r.replaceAll('_', ' ').toUpperCase(),
                           optionsBuilder: (textEditingValue) {
-                            final q = textEditingValue.text.trim().toLowerCase().replaceAll(' ', '_');
+                            final q = textEditingValue.text
+                                .trim()
+                                .toLowerCase()
+                                .replaceAll(' ', '_');
                             if (q.isEmpty) {
                               return _roles;
                             }
                             return _roles.where((r) {
-                              final formatted = r.replaceAll('_', ' ').toLowerCase();
+                              final formatted =
+                                  r.replaceAll('_', ' ').toLowerCase();
                               return r.toLowerCase().contains(q) ||
-                                  formatted.contains(textEditingValue.text.trim().toLowerCase());
+                                  formatted.contains(textEditingValue.text
+                                      .trim()
+                                      .toLowerCase());
                             });
                           },
                           onSelected: (r) {
@@ -26223,7 +26890,8 @@ class _BranchStaffManagementSectionState
                               decoration: InputDecoration(
                                 labelText: 'Role / Access Level *',
                                 hintText: 'Search or select role…',
-                                prefixIcon: const Icon(Icons.manage_accounts_outlined),
+                                prefixIcon:
+                                    const Icon(Icons.manage_accounts_outlined),
                                 border: const OutlineInputBorder(),
                                 suffixIcon: IconButton(
                                   icon: const Icon(Icons.arrow_drop_down),
@@ -26235,7 +26903,10 @@ class _BranchStaffManagementSectionState
                                 ),
                               ),
                               onChanged: (val) {
-                                final normalized = val.trim().toLowerCase().replaceAll(' ', '_');
+                                final normalized = val
+                                    .trim()
+                                    .toLowerCase()
+                                    .replaceAll(' ', '_');
                                 if (_roles.contains(normalized)) {
                                   selectedRole = normalized;
                                 }
@@ -26251,16 +26922,20 @@ class _BranchStaffManagementSectionState
                                 color: Colors.white,
                                 child: Container(
                                   width: 250,
-                                  constraints: const BoxConstraints(maxHeight: 220),
+                                  constraints:
+                                      const BoxConstraints(maxHeight: 220),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    border: Border.all(
+                                        color: const Color(0xFFCBD5E1)),
                                   ),
                                   child: ListView.separated(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 4),
                                     shrinkWrap: true,
                                     itemCount: options.length,
-                                    separatorBuilder: (_, __) => const Divider(height: 1),
+                                    separatorBuilder: (_, __) =>
+                                        const Divider(height: 1),
                                     itemBuilder: (context, i) {
                                       final opt = options.elementAt(i);
                                       final isSelected = opt == selectedRole;
@@ -26268,10 +26943,13 @@ class _BranchStaffManagementSectionState
                                         dense: true,
                                         visualDensity: VisualDensity.compact,
                                         tileColor: isSelected
-                                            ? AppColors.kPrimary.withValues(alpha: 0.1)
+                                            ? AppColors.kPrimary
+                                                .withValues(alpha: 0.1)
                                             : null,
                                         title: Text(
-                                          opt.replaceAll('_', ' ').toUpperCase(),
+                                          opt
+                                              .replaceAll('_', ' ')
+                                              .toUpperCase(),
                                           style: TextStyle(
                                             fontSize: 12.5,
                                             fontWeight: isSelected
@@ -26302,11 +26980,15 @@ class _BranchStaffManagementSectionState
                             border: OutlineInputBorder(),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'active', child: Text('Active')),
-                            DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                            DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
+                            DropdownMenuItem(
+                                value: 'active', child: Text('Active')),
+                            DropdownMenuItem(
+                                value: 'inactive', child: Text('Inactive')),
+                            DropdownMenuItem(
+                                value: 'suspended', child: Text('Suspended')),
                           ],
-                          onChanged: (v) => setDlgState(() => selectedStatus = v ?? selectedStatus),
+                          onChanged: (v) => setDlgState(
+                              () => selectedStatus = v ?? selectedStatus),
                         ),
                       ),
                     ],
@@ -26320,8 +27002,11 @@ class _BranchStaffManagementSectionState
                         child: TextField(
                           controller: pinCtrl,
                           decoration: InputDecoration(
-                            labelText: requiresPosPinForRole(selectedRole) ? 'POS PIN *' : 'POS PIN',
-                            helperText: 'Format: R1234, M1234, E1234, N1234 or C1234',
+                            labelText: requiresPosPinForRole(selectedRole)
+                                ? 'POS PIN *'
+                                : 'POS PIN',
+                            helperText:
+                                'Format: R1234, M1234, E1234, N1234 or C1234',
                             prefixIcon: const Icon(Icons.pin_outlined),
                             border: const OutlineInputBorder(),
                           ),
@@ -26384,7 +27069,8 @@ class _BranchStaffManagementSectionState
                       if (!email.contains('@')) {
                         AppNotifier.showSnackBar(
                           context,
-                          const SnackBar(content: Text('Enter a valid email address')),
+                          const SnackBar(
+                              content: Text('Enter a valid email address')),
                         );
                         return;
                       }
@@ -26394,7 +27080,9 @@ class _BranchStaffManagementSectionState
                       if (firstName.isEmpty || lastName.isEmpty) {
                         AppNotifier.showSnackBar(
                           context,
-                          const SnackBar(content: Text('First and last names are required')),
+                          const SnackBar(
+                              content:
+                                  Text('First and last names are required')),
                         );
                         return;
                       }
@@ -26402,25 +27090,33 @@ class _BranchStaffManagementSectionState
                       if (!isEditing && passwordCtrl.text.length < 6) {
                         AppNotifier.showSnackBar(
                           context,
-                          const SnackBar(content: Text('Password must be at least 6 characters')),
+                          const SnackBar(
+                              content: Text(
+                                  'Password must be at least 6 characters')),
                         );
                         return;
                       }
 
                       final pinRaw = pinCtrl.text.trim().toUpperCase();
-                      final posPinRequired = requiresPosPinForRole(selectedRole);
+                      final posPinRequired =
+                          requiresPosPinForRole(selectedRole);
                       if (posPinRequired && pinRaw.isEmpty) {
                         AppNotifier.showSnackBar(
                           context,
-                          SnackBar(content: Text('POS PIN is required for ${selectedRole.replaceAll('_', ' ')} logins')),
+                          SnackBar(
+                              content: Text(
+                                  'POS PIN is required for ${selectedRole.replaceAll('_', ' ')} logins')),
                         );
                         return;
                       }
                       if (pinRaw.isNotEmpty &&
-                          (pinRaw.length != 5 || !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw))) {
+                          (pinRaw.length != 5 ||
+                              !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw))) {
                         AppNotifier.showSnackBar(
                           context,
-                          const SnackBar(content: Text('POS PIN must start with R, M, N, C, or E followed by 4 digits (e.g. R1234)')),
+                          const SnackBar(
+                              content: Text(
+                                  'POS PIN must start with R, M, N, C, or E followed by 4 digits (e.g. R1234)')),
                         );
                         return;
                       }
@@ -26428,21 +27124,30 @@ class _BranchStaffManagementSectionState
                       setDlgState(() => saving = true);
                       try {
                         // If no existing staff profile was linked, auto-create one first for seamless creation
-                        if (!isEditing && (selectedStaffProfileId == null || selectedStaffProfileId!.isEmpty)) {
+                        if (!isEditing &&
+                            (selectedStaffProfileId == null ||
+                                selectedStaffProfileId!.isEmpty)) {
                           final dio = ref.read(dioProvider);
                           final staffRes = await dio.post('/staff', data: {
                             'first_name': firstName,
                             'last_name': lastName,
                             'email': email,
-                            if (phoneCtrl.text.trim().isNotEmpty) 'phone': phoneCtrl.text.trim(),
-                            if (departmentCtrl.text.trim().isNotEmpty) 'department': departmentCtrl.text.trim(),
+                            if (phoneCtrl.text.trim().isNotEmpty)
+                              'phone': phoneCtrl.text.trim(),
+                            if (departmentCtrl.text.trim().isNotEmpty)
+                              'department': departmentCtrl.text.trim(),
                             'position': selectedRole,
                             if (branchIdInt != null) 'branch_id': branchIdInt,
-                            if (employeeCtrl.text.trim().isNotEmpty) 'id_number': employeeCtrl.text.trim(),
+                            if (employeeCtrl.text.trim().isNotEmpty)
+                              'id_number': employeeCtrl.text.trim(),
                           });
                           final dynamic resData = staffRes.data;
-                          final dynamic innerData = resData is Map ? resData['data'] : null;
-                          final dynamic staffObj = innerData is Map && innerData['staff'] != null ? innerData['staff'] : innerData;
+                          final dynamic innerData =
+                              resData is Map ? resData['data'] : null;
+                          final dynamic staffObj =
+                              innerData is Map && innerData['staff'] != null
+                                  ? innerData['staff']
+                                  : innerData;
                           if (staffObj is Map && staffObj['id'] != null) {
                             selectedStaffProfileId = '${staffObj['id']}';
                           }
@@ -26456,11 +27161,18 @@ class _BranchStaffManagementSectionState
                           'role': selectedRole,
                           'status': selectedStatus,
                           'branch_id': branchIdInt,
-                          'phone_number': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                          'employee_id': employeeCtrl.text.trim().isEmpty ? null : employeeCtrl.text.trim(),
-                          'department': departmentCtrl.text.trim().isEmpty ? null : departmentCtrl.text.trim(),
+                          'phone_number': phoneCtrl.text.trim().isEmpty
+                              ? null
+                              : phoneCtrl.text.trim(),
+                          'employee_id': employeeCtrl.text.trim().isEmpty
+                              ? null
+                              : employeeCtrl.text.trim(),
+                          'department': departmentCtrl.text.trim().isEmpty
+                              ? null
+                              : departmentCtrl.text.trim(),
                           'pos_pin': pinRaw.isEmpty ? null : pinRaw,
-                          if (selectedStaffProfileId != null && selectedStaffProfileId!.isNotEmpty)
+                          if (selectedStaffProfileId != null &&
+                              selectedStaffProfileId!.isNotEmpty)
                             'staff_profile_id': selectedStaffProfileId,
                           if (!isEditing) 'password': passwordCtrl.text,
                         };
@@ -26478,7 +27190,9 @@ class _BranchStaffManagementSectionState
                           AppNotifier.showSnackBar(
                             context,
                             SnackBar(
-                              content: Text(isEditing ? 'User updated successfully' : 'User created successfully'),
+                              content: Text(isEditing
+                                  ? 'User updated successfully'
+                                  : 'User created successfully'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -26490,7 +27204,9 @@ class _BranchStaffManagementSectionState
                         final msg = apiErrorMessage(e);
                         AppNotifier.showSnackBar(
                           context,
-                          SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red),
+                          SnackBar(
+                              content: Text('Error: $msg'),
+                              backgroundColor: Colors.red),
                         );
                       }
                     },
@@ -26498,10 +27214,13 @@ class _BranchStaffManagementSectionState
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
                     )
                   : Icon(isEditing ? Icons.save : Icons.person_add, size: 18),
-              label: Text(saving ? 'Saving…' : (isEditing ? 'Save Changes' : 'Create User')),
+              label: Text(saving
+                  ? 'Saving…'
+                  : (isEditing ? 'Save Changes' : 'Create User')),
             ),
           ],
         );
@@ -26510,13 +27229,15 @@ class _BranchStaffManagementSectionState
   }
 
   // ── TOGGLE STATUS (Active, Inactive, Suspended) ──────────────────────────
-  Future<void> _toggleUserStatus(Map<String, dynamic> item, String newStatus) async {
+  Future<void> _toggleUserStatus(
+      Map<String, dynamic> item, String newStatus) async {
     final user = item['_user_account'] as Map<String, dynamic>?;
     final staff = item['_staff_profile'] as Map<String, dynamic>?;
 
     final name = _staffName(item);
     final userId = user != null ? '${user['id']}' : null;
-    final staffId = staff != null ? '${staff['id'] ?? staff['staff_id'] ?? ''}' : null;
+    final staffId =
+        staff != null ? '${staff['id'] ?? staff['staff_id'] ?? ''}' : null;
 
     setState(() => _loading = true);
     try {
@@ -26546,7 +27267,9 @@ class _BranchStaffManagementSectionState
         setState(() => _loading = false);
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text('Error updating status: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error updating status: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -26594,9 +27317,13 @@ class _BranchStaffManagementSectionState
                     prefixIcon: const Icon(Icons.lock_outline),
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      tooltip: obscurePassword ? 'Show password' : 'Hide password',
-                      icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setS(() => obscurePassword = !obscurePassword),
+                      tooltip:
+                          obscurePassword ? 'Show password' : 'Hide password',
+                      icon: Icon(obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setS(() => obscurePassword = !obscurePassword),
                     ),
                   ),
                 ),
@@ -26609,9 +27336,14 @@ class _BranchStaffManagementSectionState
                     prefixIcon: const Icon(Icons.lock_outline),
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      tooltip: obscureConfirm ? 'Show confirmation' : 'Hide confirmation',
-                      icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setS(() => obscureConfirm = !obscureConfirm),
+                      tooltip: obscureConfirm
+                          ? 'Show confirmation'
+                          : 'Hide confirmation',
+                      icon: Icon(obscureConfirm
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setS(() => obscureConfirm = !obscureConfirm),
                     ),
                   ),
                 ),
@@ -26630,7 +27362,9 @@ class _BranchStaffManagementSectionState
                 if (password.length < 6) {
                   AppNotifier.showSnackBar(
                     context,
-                    const SnackBar(content: Text('Password must be at least 6 characters')),
+                    const SnackBar(
+                        content:
+                            Text('Password must be at least 6 characters')),
                   );
                   return;
                 }
@@ -26653,11 +27387,15 @@ class _BranchStaffManagementSectionState
     if (newPassword == null || !mounted) return;
     setState(() => _loading = true);
     try {
-      await ref.read(userServiceProvider).resetUserPassword(userId, newPassword);
+      await ref
+          .read(userServiceProvider)
+          .resetUserPassword(userId, newPassword);
       if (mounted) {
         AppNotifier.showSnackBar(
           context,
-          const SnackBar(content: Text('Password reset successfully'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('Password reset successfully'),
+              backgroundColor: Colors.green),
         );
       }
       await _load();
@@ -26666,7 +27404,9 @@ class _BranchStaffManagementSectionState
         setState(() => _loading = false);
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text('Error resetting password: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error resetting password: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -26714,7 +27454,9 @@ class _BranchStaffManagementSectionState
       if (mounted) {
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text('User login for $name deleted'), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text('User login for $name deleted'),
+              backgroundColor: Colors.green),
         );
       }
       await _load();
@@ -26767,14 +27509,18 @@ class _BranchStaffManagementSectionState
                   Expanded(
                     child: TextField(
                       controller: firstCtrl,
-                      decoration: const InputDecoration(labelText: 'First Name *', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'First Name *',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: lastCtrl,
-                      decoration: const InputDecoration(labelText: 'Last Name *', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Last Name *',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                 ]),
@@ -26784,7 +27530,9 @@ class _BranchStaffManagementSectionState
                     child: TextField(
                       controller: natIdCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'National ID', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'National ID',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -26792,7 +27540,8 @@ class _BranchStaffManagementSectionState
                     child: TextField(
                       controller: phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Phone', border: OutlineInputBorder()),
                     ),
                   ),
                 ]),
@@ -26824,7 +27573,8 @@ class _BranchStaffManagementSectionState
                 TextField(
                   controller: emailCtrl,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                      labelText: 'Email', border: OutlineInputBorder()),
                 ),
               ]),
             ),
@@ -26838,10 +27588,13 @@ class _BranchStaffManagementSectionState
               onPressed: saving
                   ? null
                   : () async {
-                      if (firstCtrl.text.trim().isEmpty || lastCtrl.text.trim().isEmpty) {
+                      if (firstCtrl.text.trim().isEmpty ||
+                          lastCtrl.text.trim().isEmpty) {
                         AppNotifier.showSnackBar(
                           context,
-                          const SnackBar(content: Text('First and last name are required')),
+                          const SnackBar(
+                              content:
+                                  Text('First and last name are required')),
                         );
                         return;
                       }
@@ -26851,19 +27604,27 @@ class _BranchStaffManagementSectionState
                         await dio.post('/staff', data: {
                           'first_name': firstCtrl.text.trim(),
                           'last_name': lastCtrl.text.trim(),
-                          if (natIdCtrl.text.trim().isNotEmpty) 'national_id': natIdCtrl.text.trim(),
-                          if (deptCtrl.text.trim().isNotEmpty) 'department': deptCtrl.text.trim(),
-                          if (posCtrl.text.trim().isNotEmpty) 'position': posCtrl.text.trim(),
-                          if (phoneCtrl.text.trim().isNotEmpty) 'phone': phoneCtrl.text.trim(),
-                          if (emailCtrl.text.trim().isNotEmpty) 'email': emailCtrl.text.trim(),
-                          if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+                          if (natIdCtrl.text.trim().isNotEmpty)
+                            'national_id': natIdCtrl.text.trim(),
+                          if (deptCtrl.text.trim().isNotEmpty)
+                            'department': deptCtrl.text.trim(),
+                          if (posCtrl.text.trim().isNotEmpty)
+                            'position': posCtrl.text.trim(),
+                          if (phoneCtrl.text.trim().isNotEmpty)
+                            'phone': phoneCtrl.text.trim(),
+                          if (emailCtrl.text.trim().isNotEmpty)
+                            'email': emailCtrl.text.trim(),
+                          if (branchId.isNotEmpty)
+                            'branch_id': int.tryParse(branchId) ?? branchId,
                         });
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         if (mounted) {
                           AppNotifier.showSnackBar(
                             context,
-                            const SnackBar(content: Text('Staff member profile added'), backgroundColor: Colors.green),
+                            const SnackBar(
+                                content: Text('Staff member profile added'),
+                                backgroundColor: Colors.green),
                           );
                         }
                         await _load();
@@ -26872,13 +27633,19 @@ class _BranchStaffManagementSectionState
                         final msg = apiErrorMessage(e);
                         AppNotifier.showSnackBar(
                           context,
-                          SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red),
+                          SnackBar(
+                              content: Text('Error: $msg'),
+                              backgroundColor: Colors.red),
                         );
                         setDlgState(() => saving = false);
                       }
                     },
               icon: saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.person_add, size: 18),
               label: Text(saving ? 'Adding…' : 'Add Staff Profile'),
             ),
@@ -26891,12 +27658,15 @@ class _BranchStaffManagementSectionState
   // ── EDIT STAFF PROFILE DIALOG ─────────────────────────────────────────────
   Future<void> _showEditStaffDialog(Map<String, dynamic> item) async {
     final staff = item['_staff_profile'] as Map<String, dynamic>? ?? item;
-    final firstCtrl = TextEditingController(text: '${staff['first_name'] ?? ''}');
+    final firstCtrl =
+        TextEditingController(text: '${staff['first_name'] ?? ''}');
     final lastCtrl = TextEditingController(text: '${staff['last_name'] ?? ''}');
     final phoneCtrl = TextEditingController(text: '${staff['phone'] ?? ''}');
     final emailCtrl = TextEditingController(text: '${staff['email'] ?? ''}');
-    final deptCtrl = TextEditingController(text: '${staff['department'] ?? ''}');
-    final posCtrl = TextEditingController(text: '${staff['position'] ?? staff['role'] ?? ''}');
+    final deptCtrl =
+        TextEditingController(text: '${staff['department'] ?? ''}');
+    final posCtrl = TextEditingController(
+        text: '${staff['position'] ?? staff['role'] ?? ''}');
     bool saving = false;
 
     await showDialog(
@@ -26916,14 +27686,17 @@ class _BranchStaffManagementSectionState
                   Expanded(
                     child: TextField(
                       controller: firstCtrl,
-                      decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'First Name',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: lastCtrl,
-                      decoration: const InputDecoration(labelText: 'Last Name', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Last Name', border: OutlineInputBorder()),
                     ),
                   ),
                 ]),
@@ -26932,14 +27705,18 @@ class _BranchStaffManagementSectionState
                   Expanded(
                     child: TextField(
                       controller: deptCtrl,
-                      decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Department',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: posCtrl,
-                      decoration: const InputDecoration(labelText: 'Position / Role', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Position / Role',
+                          border: OutlineInputBorder()),
                     ),
                   ),
                 ]),
@@ -26949,7 +27726,8 @@ class _BranchStaffManagementSectionState
                     child: TextField(
                       controller: phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Phone', border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -26957,7 +27735,8 @@ class _BranchStaffManagementSectionState
                     child: TextField(
                       controller: emailCtrl,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Email', border: OutlineInputBorder()),
                     ),
                   ),
                 ]),
@@ -26991,7 +27770,9 @@ class _BranchStaffManagementSectionState
                         if (mounted) {
                           AppNotifier.showSnackBar(
                             context,
-                            const SnackBar(content: Text('Staff profile updated'), backgroundColor: Colors.green),
+                            const SnackBar(
+                                content: Text('Staff profile updated'),
+                                backgroundColor: Colors.green),
                           );
                         }
                         await _load();
@@ -27000,13 +27781,19 @@ class _BranchStaffManagementSectionState
                         final msg = apiErrorMessage(e);
                         AppNotifier.showSnackBar(
                           context,
-                          SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red),
+                          SnackBar(
+                              content: Text('Error: $msg'),
+                              backgroundColor: Colors.red),
                         );
                         setDlgState(() => saving = false);
                       }
                     },
               icon: saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.save_outlined, size: 18),
               label: Text(saving ? 'Saving…' : 'Save'),
             ),
@@ -27053,7 +27840,9 @@ class _BranchStaffManagementSectionState
       if (mounted) {
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text('$name profile deleted successfully'), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text('$name profile deleted successfully'),
+              backgroundColor: Colors.green),
         );
       }
       await _load();
@@ -27062,7 +27851,9 @@ class _BranchStaffManagementSectionState
         setState(() => _loading = false);
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text('Failed to delete staff profile: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Failed to delete staff profile: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -27072,8 +27863,14 @@ class _BranchStaffManagementSectionState
   Widget build(BuildContext context) {
     final totalStaffCount = _staff.length;
     final totalUsersCount = _users.length;
-    final activeUsersCount = _users.where((u) => (u['status'] ?? 'active').toString().toLowerCase() == 'active').length;
-    final inactiveUsersCount = _users.where((u) => (u['status'] ?? 'active').toString().toLowerCase() != 'active').length;
+    final activeUsersCount = _users
+        .where((u) =>
+            (u['status'] ?? 'active').toString().toLowerCase() == 'active')
+        .length;
+    final inactiveUsersCount = _users
+        .where((u) =>
+            (u['status'] ?? 'active').toString().toLowerCase() != 'active')
+        .length;
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -27089,11 +27886,13 @@ class _BranchStaffManagementSectionState
                   children: [
                     const Text(
                       'Staff & User Management',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                     ),
                     Text(
                       'Manage branch user login accounts, roles, access status and staff profiles (Branch Scoped)',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -27173,8 +27972,10 @@ class _BranchStaffManagementSectionState
                             },
                           )
                         : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                   ),
                   onChanged: _onSearch,
                 ),
@@ -27188,11 +27989,14 @@ class _BranchStaffManagementSectionState
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Role',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                   ),
                   items: [
-                    const DropdownMenuItem(value: 'all', child: Text('All roles')),
+                    const DropdownMenuItem(
+                        value: 'all', child: Text('All roles')),
                     ..._roles.map((r) => DropdownMenuItem(
                           value: r,
                           child: Text(
@@ -27218,14 +28022,18 @@ class _BranchStaffManagementSectionState
                   value: _statusFilter,
                   decoration: InputDecoration(
                     labelText: 'Status',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All statuses')),
                     DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                    DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
+                    DropdownMenuItem(
+                        value: 'inactive', child: Text('Inactive')),
+                    DropdownMenuItem(
+                        value: 'suspended', child: Text('Suspended')),
                   ],
                   onChanged: (v) {
                     setState(() {
@@ -27241,7 +28049,8 @@ class _BranchStaffManagementSectionState
                 segments: const [
                   ButtonSegment(value: 'all', label: Text('All')),
                   ButtonSegment(value: 'with_login', label: Text('Has Login')),
-                  ButtonSegment(value: 'without_login', label: Text('No Login')),
+                  ButtonSegment(
+                      value: 'without_login', label: Text('No Login')),
                 ],
                 selected: {_viewTab},
                 onSelectionChanged: (val) {
@@ -27275,9 +28084,12 @@ class _BranchStaffManagementSectionState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
                     const SizedBox(height: 12),
-                    Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red)),
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: _load,
@@ -27291,7 +28103,8 @@ class _BranchStaffManagementSectionState
           else if (_filtered.isEmpty)
             const Expanded(
               child: Center(
-                child: Text('No matching staff or users found.', style: TextStyle(color: Colors.grey)),
+                child: Text('No matching staff or users found.',
+                    style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -27310,12 +28123,16 @@ class _BranchStaffManagementSectionState
                     final name = _staffName(item);
                     final role = '${item['effective_role'] ?? '—'}';
                     final dept = '${item['department'] ?? '—'}';
-                    final phone = '${item['phone'] ?? item['phone_number'] ?? '—'}';
+                    final phone =
+                        '${item['phone'] ?? item['phone_number'] ?? '—'}';
                     final email = '${item['effective_email'] ?? ''}';
-                    final userStatus = '${item['user_status'] ?? 'active'}'.toLowerCase();
+                    final userStatus =
+                        '${item['user_status'] ?? 'active'}'.toLowerCase();
                     final hasUser = item['has_user'] == true;
-                    final userAccount = item['_user_account'] as Map<String, dynamic>?;
-                    final staffProfile = item['_staff_profile'] as Map<String, dynamic>?;
+                    final userAccount =
+                        item['_user_account'] as Map<String, dynamic>?;
+                    final staffProfile =
+                        item['_staff_profile'] as Map<String, dynamic>?;
 
                     final statusColor = userStatus == 'active'
                         ? const Color(0xFF16A34A)
@@ -27329,10 +28146,12 @@ class _BranchStaffManagementSectionState
                             : const Color(0xFFFEF3C7));
 
                     return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       leading: CircleAvatar(
                         radius: 22,
-                        backgroundColor: _getRoleColor(role).withValues(alpha: 0.12),
+                        backgroundColor:
+                            _getRoleColor(role).withValues(alpha: 0.12),
                         child: Text(
                           name.isNotEmpty ? name[0].toUpperCase() : '?',
                           style: TextStyle(
@@ -27349,15 +28168,19 @@ class _BranchStaffManagementSectionState
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14),
                           ),
                           // Role Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
                               color: _getRoleColor(role).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: _getRoleColor(role).withValues(alpha: 0.3)),
+                              border: Border.all(
+                                  color: _getRoleColor(role)
+                                      .withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               role.replaceAll('_', ' ').toUpperCase(),
@@ -27370,11 +28193,13 @@ class _BranchStaffManagementSectionState
                           ),
                           // Status Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
                               color: statusBg,
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                              border: Border.all(
+                                  color: statusColor.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               userStatus.toUpperCase(),
@@ -27387,21 +28212,30 @@ class _BranchStaffManagementSectionState
                           ),
                           // Has Login Pill
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: hasUser ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                              color: hasUser
+                                  ? const Color(0xFFF0FDF4)
+                                  : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: hasUser ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                                color: hasUser
+                                    ? const Color(0xFF86EFAC)
+                                    : const Color(0xFFCBD5E1),
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  hasUser ? Icons.check_circle_outline : Icons.link_off,
+                                  hasUser
+                                      ? Icons.check_circle_outline
+                                      : Icons.link_off,
                                   size: 11,
-                                  color: hasUser ? Colors.green.shade700 : Colors.grey.shade600,
+                                  color: hasUser
+                                      ? Colors.green.shade700
+                                      : Colors.grey.shade600,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
@@ -27409,7 +28243,9 @@ class _BranchStaffManagementSectionState
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w500,
-                                    color: hasUser ? Colors.green.shade700 : Colors.grey.shade600,
+                                    color: hasUser
+                                        ? Colors.green.shade700
+                                        : Colors.grey.shade600,
                                   ),
                                 ),
                               ],
@@ -27427,36 +28263,54 @@ class _BranchStaffManagementSectionState
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.business_outlined, size: 13, color: Colors.grey.shade600),
+                                  Icon(Icons.business_outlined,
+                                      size: 13, color: Colors.grey.shade600),
                                   const SizedBox(width: 4),
-                                  Text(dept, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                  Text(dept,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade700)),
                                 ],
                               ),
                             if (email.isNotEmpty)
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.email_outlined, size: 13, color: Colors.grey.shade600),
+                                  Icon(Icons.email_outlined,
+                                      size: 13, color: Colors.grey.shade600),
                                   const SizedBox(width: 4),
-                                  Text(email, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                  Text(email,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade700)),
                                 ],
                               ),
                             if (phone.isNotEmpty && phone != '—')
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.phone_outlined, size: 13, color: Colors.grey.shade600),
+                                  Icon(Icons.phone_outlined,
+                                      size: 13, color: Colors.grey.shade600),
                                   const SizedBox(width: 4),
-                                  Text(phone, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                  Text(phone,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade700)),
                                 ],
                               ),
-                            if (userAccount?['pos_pin'] != null && '${userAccount!['pos_pin']}'.isNotEmpty)
+                            if (userAccount?['pos_pin'] != null &&
+                                '${userAccount!['pos_pin']}'.isNotEmpty)
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.pin_outlined, size: 13, color: Colors.purple.shade600),
+                                  Icon(Icons.pin_outlined,
+                                      size: 13, color: Colors.purple.shade600),
                                   const SizedBox(width: 4),
-                                  Text('PIN: ${userAccount['pos_pin']}', style: TextStyle(fontSize: 12, color: Colors.purple.shade700, fontWeight: FontWeight.w500)),
+                                  Text('PIN: ${userAccount['pos_pin']}',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.purple.shade700,
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                           ],
@@ -27467,11 +28321,14 @@ class _BranchStaffManagementSectionState
                         children: [
                           if (!hasUser)
                             FilledButton.tonalIcon(
-                              onPressed: () => _showUserDialog(initialStaff: staffProfile ?? item),
+                              onPressed: () => _showUserDialog(
+                                  initialStaff: staffProfile ?? item),
                               icon: const Icon(Icons.person_add_alt, size: 15),
-                              label: const Text('Create Login', style: TextStyle(fontSize: 12)),
+                              label: const Text('Create Login',
+                                  style: TextStyle(fontSize: 12)),
                               style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
                                 visualDensity: VisualDensity.compact,
                               ),
                             ),
@@ -27479,7 +28336,8 @@ class _BranchStaffManagementSectionState
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, size: 20),
                               tooltip: 'Edit User Account',
-                              onPressed: () => _showUserDialog(user: userAccount),
+                              onPressed: () =>
+                                  _showUserDialog(user: userAccount),
                             ),
                             IconButton(
                               icon: const Icon(Icons.lock_reset, size: 20),
@@ -27510,9 +28368,12 @@ class _BranchStaffManagementSectionState
                                     value: 'activate',
                                     child: Row(
                                       children: [
-                                        Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+                                        Icon(Icons.check_circle_outline,
+                                            color: Colors.green, size: 18),
                                         SizedBox(width: 8),
-                                        Text('Mark Active', style: TextStyle(color: Colors.green)),
+                                        Text('Mark Active',
+                                            style:
+                                                TextStyle(color: Colors.green)),
                                       ],
                                     ),
                                   ),
@@ -27521,9 +28382,12 @@ class _BranchStaffManagementSectionState
                                     value: 'inactive',
                                     child: Row(
                                       children: [
-                                        Icon(Icons.pause_circle_outline, color: Colors.amber, size: 18),
+                                        Icon(Icons.pause_circle_outline,
+                                            color: Colors.amber, size: 18),
                                         SizedBox(width: 8),
-                                        Text('Mark Inactive', style: TextStyle(color: Colors.amber)),
+                                        Text('Mark Inactive',
+                                            style:
+                                                TextStyle(color: Colors.amber)),
                                       ],
                                     ),
                                   ),
@@ -27532,9 +28396,12 @@ class _BranchStaffManagementSectionState
                                     value: 'suspend',
                                     child: Row(
                                       children: [
-                                        Icon(Icons.block, color: Colors.deepOrange, size: 18),
+                                        Icon(Icons.block,
+                                            color: Colors.deepOrange, size: 18),
                                         SizedBox(width: 8),
-                                        Text('Suspend User', style: TextStyle(color: Colors.deepOrange)),
+                                        Text('Suspend User',
+                                            style: TextStyle(
+                                                color: Colors.deepOrange)),
                                       ],
                                     ),
                                   ),
@@ -27554,9 +28421,11 @@ class _BranchStaffManagementSectionState
                                   value: 'delete_user',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.no_accounts, color: Colors.red, size: 18),
+                                      Icon(Icons.no_accounts,
+                                          color: Colors.red, size: 18),
                                       SizedBox(width: 8),
-                                      Text('Delete User Login', style: TextStyle(color: Colors.red)),
+                                      Text('Delete User Login',
+                                          style: TextStyle(color: Colors.red)),
                                     ],
                                   ),
                                 ),
@@ -27565,9 +28434,12 @@ class _BranchStaffManagementSectionState
                                     value: 'delete_staff',
                                     child: Row(
                                       children: [
-                                        Icon(Icons.delete_forever, color: Colors.red, size: 18),
+                                        Icon(Icons.delete_forever,
+                                            color: Colors.red, size: 18),
                                         SizedBox(width: 8),
-                                        Text('Delete Staff Profile', style: TextStyle(color: Colors.red)),
+                                        Text('Delete Staff Profile',
+                                            style:
+                                                TextStyle(color: Colors.red)),
                                       ],
                                     ),
                                   ),
@@ -27581,7 +28453,8 @@ class _BranchStaffManagementSectionState
                               onPressed: () => _showEditStaffDialog(item),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 20, color: Colors.red),
                               tooltip: 'Delete Staff Profile',
                               onPressed: () => _confirmDeleteStaff(item),
                             ),
@@ -27780,7 +28653,9 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
         final data = res.data;
         final list = data is List
             ? data
-            : (data is Map ? (data['data'] ?? data['outlets'] ?? []) as List : []);
+            : (data is Map
+                ? (data['data'] ?? data['outlets'] ?? []) as List
+                : []);
         final outlets = <Map<String, dynamic>>[];
         for (final o in list.whereType<Map>()) {
           final t = '${o['outlet_type'] ?? ''}'.toLowerCase();
@@ -27813,15 +28688,18 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
     final catCtrl = TextEditingController(text: '${item['category'] ?? ''}');
     final priceCtrl = TextEditingController(
         text: '${item['selling_price'] ?? item['price'] ?? ''}');
-    final costCtrl =
-        TextEditingController(text: '${item['cost_price'] ?? ''}');
+    final costCtrl = TextEditingController(text: '${item['cost_price'] ?? ''}');
     String selectedUnit = '${item['unit'] ?? 'bottle'}';
     bool trackStock = item['track_stock'] != false;
-    bool available = item['is_active'] != false && item['is_available'] != false;
+    bool available =
+        item['is_active'] != false && item['is_available'] != false;
     bool saving = false;
 
     // Instant local categories aggregation
-    final categorySet = <String>{..._kDefaultBarCategories, ..._cachedCategories};
+    final categorySet = <String>{
+      ..._kDefaultBarCategories,
+      ..._cachedCategories
+    };
     for (final c in _categories) {
       if (c != 'All' && c.trim().isNotEmpty) categorySet.add(c.trim());
     }
@@ -27844,7 +28722,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
               Container(
@@ -27853,169 +28732,184 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                   color: AppColors.kPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.edit_note, color: AppColors.kPrimary, size: 22),
+                child: const Icon(Icons.edit_note,
+                    color: AppColors.kPrimary, size: 22),
               ),
               const SizedBox(width: 10),
-              const Text('Edit Bar Item / Drink', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const Text('Edit Bar Item / Drink',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
           content: SizedBox(
             width: 540,
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Item / Drink Name *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.local_bar),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: skuCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'SKU / Barcode',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.qr_code),
-                        ),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Item / Drink Name *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.local_bar),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: selectedUnit,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit of Measure',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.scale),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: skuCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'SKU / Barcode',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.qr_code),
+                            ),
+                          ),
                         ),
-                        items: units
-                            .map((u) => DropdownMenuItem(
-                                  value: u,
-                                  child: Text(u.toUpperCase()),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v != null) setDlgState(() => selectedUnit = v);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Searchable Category Autocomplete
-                RawAutocomplete<String>(
-                  textEditingController: catCtrl,
-                  focusNode: FocusNode(),
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    final query = textEditingValue.text.toLowerCase().trim();
-                    if (query.isEmpty) {
-                      return allCategories;
-                    }
-                    return allCategories.where((c) => c.toLowerCase().contains(query));
-                  },
-                  onSelected: (String selection) {
-                    catCtrl.text = selection;
-                    setDlgState(() {});
-                  },
-                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                    return TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      decoration: InputDecoration(
-                        labelText: 'Category * (Search or type new)',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.category),
-                        suffixIcon: PopupMenuButton<String>(
-                          icon: const Icon(Icons.arrow_drop_down),
-                          tooltip: 'Select existing category',
-                          onSelected: (val) {
-                            controller.text = val;
-                            setDlgState(() {});
-                          },
-                          itemBuilder: (context) {
-                            return allCategories
-                                .map((c) => PopupMenuItem(value: c, child: Text(c)))
-                                .toList();
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  optionsViewBuilder: (context, onSelected, options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4.0,
-                        borderRadius: BorderRadius.circular(8),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 200, maxWidth: 500),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: options.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              final option = options.elementAt(index);
-                              return ListTile(
-                                dense: true,
-                                title: Text(option),
-                                onTap: () => onSelected(option),
-                              );
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedUnit,
+                            decoration: const InputDecoration(
+                              labelText: 'Unit of Measure',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.scale),
+                            ),
+                            items: units
+                                .map((u) => DropdownMenuItem(
+                                      value: u,
+                                      child: Text(u.toUpperCase()),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v != null)
+                                setDlgState(() => selectedUnit = v);
                             },
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: priceCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Selling Price *',
-                          prefixText: 'KES ',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.attach_money),
-                        ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: costCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Cost Price',
-                          prefixText: 'KES ',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.receipt_long),
-                        ),
-                      ),
+                    const SizedBox(height: 12),
+                    // Searchable Category Autocomplete
+                    RawAutocomplete<String>(
+                      textEditingController: catCtrl,
+                      focusNode: FocusNode(),
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        final query =
+                            textEditingValue.text.toLowerCase().trim();
+                        if (query.isEmpty) {
+                          return allCategories;
+                        }
+                        return allCategories
+                            .where((c) => c.toLowerCase().contains(query));
+                      },
+                      onSelected: (String selection) {
+                        catCtrl.text = selection;
+                        setDlgState(() {});
+                      },
+                      fieldViewBuilder:
+                          (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: 'Category * (Search or type new)',
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.category),
+                            suffixIcon: PopupMenuButton<String>(
+                              icon: const Icon(Icons.arrow_drop_down),
+                              tooltip: 'Select existing category',
+                              onSelected: (val) {
+                                controller.text = val;
+                                setDlgState(() {});
+                              },
+                              itemBuilder: (context) {
+                                return allCategories
+                                    .map((c) =>
+                                        PopupMenuItem(value: c, child: Text(c)))
+                                    .toList();
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4.0,
+                            borderRadius: BorderRadius.circular(8),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                  maxHeight: 200, maxWidth: 500),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                itemBuilder: (BuildContext context, int index) {
+                                  final option = options.elementAt(index);
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option),
+                                    onTap: () => onSelected(option),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: trackStock,
-                  title: const Text('Track inventory stock for this item', style: TextStyle(fontSize: 14)),
-                  onChanged: (v) => setDlgState(() => trackStock = v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: available,
-                  title: const Text('Available for sale in Bar POS', style: TextStyle(fontSize: 14)),
-                  onChanged: (v) => setDlgState(() => available = v),
-                ),
-              ]),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: priceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Selling Price *',
+                              prefixText: 'KES ',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.attach_money),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: costCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Cost Price',
+                              prefixText: 'KES ',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.receipt_long),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: trackStock,
+                      title: const Text('Track inventory stock for this item',
+                          style: TextStyle(fontSize: 14)),
+                      onChanged: (v) => setDlgState(() => trackStock = v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: available,
+                      title: const Text('Available for sale in Bar POS',
+                          style: TextStyle(fontSize: 14)),
+                      onChanged: (v) => setDlgState(() => available = v),
+                    ),
+                  ]),
             ),
           ),
           actions: [
@@ -28025,7 +28919,11 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
             ),
             FilledButton.icon(
               icon: saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.save, size: 18),
               onPressed: saving
                   ? null
@@ -28034,7 +28932,9 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
                       if (name.isEmpty || priceCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(content: Text('Item name and price are required')),
+                          const SnackBar(
+                              content:
+                                  Text('Item name and price are required')),
                         );
                         return;
                       }
@@ -28042,13 +28942,16 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       try {
                         final id = '${item['id'] ?? ''}';
                         final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
-                        final category = catCtrl.text.trim().isEmpty ? 'Bar' : catCtrl.text.trim();
+                        final category = catCtrl.text.trim().isEmpty
+                            ? 'Bar'
+                            : catCtrl.text.trim();
                         final sku = skuCtrl.text.trim();
 
                         final dio = ref.read(dioProvider);
                         if (item['_source'] == 'pos') {
                           final outletId = '${item['_outlet_id'] ?? ''}';
-                          await dio.patch('/pos/outlets/$outletId/items/$id', data: {
+                          await dio
+                              .patch('/pos/outlets/$outletId/items/$id', data: {
                             'name': name,
                             if (sku.isNotEmpty) 'sku': sku,
                             'category': category,
@@ -28075,14 +28978,19 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                         Navigator.pop(ctx);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Drink "$name" updated successfully'), backgroundColor: Colors.green),
+                            SnackBar(
+                                content:
+                                    Text('Drink "$name" updated successfully'),
+                                backgroundColor: Colors.green),
                           );
                         }
                         await _load();
                       } catch (e) {
                         if (!ctx.mounted) return;
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                          SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red),
                         );
                         setDlgState(() => saving = false);
                       }
@@ -28098,7 +29006,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
   Future<void> _showAddDialog() async {
     final nameCtrl = TextEditingController();
     final skuCtrl = TextEditingController(
-        text: 'BAR-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}');
+        text:
+            'BAR-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}');
     final catCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     final costCtrl = TextEditingController();
@@ -28111,13 +29020,18 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
     bool saving = false;
 
     // Instant local categories aggregation (0ms)
-    final categorySet = <String>{..._kDefaultBarCategories, ..._cachedCategories};
+    final categorySet = <String>{
+      ..._kDefaultBarCategories,
+      ..._cachedCategories
+    };
     for (final c in _categories) {
       if (c != 'All' && c.trim().isNotEmpty) categorySet.add(c.trim());
     }
     final allCategories = categorySet.toList()..sort();
 
-    final activeOutletName = _barOutletType == 'executive_bar' ? 'Executive Bar' : 'Sports Bar / Main Bar';
+    final activeOutletName = _barOutletType == 'executive_bar'
+        ? 'Executive Bar'
+        : 'Sports Bar / Main Bar';
 
     final units = [
       'bottle',
@@ -28137,7 +29051,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
               Container(
@@ -28146,10 +29061,12 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                   color: AppColors.kPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.local_bar, color: AppColors.kPrimary, size: 22),
+                child: const Icon(Icons.local_bar,
+                    color: AppColors.kPrimary, size: 22),
               ),
               const SizedBox(width: 10),
-              const Text('Add Bar Drink / Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const Text('Add Bar Drink / Item',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
           content: SizedBox(
@@ -28213,13 +29130,15 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       if (query.isEmpty) {
                         return allCategories;
                       }
-                      return allCategories.where((c) => c.toLowerCase().contains(query));
+                      return allCategories
+                          .where((c) => c.toLowerCase().contains(query));
                     },
                     onSelected: (String selection) {
                       catCtrl.text = selection;
                       setDlgState(() {});
                     },
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
                       return TextField(
                         controller: controller,
                         focusNode: focusNode,
@@ -28237,7 +29156,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                             },
                             itemBuilder: (context) {
                               return allCategories
-                                  .map((c) => PopupMenuItem(value: c, child: Text(c)))
+                                  .map((c) =>
+                                      PopupMenuItem(value: c, child: Text(c)))
                                   .toList();
                             },
                           ),
@@ -28251,7 +29171,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                           elevation: 4.0,
                           borderRadius: BorderRadius.circular(8),
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 220, maxWidth: 520),
+                            constraints: const BoxConstraints(
+                                maxHeight: 220, maxWidth: 520),
                             child: ListView.builder(
                               padding: EdgeInsets.zero,
                               shrinkWrap: true,
@@ -28283,11 +29204,13 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                     items: [
                       DropdownMenuItem(
                         value: 'active',
-                        child: Text('Current Bar Outlet Only ($activeOutletName)'),
+                        child:
+                            Text('Current Bar Outlet Only ($activeOutletName)'),
                       ),
                       const DropdownMenuItem(
                         value: 'all',
-                        child: Text('All Bar Outlets in Branch (Sports Bar & Executive Bar)'),
+                        child: Text(
+                            'All Bar Outlets in Branch (Sports Bar & Executive Bar)'),
                       ),
                     ],
                     onChanged: (v) {
@@ -28300,7 +29223,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       Expanded(
                         child: TextField(
                           controller: priceCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Selling Price *',
                             prefixText: 'KES ',
@@ -28313,7 +29237,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       Expanded(
                         child: TextField(
                           controller: costCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Cost Price',
                             prefixText: 'KES ',
@@ -28330,7 +29255,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       Expanded(
                         child: TextField(
                           controller: openingCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Opening Stock',
                             border: OutlineInputBorder(),
@@ -28342,7 +29268,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       Expanded(
                         child: TextField(
                           controller: currentCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Current Stock',
                             border: OutlineInputBorder(),
@@ -28356,13 +29283,15 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: trackStock,
-                    title: const Text('Track inventory stock for this item', style: TextStyle(fontSize: 14)),
+                    title: const Text('Track inventory stock for this item',
+                        style: TextStyle(fontSize: 14)),
                     onChanged: (v) => setDlgState(() => trackStock = v),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: available,
-                    title: const Text('Available for sale in Bar POS', style: TextStyle(fontSize: 14)),
+                    title: const Text('Available for sale in Bar POS',
+                        style: TextStyle(fontSize: 14)),
                     onChanged: (v) => setDlgState(() => available = v),
                   ),
                 ],
@@ -28376,7 +29305,11 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
             ),
             FilledButton.icon(
               icon: saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.add, size: 18),
               onPressed: saving
                   ? null
@@ -28384,19 +29317,27 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                       final name = nameCtrl.text.trim();
                       final sku = skuCtrl.text.trim();
                       final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
-                      if (name.isEmpty || sku.isEmpty || priceCtrl.text.trim().isEmpty) {
+                      if (name.isEmpty ||
+                          sku.isEmpty ||
+                          priceCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(content: Text('Item name, SKU and selling price are required')),
+                          const SnackBar(
+                              content: Text(
+                                  'Item name, SKU and selling price are required')),
                         );
                         return;
                       }
                       setDlgState(() => saving = true);
                       try {
                         final branchId = await repo.getBranchId();
-                        final category = catCtrl.text.trim().isEmpty ? 'Bar' : catCtrl.text.trim();
+                        final category = catCtrl.text.trim().isEmpty
+                            ? 'Bar'
+                            : catCtrl.text.trim();
                         final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
-                        final opening = double.tryParse(openingCtrl.text.trim()) ?? 0;
-                        final current = double.tryParse(currentCtrl.text.trim()) ?? 0;
+                        final opening =
+                            double.tryParse(openingCtrl.text.trim()) ?? 0;
+                        final current =
+                            double.tryParse(currentCtrl.text.trim()) ?? 0;
 
                         final body = {
                           'name': name,
@@ -28412,7 +29353,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                           'is_available': available,
                           'status': available ? 'active' : 'inactive',
                           'source_table': 'bar_drinks',
-                          if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+                          if (branchId.isNotEmpty)
+                            'branch_id': int.tryParse(branchId) ?? branchId,
                         };
 
                         final dio = ref.read(dioProvider);
@@ -28429,7 +29371,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                           targetOutlets.addAll(_cachedBarOutlets);
                         } else {
                           final matching = _cachedBarOutlets.where((o) =>
-                              '${o['outlet_type'] ?? ''}'.toLowerCase() == _barOutletType.toLowerCase());
+                              '${o['outlet_type'] ?? ''}'.toLowerCase() ==
+                              _barOutletType.toLowerCase());
                           if (matching.isNotEmpty) {
                             targetOutlets.addAll(matching);
                           } else if (_cachedBarOutlets.isNotEmpty) {
@@ -28443,7 +29386,9 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                           try {
                             await dio.post('/pos/outlets/$oId/items', data: {
                               ...body,
-                              'sku': targetOutlets.length > 1 ? '$sku-${oId.substring(0, 4)}' : sku,
+                              'sku': targetOutlets.length > 1
+                                  ? '$sku-${oId.substring(0, 4)}'
+                                  : sku,
                             });
                           } catch (_) {}
                         }
@@ -28463,7 +29408,8 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                         if (!ctx.mounted) return;
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(
-                            content: Text(apiErrorMessage(e, fallback: 'Could not add bar drink')),
+                            content: Text(apiErrorMessage(e,
+                                fallback: 'Could not add bar drink')),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -28806,8 +29752,8 @@ class _BranchRestaurantMenuSectionState
         _filtered = effectiveFilter == 'All'
             ? items
             : items
-                .where((i) =>
-                    _menuCategoryName(i['category']) == effectiveFilter)
+                .where(
+                    (i) => _menuCategoryName(i['category']) == effectiveFilter)
                 .toList();
         _loading = false;
       });
@@ -28858,7 +29804,8 @@ class _BranchRestaurantMenuSectionState
 
     // Resolve initial category name from the item
     final initialCatName = _menuCategoryName(item['category']);
-    String? selectedCategory = initialCatName.isNotEmpty ? initialCatName : null;
+    String? selectedCategory =
+        initialCatName.isNotEmpty ? initialCatName : null;
     bool saving = false;
 
     // Use only restaurant/food categories preloaded in memory
@@ -28881,8 +29828,7 @@ class _BranchRestaurantMenuSectionState
                     decoration: const InputDecoration(labelText: 'Name *')),
                 const SizedBox(height: 12),
                 Autocomplete<String>(
-                  initialValue:
-                      TextEditingValue(text: selectedCategory ?? ''),
+                  initialValue: TextEditingValue(text: selectedCategory ?? ''),
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text.isEmpty) {
                       return categories;
@@ -28897,8 +29843,7 @@ class _BranchRestaurantMenuSectionState
                   fieldViewBuilder: (context, fieldTextEditingController,
                       focusNode, onFieldSubmitted) {
                     fieldTextEditingController.addListener(() {
-                      selectedCategory =
-                          fieldTextEditingController.text.trim();
+                      selectedCategory = fieldTextEditingController.text.trim();
                     });
                     return TextField(
                       controller: fieldTextEditingController,
@@ -29107,17 +30052,17 @@ class _BranchRestaurantMenuSectionState
                             hintText: 'Search or type category...',
                             prefixIcon:
                                 const Icon(Icons.category_outlined, size: 18),
-                            suffixIcon: fieldTextEditingController
-                                    .text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 16),
-                                    onPressed: () {
-                                      fieldTextEditingController.clear();
-                                      selectedCategory = null;
-                                      setDlgState(() {});
-                                    },
-                                  )
-                                : const Icon(Icons.arrow_drop_down),
+                            suffixIcon:
+                                fieldTextEditingController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        onPressed: () {
+                                          fieldTextEditingController.clear();
+                                          selectedCategory = null;
+                                          setDlgState(() {});
+                                        },
+                                      )
+                                    : const Icon(Icons.arrow_drop_down),
                           ),
                         );
                       },
@@ -29135,8 +30080,7 @@ class _BranchRestaurantMenuSectionState
                                     const EdgeInsets.symmetric(vertical: 4),
                                 shrinkWrap: true,
                                 itemCount: options.length,
-                                itemBuilder:
-                                    (BuildContext context, int index) {
+                                itemBuilder: (BuildContext context, int index) {
                                   final option = options.elementAt(index);
                                   return InkWell(
                                     onTap: () => onSelected(option),
@@ -29144,8 +30088,7 @@ class _BranchRestaurantMenuSectionState
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 14, vertical: 10),
                                       child: Text(option,
-                                          style:
-                                              const TextStyle(fontSize: 14)),
+                                          style: const TextStyle(fontSize: 14)),
                                     ),
                                   );
                                 },
@@ -29184,8 +30127,8 @@ class _BranchRestaurantMenuSectionState
                         controller: openingCtrl,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: const InputDecoration(
-                            labelText: 'Opening stock')),
+                        decoration:
+                            const InputDecoration(labelText: 'Opening stock')),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -29193,15 +30136,14 @@ class _BranchRestaurantMenuSectionState
                         controller: currentCtrl,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: const InputDecoration(
-                            labelText: 'Current stock')),
+                        decoration:
+                            const InputDecoration(labelText: 'Current stock')),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                         controller: unitCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Unit')),
+                        decoration: const InputDecoration(labelText: 'Unit')),
                   ),
                 ]),
                 SwitchListTile(
@@ -30753,7 +31695,9 @@ class _BranchOutletItemsSectionState
         for (final o in list) {
           if (o is Map) {
             final ot = '${o['outlet_type'] ?? ''}'.toLowerCase();
-            if (!ot.contains('bar') && !ot.contains('restaurant') && !ot.contains('choma')) {
+            if (!ot.contains('bar') &&
+                !ot.contains('restaurant') &&
+                !ot.contains('choma')) {
               _nonConsumableOutlets[ot] = Map<String, dynamic>.from(o);
             }
           }
@@ -30881,7 +31825,8 @@ class _BranchOutletItemsSectionState
     final id = _outletId;
     final itemId = '${item['id'] ?? ''}';
     if (id == null || itemId.isEmpty) return;
-    final newActive = !(item['is_active'] == true || item['is_available'] == true);
+    final newActive =
+        !(item['is_active'] == true || item['is_available'] == true);
     try {
       await _dio.patch('/pos/outlets/$id/items/$itemId', data: {
         'is_active': newActive,
@@ -30894,7 +31839,8 @@ class _BranchOutletItemsSectionState
       AppNotifier.showSnackBar(
         context,
         SnackBar(
-          content: Text(newActive ? 'Item marked active' : 'Item marked inactive'),
+          content:
+              Text(newActive ? 'Item marked active' : 'Item marked inactive'),
           duration: const Duration(seconds: 1),
         ),
       );
@@ -30957,7 +31903,9 @@ class _BranchOutletItemsSectionState
     final outletId = _outletId;
     if (outletId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No active Non-Consumables outlet found for this branch.')),
+        const SnackBar(
+            content: Text(
+                'No active Non-Consumables outlet found for this branch.')),
       );
       return;
     }
@@ -30966,7 +31914,8 @@ class _BranchOutletItemsSectionState
     final nameCtrl = TextEditingController();
     final catCtrl = TextEditingController();
     final skuCtrl = TextEditingController(
-        text: 'NC-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+        text:
+            'NC-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
     final priceCtrl = TextEditingController();
     final costCtrl = TextEditingController(text: '0');
     final openingCtrl = TextEditingController(text: '0');
@@ -30994,12 +31943,14 @@ class _BranchOutletItemsSectionState
                       controller: nameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Item Name *',
-                        hintText: 'e.g. Swimming Towel, Conference Hall, Laundry Service',
+                        hintText:
+                            'e.g. Swimming Towel, Conference Hall, Laundry Service',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Item name is required' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Item name is required'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -31012,8 +31963,9 @@ class _BranchOutletItemsSectionState
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
-                            validator: (v) =>
-                                (v == null || v.trim().isEmpty) ? 'SKU is required' : null,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'SKU is required'
+                                : null,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -31027,8 +31979,8 @@ class _BranchOutletItemsSectionState
                                   .contains(textVal.text.toLowerCase()));
                             },
                             onSelected: (val) => catCtrl.text = val,
-                            fieldViewBuilder:
-                                (ctx, textEditingController, focusNode, onFieldSubmitted) {
+                            fieldViewBuilder: (ctx, textEditingController,
+                                focusNode, onFieldSubmitted) {
                               textEditingController.addListener(() {
                                 catCtrl.text = textEditingController.text;
                               });
@@ -31042,7 +31994,9 @@ class _BranchOutletItemsSectionState
                                   isDense: true,
                                 ),
                                 validator: (v) =>
-                                    (v == null || v.trim().isEmpty) ? 'Category is required' : null,
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'Category is required'
+                                        : null,
                               );
                             },
                           ),
@@ -31055,15 +32009,18 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: priceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Selling Price (KES) *',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Selling price is required';
-                              if (double.tryParse(v.trim()) == null) return 'Invalid price';
+                              if (v == null || v.trim().isEmpty)
+                                return 'Selling price is required';
+                              if (double.tryParse(v.trim()) == null)
+                                return 'Invalid price';
                               return null;
                             },
                           ),
@@ -31072,7 +32029,8 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: costCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Cost Price (KES)',
                               border: OutlineInputBorder(),
@@ -31088,7 +32046,8 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: openingCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Opening Stock',
                               border: OutlineInputBorder(),
@@ -31100,7 +32059,8 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: currentCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Current Stock',
                               border: OutlineInputBorder(),
@@ -31118,17 +32078,27 @@ class _BranchOutletItemsSectionState
                               isDense: true,
                             ),
                             items: const [
-                              DropdownMenuItem(value: 'piece', child: Text('piece')),
-                              DropdownMenuItem(value: 'unit', child: Text('unit')),
-                              DropdownMenuItem(value: 'each', child: Text('each')),
-                              DropdownMenuItem(value: 'service', child: Text('service')),
-                              DropdownMenuItem(value: 'hour', child: Text('hour')),
-                              DropdownMenuItem(value: 'day', child: Text('day')),
-                              DropdownMenuItem(value: 'session', child: Text('session')),
-                              DropdownMenuItem(value: 'pack', child: Text('pack')),
-                              DropdownMenuItem(value: 'set', child: Text('set')),
+                              DropdownMenuItem(
+                                  value: 'piece', child: Text('piece')),
+                              DropdownMenuItem(
+                                  value: 'unit', child: Text('unit')),
+                              DropdownMenuItem(
+                                  value: 'each', child: Text('each')),
+                              DropdownMenuItem(
+                                  value: 'service', child: Text('service')),
+                              DropdownMenuItem(
+                                  value: 'hour', child: Text('hour')),
+                              DropdownMenuItem(
+                                  value: 'day', child: Text('day')),
+                              DropdownMenuItem(
+                                  value: 'session', child: Text('session')),
+                              DropdownMenuItem(
+                                  value: 'pack', child: Text('pack')),
+                              DropdownMenuItem(
+                                  value: 'set', child: Text('set')),
                             ],
-                            onChanged: (v) => setDlgState(() => selectedUnit = v ?? 'piece'),
+                            onChanged: (v) =>
+                                setDlgState(() => selectedUnit = v ?? 'piece'),
                           ),
                         ),
                       ],
@@ -31162,7 +32132,11 @@ class _BranchOutletItemsSectionState
             ),
             FilledButton.icon(
               icon: saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.check, size: 18),
               onPressed: saving
                   ? null
@@ -31175,8 +32149,10 @@ class _BranchOutletItemsSectionState
                       final category = catCtrl.text.trim();
                       final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
                       final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
-                      final opening = double.tryParse(openingCtrl.text.trim()) ?? 0;
-                      final current = double.tryParse(currentCtrl.text.trim()) ?? 0;
+                      final opening =
+                          double.tryParse(openingCtrl.text.trim()) ?? 0;
+                      final current =
+                          double.tryParse(currentCtrl.text.trim()) ?? 0;
 
                       final body = <String, dynamic>{
                         'name': name,
@@ -31197,14 +32173,16 @@ class _BranchOutletItemsSectionState
                       };
 
                       try {
-                        await _dio.post('/pos/outlets/$outletId/items', data: body);
+                        await _dio.post('/pos/outlets/$outletId/items',
+                            data: body);
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         if (mounted) {
                           AppNotifier.showSnackBar(
                             context,
                             SnackBar(
-                              content: Text('Non-consumable item "$name" added successfully'),
+                              content: Text(
+                                  'Non-consumable item "$name" added successfully'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -31215,7 +32193,8 @@ class _BranchOutletItemsSectionState
                         setDlgState(() => saving = false);
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(
-                            content: Text(apiErrorMessage(e, fallback: 'Could not add item')),
+                            content: Text(apiErrorMessage(e,
+                                fallback: 'Could not add item')),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -31243,7 +32222,8 @@ class _BranchOutletItemsSectionState
     final costCtrl = TextEditingController(text: '$costVal');
     String selectedUnit = '${item['unit'] ?? 'piece'}';
     if (selectedUnit.isEmpty) selectedUnit = 'piece';
-    bool available = item['is_active'] != false && item['is_available'] != false;
+    bool available =
+        item['is_active'] != false && item['is_available'] != false;
     bool saving = false;
 
     showDialog(
@@ -31267,20 +32247,22 @@ class _BranchOutletItemsSectionState
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Item name is required' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Item name is required'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     Autocomplete<String>(
                       initialValue: TextEditingValue(text: catCtrl.text),
                       optionsBuilder: (textVal) {
                         if (textVal.text.isEmpty) return _itemCategories;
-                        return _itemCategories.where((c) =>
-                            c.toLowerCase().contains(textVal.text.toLowerCase()));
+                        return _itemCategories.where((c) => c
+                            .toLowerCase()
+                            .contains(textVal.text.toLowerCase()));
                       },
                       onSelected: (val) => catCtrl.text = val,
-                      fieldViewBuilder:
-                          (ctx, textEditingController, focusNode, onFieldSubmitted) {
+                      fieldViewBuilder: (ctx, textEditingController, focusNode,
+                          onFieldSubmitted) {
                         textEditingController.addListener(() {
                           catCtrl.text = textEditingController.text;
                         });
@@ -31292,8 +32274,9 @@ class _BranchOutletItemsSectionState
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Category is required' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Category is required'
+                              : null,
                         );
                       },
                     ),
@@ -31303,15 +32286,18 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: priceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Selling Price (KES) *',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Selling price is required';
-                              if (double.tryParse(v.trim()) == null) return 'Invalid price';
+                              if (v == null || v.trim().isEmpty)
+                                return 'Selling price is required';
+                              if (double.tryParse(v.trim()) == null)
+                                return 'Invalid price';
                               return null;
                             },
                           ),
@@ -31320,7 +32306,8 @@ class _BranchOutletItemsSectionState
                         Expanded(
                           child: TextFormField(
                             controller: costCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Cost Price (KES)',
                               border: OutlineInputBorder(),
@@ -31333,7 +32320,15 @@ class _BranchOutletItemsSectionState
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: [
-                        'piece', 'unit', 'each', 'service', 'hour', 'day', 'session', 'pack', 'set'
+                        'piece',
+                        'unit',
+                        'each',
+                        'service',
+                        'hour',
+                        'day',
+                        'session',
+                        'pack',
+                        'set'
                       ].contains(selectedUnit)
                           ? selectedUnit
                           : 'piece',
@@ -31346,14 +32341,17 @@ class _BranchOutletItemsSectionState
                         DropdownMenuItem(value: 'piece', child: Text('piece')),
                         DropdownMenuItem(value: 'unit', child: Text('unit')),
                         DropdownMenuItem(value: 'each', child: Text('each')),
-                        DropdownMenuItem(value: 'service', child: Text('service')),
+                        DropdownMenuItem(
+                            value: 'service', child: Text('service')),
                         DropdownMenuItem(value: 'hour', child: Text('hour')),
                         DropdownMenuItem(value: 'day', child: Text('day')),
-                        DropdownMenuItem(value: 'session', child: Text('session')),
+                        DropdownMenuItem(
+                            value: 'session', child: Text('session')),
                         DropdownMenuItem(value: 'pack', child: Text('pack')),
                         DropdownMenuItem(value: 'set', child: Text('set')),
                       ],
-                      onChanged: (v) => setDlgState(() => selectedUnit = v ?? 'piece'),
+                      onChanged: (v) =>
+                          setDlgState(() => selectedUnit = v ?? 'piece'),
                     ),
                     const SizedBox(height: 12),
                     SwitchListTile(
@@ -31380,7 +32378,9 @@ class _BranchOutletItemsSectionState
                       setDlgState(() => saving = true);
 
                       final name = nameCtrl.text.trim();
-                      final category = catCtrl.text.trim().isEmpty ? 'Amenities' : catCtrl.text.trim();
+                      final category = catCtrl.text.trim().isEmpty
+                          ? 'Amenities'
+                          : catCtrl.text.trim();
                       final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
                       final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
 
@@ -31397,14 +32397,16 @@ class _BranchOutletItemsSectionState
                       };
 
                       try {
-                        await _dio.patch('/pos/outlets/$outletId/items/$itemId', data: body);
+                        await _dio.patch('/pos/outlets/$outletId/items/$itemId',
+                            data: body);
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         if (mounted) {
                           AppNotifier.showSnackBar(
                             context,
                             SnackBar(
-                              content: Text('Item "$name" updated successfully'),
+                              content:
+                                  Text('Item "$name" updated successfully'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -31415,7 +32417,8 @@ class _BranchOutletItemsSectionState
                         setDlgState(() => saving = false);
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(
-                            content: Text(apiErrorMessage(e, fallback: 'Could not update item')),
+                            content: Text(apiErrorMessage(e,
+                                fallback: 'Could not update item')),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -31445,12 +32448,14 @@ class _BranchOutletItemsSectionState
                   children: [
                     const Text(
                       'Non-Consumables',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Manage non-consumable items, services, amenities and equipment sold at this branch.',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                   ],
                 ),
@@ -31515,8 +32520,10 @@ class _BranchOutletItemsSectionState
                               },
                             )
                           : null,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                       isDense: true,
                     ),
                     onChanged: (val) {
@@ -31529,7 +32536,10 @@ class _BranchOutletItemsSectionState
               const SizedBox(width: 12),
               Text(
                 '${_filtered.length} item(s)',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -31568,9 +32578,12 @@ class _BranchOutletItemsSectionState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
                     const SizedBox(height: 12),
-                    Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red)),
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: _init,
@@ -31587,7 +32600,8 @@ class _BranchOutletItemsSectionState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade400),
+                    Icon(Icons.inventory_2_outlined,
+                        size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 12),
                     Text(
                       _searchQuery.isNotEmpty || _categoryFilter != 'All'
@@ -31621,13 +32635,17 @@ class _BranchOutletItemsSectionState
                   final price = _price(item);
                   final unit = '${item['unit'] ?? 'piece'}';
                   final sku = '${item['sku'] ?? ''}';
-                  final active = item['is_active'] == true || item['is_available'] == true;
+                  final active =
+                      item['is_active'] == true || item['is_available'] == true;
 
                   return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     leading: CircleAvatar(
-                      backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
-                      child: Icon(Icons.inventory_2_outlined, size: 20, color: AppColors.kPrimary),
+                      backgroundColor:
+                          AppColors.kPrimary.withValues(alpha: 0.1),
+                      child: Icon(Icons.inventory_2_outlined,
+                          size: 20, color: AppColors.kPrimary),
                     ),
                     title: Row(
                       children: [
@@ -31642,7 +32660,8 @@ class _BranchOutletItemsSectionState
                         ),
                         if (sku.isNotEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(4),
@@ -31650,7 +32669,10 @@ class _BranchOutletItemsSectionState
                             ),
                             child: Text(
                               sku,
-                              style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontFamily: 'monospace'),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade700,
+                                  fontFamily: 'monospace'),
                             ),
                           ),
                       ],
@@ -31692,9 +32714,12 @@ class _BranchOutletItemsSectionState
                               value: 'delete',
                               child: Row(
                                 children: [
-                                  Icon(Icons.delete_outline, size: 16, color: Colors.red.shade700),
+                                  Icon(Icons.delete_outline,
+                                      size: 16, color: Colors.red.shade700),
                                   const SizedBox(width: 8),
-                                  Text('Delete', style: TextStyle(color: Colors.red.shade700)),
+                                  Text('Delete',
+                                      style: TextStyle(
+                                          color: Colors.red.shade700)),
                                 ],
                               ),
                             ),
@@ -31711,7 +32736,6 @@ class _BranchOutletItemsSectionState
     );
   }
 }
-
 
 class _BranchMenuPricingSection extends ConsumerStatefulWidget {
   const _BranchMenuPricingSection();
@@ -32186,8 +33210,8 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
         ? Colors.red
         : (_marginPct < 15 ? Colors.orange[800]! : Colors.green[700]!);
 
-    final isNonConsumable = it.itemType == 'non_consumables' ||
-        it.itemType == 'non-consumables';
+    final isNonConsumable =
+        it.itemType == 'non_consumables' || it.itemType == 'non-consumables';
 
     return Card(
       elevation: 0,
@@ -32519,8 +33543,8 @@ class _KitchenShiftOptionCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
             Text(description,
                 style: const TextStyle(fontSize: 13, color: Colors.grey)),
@@ -32538,9 +33562,8 @@ class _KitchenShiftOptionCard extends StatelessWidget {
                       height: 16,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : Text(isSelected
-                      ? 'Currently Selected'
-                      : 'Activate This Mode'),
+                  : Text(
+                      isSelected ? 'Currently Selected' : 'Activate This Mode'),
             ),
           ],
         ),
@@ -32548,4 +33571,3 @@ class _KitchenShiftOptionCard extends StatelessWidget {
     );
   }
 }
-

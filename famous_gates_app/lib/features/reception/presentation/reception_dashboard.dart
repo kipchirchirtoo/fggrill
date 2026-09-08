@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ import '../../../core/widgets/stat_card.dart';
 import '../../cashier/presentation/cashier_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import 'widgets/occupancy_breakfast_charges.dart';
 import '../../templates/data/document_printer.dart';
 import '../../pos/domain/models.dart';
 import '../../shared/presentation/room_bills_view.dart';
@@ -3387,8 +3389,11 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
                               }
                             }),
                           if (_tab == 'checkout')
-                            _SmallAction('Extend Stay', Icons.update,
-                                () => _showExtendStayDialog(context, ref, b, widget.onRefresh)),
+                            _SmallAction(
+                                'Extend Stay',
+                                Icons.update,
+                                () => _showExtendStayDialog(
+                                    context, ref, b, widget.onRefresh)),
                           _SmallAction(
                               'Email',
                               Icons.email_outlined,
@@ -4179,15 +4184,31 @@ class _ConferenceSection extends ConsumerWidget {
                         _SmallAction(
                           'Open',
                           Icons.open_in_new,
-                          () => showDialog<void>(
-                            context: context,
-                            builder: (_) => ConferenceBookingDialog(
-                              halls: data.conferenceHalls,
-                              repo: ref.read(receptionRepositoryProvider),
-                              onSuccess: onRefresh,
-                              initialHall: hall,
-                            ),
-                          ),
+                          () async {
+                            // Defaults the dialog's branch dropdown (and its
+                            // auto-printed invoice header) to the STAFF
+                            // MEMBER'S OWN branch instead of the widget's
+                            // hardcoded "Kyogong" fallback — the underlying
+                            // booking row is always correctly branch-scoped
+                            // by the repo regardless, but the printed client
+                            // invoice used to say "Kyogong" even when a
+                            // different branch made the booking.
+                            final branch = await ref
+                                .read(receptionRepositoryProvider)
+                                .branchName;
+                            if (!context.mounted) return;
+                            await showDialog<void>(
+                              context: context,
+                              builder: (_) => ConferenceBookingDialog(
+                                halls: data.conferenceHalls,
+                                repo: ref.read(receptionRepositoryProvider),
+                                onSuccess: onRefresh,
+                                initialHall: hall,
+                                currentBranch:
+                                    branch.isNotEmpty ? branch : 'Kyogong',
+                              ),
+                            );
+                          },
                         ),
                       ],
                     );
@@ -4205,14 +4226,22 @@ class _ConferenceSection extends ConsumerWidget {
                     const EmptyState(message: 'No active conference bookings'),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => showDialog<void>(
-                        context: context,
-                        builder: (_) => ConferenceBookingDialog(
-                          halls: data.conferenceHalls,
-                          repo: ref.read(receptionRepositoryProvider),
-                          onSuccess: onRefresh,
-                        ),
-                      ),
+                      onPressed: () async {
+                        final branch = await ref
+                            .read(receptionRepositoryProvider)
+                            .branchName;
+                        if (!context.mounted) return;
+                        await showDialog<void>(
+                          context: context,
+                          builder: (_) => ConferenceBookingDialog(
+                            halls: data.conferenceHalls,
+                            repo: ref.read(receptionRepositoryProvider),
+                            onSuccess: onRefresh,
+                            currentBranch:
+                                branch.isNotEmpty ? branch : 'Kyogong',
+                          ),
+                        );
+                      },
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Book a Hall'),
                     ),
@@ -5641,7 +5670,8 @@ class _RoomsTable extends StatelessWidget {
 }
 
 class _HorizontalTable extends StatefulWidget {
-  const _HorizontalTable({super.key, required this.columns, required this.rows});
+  const _HorizontalTable(
+      {super.key, required this.columns, required this.rows});
 
   final List<String> columns;
   final List<List<Widget>> rows;
@@ -5701,7 +5731,8 @@ class _HorizontalTableState extends State<_HorizontalTable> {
               const Spacer(),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor: Colors.white,
@@ -5710,12 +5741,15 @@ class _HorizontalTableState extends State<_HorizontalTable> {
                 ),
                 onPressed: () => _scroll(-250),
                 icon: const Icon(Icons.arrow_back, size: 12),
-                label: const Text('Scroll Left', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                label: const Text('Scroll Left',
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 6),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor: AppColors.kPrimary,
@@ -5724,7 +5758,9 @@ class _HorizontalTableState extends State<_HorizontalTable> {
                 ),
                 onPressed: () => _scroll(250),
                 icon: const Icon(Icons.arrow_forward, size: 12),
-                label: const Text('Scroll Right', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                label: const Text('Scroll Right',
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -5746,8 +5782,8 @@ class _HorizontalTableState extends State<_HorizontalTable> {
                           style: const TextStyle(fontWeight: FontWeight.w800))))
                   .toList(),
               rows: widget.rows
-                  .map((cells) =>
-                      DataRow(cells: cells.map((cell) => DataCell(cell)).toList()))
+                  .map((cells) => DataRow(
+                      cells: cells.map((cell) => DataCell(cell)).toList()))
                   .toList(),
             ),
           ),
@@ -6503,6 +6539,13 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   final _deposit = TextEditingController(text: '0');
   final _paymentReference = TextEditingController();
   final _cashTendered = TextEditingController();
+  // Double Occupancy / Breakfast surcharges — see OccupancyBreakfastCharges.
+  // Posted to the folio once the booking is actually created (either by
+  // Pay Now or by the final "Create Confirmed Booking" submit), same as the
+  // check-in dialogs.
+  final _doubleOccCtrl = TextEditingController();
+  bool _addBreakfast = false;
+  final _breakfastCtrl = TextEditingController();
   int _step = 0;
   int _adults = 1;
   int _children = 0;
@@ -6519,6 +6562,7 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   // ── Room-rate offers ──────────────────────────────────────────────────────
   /// Active room_type / all_rooms offers for today, fetched alongside rooms.
   List<Map<String, dynamic>> _roomOffers = [];
+
   /// Best matching offer for the currently selected room (null = no offer).
   Map<String, dynamic>? _appliedOffer;
 
@@ -6567,6 +6611,64 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Rebuilds so the "Amount Due" summary row updates live as the
+    // Double Occupancy / Breakfast charge fields are typed.
+    _doubleOccCtrl.addListener(_recalcExtras);
+    _breakfastCtrl.addListener(_recalcExtras);
+  }
+
+  void _recalcExtras() => setState(() {});
+
+  /// True once the selected Meal Plan already includes breakfast (Bed &
+  /// Breakfast, Half Board, Full Board) — hides the "Add breakfast" option
+  /// so staff can't charge for something the room rate already covers.
+  bool get _breakfastIncluded =>
+      OccupancyBreakfastCharges.breakfastIncludedInMealPlan(_mealPlan);
+
+  double get _extrasTotal => OccupancyBreakfastCharges.resolve(
+        adults: _adults,
+        doubleOccCtrl: _doubleOccCtrl,
+        addBreakfast: _addBreakfast,
+        breakfastCtrl: _breakfastCtrl,
+        breakfastIncluded: _breakfastIncluded,
+      ).values.fold(0.0, (a, b) => a + b);
+
+  /// Posts the Double Occupancy / Breakfast surcharges to the just-created
+  /// booking's folio. Called exactly once, right after the booking is first
+  /// created (either by Pay Now or by the direct submit path) — never
+  /// re-posted if the dialog later reuses that same booking.
+  Future<void> _postOccupancyAndBreakfastCharges(String bookingId) async {
+    final charges = OccupancyBreakfastCharges.resolve(
+      adults: _adults,
+      doubleOccCtrl: _doubleOccCtrl,
+      addBreakfast: _addBreakfast,
+      breakfastCtrl: _breakfastCtrl,
+      breakfastIncluded: _breakfastIncluded,
+    );
+    for (final entry in charges.entries) {
+      try {
+        await ref
+            .read(receptionRepositoryProvider)
+            .addFolioTransaction(bookingId, {
+          'description': entry.key,
+          'amount': entry.value,
+          'type': 'charge',
+          'category': 'Additional Service',
+        });
+      } catch (e) {
+        if (mounted) {
+          _showSnack(
+            'Booking created, but posting "${entry.key}" to the folio failed: '
+            '${apiErrorMessage(e)}. Add it from the Guest Folio screen instead.',
+          );
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _checkIn.dispose();
     _checkOut.dispose();
@@ -6575,6 +6677,10 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     _deposit.dispose();
     _paymentReference.dispose();
     _cashTendered.dispose();
+    _doubleOccCtrl.removeListener(_recalcExtras);
+    _breakfastCtrl.removeListener(_recalcExtras);
+    _doubleOccCtrl.dispose();
+    _breakfastCtrl.dispose();
     super.dispose();
   }
 
@@ -6717,7 +6823,10 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
                             'Available Rooms (${_rooms.length} found)',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.kPrimary),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: AppColors.kPrimary),
                           ),
                         ),
                         ConstrainedBox(
@@ -6725,16 +6834,21 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                           child: ListView(
                             shrinkWrap: true,
                             children: _rooms.map((room) {
-                              final selected = _selectedRoom?['id'] == room['id'];
-                              final baseRate = _num(room, _roomRateKeys).toDouble();
+                              final selected =
+                                  _selectedRoom?['id'] == room['id'];
+                              final baseRate =
+                                  _num(room, _roomRateKeys).toDouble();
                               final bestOffer = _bestOfferFor(room);
                               final effRate = bestOffer != null
-                                  ? (baseRate - _offerSaving(bestOffer, baseRate))
+                                  ? (baseRate -
+                                          _offerSaving(bestOffer, baseRate))
                                       .clamp(0.0, double.infinity)
                                   : baseRate;
                               final typeName = _text(room, [
-                                    'type.name', 'type.code',
-                                    'room_type.name', 'room_type.code',
+                                    'type.name',
+                                    'type.code',
+                                    'room_type.name',
+                                    'room_type.code',
                                     'type_name',
                                   ]) ??
                                   'Standard';
@@ -6742,7 +6856,10 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                 selected: selected,
                                 title: Row(
                                   children: [
-                                    Text('Room ${_text(room, ['room_number', 'number']) ?? '-'}'),
+                                    Text('Room ${_text(room, [
+                                              'room_number',
+                                              'number'
+                                            ]) ?? '-'}'),
                                     if (bestOffer != null) ...[
                                       const SizedBox(width: 6),
                                       Container(
@@ -6790,7 +6907,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                           ],
                                         ),
                                       )
-                                    : Text('$typeName • ${_money(baseRate)}/night'),
+                                    : Text(
+                                        '$typeName • ${_money(baseRate)}/night'),
                                 trailing: selected
                                     ? const Icon(Icons.check_circle,
                                         color: AppColors.kSuccess)
@@ -6926,6 +7044,16 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                     onChanged: (v) =>
                         setState(() => _mealPlan = v ?? 'bed_breakfast'),
                   ),
+                  const SizedBox(height: 14),
+                  OccupancyBreakfastCharges(
+                    adults: _adults,
+                    doubleOccCtrl: _doubleOccCtrl,
+                    addBreakfast: _addBreakfast,
+                    onAddBreakfastChanged: (v) =>
+                        setState(() => _addBreakfast = v),
+                    breakfastCtrl: _breakfastCtrl,
+                    breakfastIncluded: _breakfastIncluded,
+                  ),
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.only(left: 2, bottom: 6),
@@ -6992,17 +7120,17 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                       decoration: BoxDecoration(
                         color: AppColors.kSuccess.withAlpha(26),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: AppColors.kSuccess.withAlpha(89)),
+                        border:
+                            Border.all(color: AppColors.kSuccess.withAlpha(89)),
                       ),
                       child: Text(
                         'Cashier payment posted: ${_money(_num(_cashierPaymentReceipt!, [
                               'amount'
                             ]))} via ${_paymentMethod.toUpperCase()} • Ref: ${_text(_cashierPaymentReceipt!, [
-                              'cashier_transaction_number',
-                              'reference',
-                              'payment_reference'
-                            ]) ?? '-'} • Folio balance: ${_money(_num(_cashierPaymentReceipt!, [
+                                  'cashier_transaction_number',
+                                  'reference',
+                                  'payment_reference'
+                                ]) ?? '-'} • Folio balance: ${_money(_num(_cashierPaymentReceipt!, [
                               'balance'
                             ]))}',
                         style: const TextStyle(
@@ -7056,8 +7184,7 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                         final base =
                             _num(_selectedRoom!, _roomRateKeys).toDouble();
                         if (_appliedOffer == null) return _money(base);
-                        final eff = (base -
-                                _offerSaving(_appliedOffer!, base))
+                        final eff = (base - _offerSaving(_appliedOffer!, base))
                             .clamp(0.0, double.infinity);
                         return '${_money(eff)}/night (was ${_money(base)})';
                       }(),
@@ -7065,11 +7192,20 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                     if (_appliedOffer != null)
                       {
                         'label': 'Offer Applied',
-                        'value':
-                            '${_appliedOffer!['name'] ?? 'Discount'} — '
+                        'value': '${_appliedOffer!['name'] ?? 'Discount'} — '
                             '${_discountBadge(_appliedOffer!)}',
                       },
                     {'label': 'Total Amount', 'value': _money(total)},
+                    if (_extrasTotal > 0) ...[
+                      {
+                        'label': 'Extra Charges',
+                        'value': _money(_extrasTotal),
+                      },
+                      {
+                        'label': 'Amount Due',
+                        'value': _money(total + _extrasTotal),
+                      },
+                    ],
                   ]),
                 ],
               ),
@@ -7098,8 +7234,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                       : 'Creating Hold...')
                   : (_cashierPaymentReceipt != null
                       ? 'Done'
-                  : (widget.isBookingMode
-                      ? 'Create Confirmed Booking'
+                      : (widget.isBookingMode
+                          ? 'Create Confirmed Booking'
                           : 'Create Provisional Hold')))),
       ],
     );
@@ -7141,9 +7277,17 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   // ── Offer helpers ─────────────────────────────────────────────────────────
 
   static const List<String> _roomRateKeys = [
-    'price_per_night', 'rate', 'base_rate', 'base_price',
-    'type.base_price', 'type.price_per_night', 'type.base_rate', 'type.rate',
-    'room_type.base_price', 'room_type.price_per_night', 'room_type.rate',
+    'price_per_night',
+    'rate',
+    'base_rate',
+    'base_price',
+    'type.base_price',
+    'type.price_per_night',
+    'type.base_rate',
+    'type.rate',
+    'room_type.base_price',
+    'room_type.price_per_night',
+    'room_type.rate',
   ];
 
   /// Amount saved by [offer] on a room with [baseRate].
@@ -7160,9 +7304,14 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     final baseRate = _num(room, _roomRateKeys).toDouble();
     if (baseRate <= 0) return null;
     final roomTypeName = (_text(room, [
-          'type.name', 'room_type.name', 'type_name', 'type.code',
-        ]) ??
-        '').toLowerCase().trim();
+              'type.name',
+              'room_type.name',
+              'type_name',
+              'type.code',
+            ]) ??
+            '')
+        .toLowerCase()
+        .trim();
 
     Map<String, dynamic>? best;
     double bestSaving = 0;
@@ -7175,6 +7324,10 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
         matches = label.isNotEmpty &&
             (roomTypeName.contains(label.toLowerCase()) ||
                 label.toLowerCase().contains(roomTypeName));
+      } else if (tt == 'room_number') {
+        final targetId = '${o['target_id'] ?? ''}'.trim();
+        final roomId = '${room['id'] ?? ''}'.trim();
+        matches = targetId.isNotEmpty && targetId == roomId;
       } else if (tt == 'guest') {
         final targetId = '${o['target_id'] ?? ''}'.trim();
         final bookingId = '${room['booking_id'] ?? room['id'] ?? ''}'.trim();
@@ -7191,7 +7344,6 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     }
     return best;
   }
-
 
   Future<void> _searchGuests() async {
     final rows = await ref
@@ -7241,14 +7393,15 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
         : 'KES $v OFF';
   }
 
-  Future<Map<String, dynamic>> _createBooking({required bool recordDepositAsPaid}) async {
+  Future<Map<String, dynamic>> _createBooking(
+      {required bool recordDepositAsPaid}) async {
     if (_selectedRoom == null || _selectedGuest == null) {
       throw StateError('Select a room and guest before creating the booking.');
     }
     final status = widget.isBookingMode ? 'confirmed' : 'pending';
-    final paidAmount = recordDepositAsPaid ? (num.tryParse(_deposit.text) ?? 0) : 0;
-    final originalRate =
-        _num(_selectedRoom!, _roomRateKeys).toDouble();
+    final paidAmount =
+        recordDepositAsPaid ? (num.tryParse(_deposit.text) ?? 0) : 0;
+    final originalRate = _num(_selectedRoom!, _roomRateKeys).toDouble();
     final hasOffer = _appliedOffer != null;
     return ref.read(receptionRepositoryProvider).createBookingRow({
       'room_id': _text(_selectedRoom!, ['id']),
@@ -7284,14 +7437,21 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
 
     final depositAmount = num.tryParse(_deposit.text) ?? 0;
     if (widget.isBookingMode && depositAmount > 0) {
-      _showSnack('Use Pay Now to record received booking money through Cashier Station.');
+      _showSnack(
+          'Use Pay Now to record received booking money through Cashier Station.');
       await _openBookingPaymentDialog();
       return;
     }
 
     setState(() => _busy = true);
     try {
-      await _createBooking(recordDepositAsPaid: !widget.isBookingMode);
+      final created =
+          await _createBooking(recordDepositAsPaid: !widget.isBookingMode);
+      final bookingId = _text(created,
+          ['id', 'reservation_id', 'reservationId', 'booking_id', 'bookingId']);
+      if (bookingId != null && bookingId.isNotEmpty) {
+        await _postOccupancyAndBreakfastCharges(bookingId);
+      }
       widget.onSuccess();
       if (mounted) Navigator.pop(context);
     } finally {
@@ -7339,13 +7499,15 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                     return;
                   }
                   if (tendered < amount) {
-                    _showSnack('Cash tendered is short by ${_money(amount - tendered)}.');
+                    _showSnack(
+                        'Cash tendered is short by ${_money(amount - tendered)}.');
                     return;
                   }
                 }
+                final isFirstCreation = _createdBookingForPayment == null;
                 final booking = _createdBookingForPayment ??
                     await _createBooking(recordDepositAsPaid: false);
-                if (mounted && _createdBookingForPayment == null) {
+                if (mounted && isFirstCreation) {
                   setState(() => _createdBookingForPayment = booking);
                 }
                 final bookingId = _text(booking, [
@@ -7356,7 +7518,13 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                   'bookingId'
                 ]);
                 if (bookingId == null || bookingId.isEmpty) {
-                  throw StateError('The created booking did not return a reservation id.');
+                  throw StateError(
+                      'The created booking did not return a reservation id.');
+                }
+                // Post the Double Occupancy / Breakfast surcharges exactly
+                // once, right when the booking is first created here.
+                if (isFirstCreation) {
+                  await _postOccupancyAndBreakfastCharges(bookingId);
                 }
                 final confirmation = _text(booking, [
                       'confirmationNumber',
@@ -7392,7 +7560,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                 });
                 widget.onSuccess();
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-                _showSnack('Payment posted to guest folio. Room bills and checkout will reflect the balance.');
+                _showSnack(
+                    'Payment posted to guest folio. Room bills and checkout will reflect the balance.');
               } catch (error) {
                 if (mounted) _showSnack('Payment failed: $error');
               } finally {
@@ -7418,9 +7587,9 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                       {
                         'label': 'Room',
                         'value': 'Room ${_text(_selectedRoom!, [
-                              'room_number',
-                              'number'
-                            ]) ?? '-'}'
+                                  'room_number',
+                                  'number'
+                                ]) ?? '-'}'
                       },
                       {'label': 'Amount', 'value': _money(amount)},
                     ]),
@@ -7795,82 +7964,745 @@ Future<void> _showGuestFormDialog(BuildContext context, WidgetRef ref,
   );
 }
 
+/// Walk-in flow for an AVAILABLE room with no existing booking: pick/create a
+/// guest and stay dates, then create the booking AND check the guest in on
+/// this one action (no second "Complete Check-In" screen/step — that only
+/// exists for checking in a pre-existing confirmed reservation via
+/// [CheckInScreen]/[_checkIn]). Also collects the optional Double Occupancy
+/// and Breakfast surcharges and posts them straight to the guest's folio.
 Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
     Room room, VoidCallback onSuccess) async {
-  Guest? selected;
   final repo = ref.read(receptionRepositoryProvider);
-  final guests = await repo.getGuests();
-  if (!context.mounted) return;
-  await showDialog<void>(
+  final result = await showDialog<bool>(
     context: context,
-    builder: (_) => StatefulBuilder(builder: (context, setState) {
-      return AlertDialog(
-        title: Text('Quick Check-in Room ${room.displayNumber}'),
-        content: SizedBox(
-          width: 520,
-          height: 420,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  children: guests.map((guest) {
-                    return ListTile(
-                      selected: selected?.id == guest.id,
-                      title: Text(guest.name),
-                      subtitle: Text(guest.phone ?? guest.email ?? ''),
-                      onTap: () => setState(() => selected = guest),
-                    );
-                  }).toList(),
+    builder: (_) => _QuickCheckInDialog(room: room, repo: repo),
+  );
+  if (result == true) onSuccess();
+}
+
+class _QuickCheckInDialog extends StatefulWidget {
+  const _QuickCheckInDialog({required this.room, required this.repo});
+  final Room room;
+  final ReceptionRepository repo;
+
+  @override
+  State<_QuickCheckInDialog> createState() => _QuickCheckInDialogState();
+}
+
+class _QuickCheckInDialogState extends State<_QuickCheckInDialog> {
+  final _searchCtrl = TextEditingController();
+  late Future<List<Guest>> _guestsFuture;
+  Timer? _searchDebounce;
+  Guest? _selected;
+  DateTime _checkIn = DateTime.now();
+  DateTime _checkOut = DateTime.now().add(const Duration(days: 1));
+  int _adults = 1;
+  int _children = 0;
+  final _doubleOccCtrl = TextEditingController();
+  bool _addBreakfast = false;
+  final _breakfastCtrl = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  // Payment — same "Pay Now" / cashier-station pattern as _NewReservationDialog
+  // (see _openBookingPaymentDialog), so Quick Check-in offers the identical
+  // total/payment-method/reference experience instead of a bare check-in with
+  // no pricing shown at all.
+  final _payAmountCtrl = TextEditingController(text: '0');
+  final _paymentReferenceCtrl = TextEditingController();
+  final _cashTenderedCtrl = TextEditingController();
+  String _paymentMethod = 'cash';
+  bool _payNowBusy = false;
+  Map<String, dynamic>? _cashierPaymentReceipt;
+  // Set once a booking row exists — either because Pay Now created it early,
+  // or _continue() did. Reused instead of creating a second, duplicate
+  // booking if Pay Now already ran before "Check In" is pressed.
+  Map<String, dynamic>? _createdBooking;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initial list: guests with prior history at this branch (see
+    // Guest.search on the backend). Typing below re-queries the backend
+    // directly instead of just filtering this snapshot, so a guest who's
+    // already registered but has no reservation at THIS branch yet (a
+    // returning guest from elsewhere, or someone pre-registered by phone)
+    // can still be found instead of forcing staff into "Create Guest" and
+    // making a duplicate record.
+    _guestsFuture = widget.repo.getGuests();
+    // Rebuild so the Total line updates live as the extra-charge fields
+    // are typed (dates/adults/children already rebuild via their own
+    // setState-driven handlers).
+    _doubleOccCtrl.addListener(_recalcTotal);
+    _breakfastCtrl.addListener(_recalcTotal);
+  }
+
+  void _recalcTotal() => setState(() {});
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchDebounce?.cancel();
+    _doubleOccCtrl.removeListener(_recalcTotal);
+    _breakfastCtrl.removeListener(_recalcTotal);
+    _doubleOccCtrl.dispose();
+    _breakfastCtrl.dispose();
+    _payAmountCtrl.dispose();
+    _paymentReferenceCtrl.dispose();
+    _cashTenderedCtrl.dispose();
+    super.dispose();
+  }
+
+  int get _nights => _checkOut.difference(_checkIn).inDays.clamp(1, 365);
+  double get _roomTotal => (widget.room.pricePerNight ?? 0) * _nights;
+  double get _extrasTotal => OccupancyBreakfastCharges.resolve(
+        adults: _adults,
+        doubleOccCtrl: _doubleOccCtrl,
+        addBreakfast: _addBreakfast,
+        breakfastCtrl: _breakfastCtrl,
+      ).values.fold(0.0, (a, b) => a + b);
+  double get _grandTotal => _roomTotal + _extrasTotal;
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _guestsFuture = widget.repo.getGuests());
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _guestsFuture = widget.repo.getGuests(search: trimmed));
+    });
+  }
+
+  Future<void> _pickDate({required bool isCheckIn}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isCheckIn ? _checkIn : _checkOut,
+      firstDate: isCheckIn
+          ? DateTime.now().subtract(const Duration(days: 1))
+          : _checkIn.add(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isCheckIn) {
+        _checkIn = picked;
+        if (!_checkOut.isAfter(_checkIn)) {
+          _checkOut = _checkIn.add(const Duration(days: 1));
+        }
+      } else {
+        _checkOut = picked;
+      }
+    });
+  }
+
+  Future<void> _createGuest() async {
+    final created = await showDialog<Guest>(
+        context: context, builder: (_) => _InlineGuestDialog());
+    if (created != null && mounted) {
+      setState(() {
+        _selected = created;
+        // The just-created guest won't be in the already-fetched list yet —
+        // refetch so it (and anyone else added meanwhile) shows up if the
+        // staff member reopens the list.
+        _guestsFuture = widget.repo.getGuests();
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _createBookingRow() async {
+    final fmt = DateFormat('yyyy-MM-dd');
+    return widget.repo.createBookingRow({
+      'room_id': widget.room.id,
+      'guest_id': _selected!.id,
+      'check_in': fmt.format(_checkIn),
+      'check_out': fmt.format(_checkOut),
+      'adults': _adults,
+      'children': _children,
+      'status': 'confirmed',
+    });
+  }
+
+  Future<void> _continue() async {
+    final guest = _selected;
+    if (guest == null || _submitting) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    String? bookingId;
+    try {
+      // Reuse the booking Pay Now already created (if the receptionist took
+      // payment before pressing Check In) instead of creating a second,
+      // duplicate one.
+      final created = _createdBooking ?? await _createBookingRow();
+      bookingId = (created['id'] ?? created['bookingId'] ?? '').toString();
+      if (bookingId.isEmpty) {
+        throw Exception('Booking was created but no booking ID was returned.');
+      }
+      // A walk-in ("Quick Check-in") actually checks the guest in on this
+      // one action — no separate "Complete Check-In" step (that's
+      // CheckInScreen's flow, for checking in an EXISTING reservation, not a
+      // fresh walk-in). checkIn requires status == 'confirmed', which the
+      // booking above was just created with, so this is safe to call
+      // immediately.
+      await widget.repo.checkIn(bookingId);
+      await _postOccupancyAndBreakfastCharges(bookingId);
+      if (!mounted) return;
+      _snack(context, 'Guest checked in to Room ${widget.room.displayNumber}');
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      final bookingCreated = bookingId != null && bookingId.isNotEmpty;
+      setState(() {
+        _error = bookingCreated
+            // The booking exists (visible in the Check-in Queue) even though
+            // the check-in call itself failed — say so, so staff don't retry
+            // "Check In" again and create a second, duplicate booking.
+            ? 'Booking was created, but check-in failed: '
+                '${apiErrorMessage(e)}. Find it in the Check-in Queue to retry.'
+            : apiErrorMessage(e, fallback: 'Could not check in: $e');
+        _submitting = false;
+      });
+    }
+  }
+
+  /// Posts the optional Double Occupancy / Breakfast surcharges entered
+  /// below straight to the guest's folio, so they land on the final
+  /// bill/invoice as their own explicitly-described lines (see
+  /// buildFolioInvoiceItems / _downloadCheckoutBill) rather than silently
+  /// vanishing into a generic total. Runs after check-in has already
+  /// succeeded, so a failure here (e.g. a flaky connection) is reported but
+  /// never undoes the check-in — staff can post the charge later from the
+  /// Guest Folio screen instead.
+  Future<void> _postOccupancyAndBreakfastCharges(String bookingId) async {
+    final charges = OccupancyBreakfastCharges.resolve(
+      adults: _adults,
+      doubleOccCtrl: _doubleOccCtrl,
+      addBreakfast: _addBreakfast,
+      breakfastCtrl: _breakfastCtrl,
+    );
+    for (final entry in charges.entries) {
+      try {
+        await widget.repo.addFolioTransaction(bookingId, {
+          'description': entry.key,
+          'amount': entry.value,
+          'type': 'charge',
+          'category': 'Additional Service',
+        });
+      } catch (e) {
+        if (mounted) {
+          _snack(
+            context,
+            'Checked in, but posting "${entry.key}" to the folio failed: '
+            '${apiErrorMessage(e)}. Add it from the Guest Folio screen instead.',
+            error: true,
+          );
+        }
+      }
+    }
+  }
+
+  /// Same "Pay Now → Cashier Station" flow as _NewReservationDialog's
+  /// _openBookingPaymentDialog: creates the booking early if it doesn't
+  /// exist yet (so a walk-in can pay before "Check In" is pressed), then
+  /// posts the payment through the cashier ledger via settleRoomFolioPayment
+  /// — cash/M-Pesa/card, with a required reference for M-Pesa and card.
+  Future<void> _openCheckInPaymentDialog() async {
+    if (_selected == null) {
+      _snack(context, 'Select a guest before taking payment.', error: true);
+      return;
+    }
+    final amount = num.tryParse(_payAmountCtrl.text) ?? 0;
+    if (amount <= 0) {
+      _snack(context, 'Enter the payment amount first.', error: true);
+      return;
+    }
+    if (_cashTenderedCtrl.text.trim().isEmpty) {
+      _cashTenderedCtrl.text = amount.toStringAsFixed(0);
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !_payNowBusy,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> postPayment() async {
+              setDialogState(() => _payNowBusy = true);
+              if (mounted) setState(() => _payNowBusy = true);
+              try {
+                final typedReference = _paymentReferenceCtrl.text.trim();
+                if ((_paymentMethod == 'mpesa' || _paymentMethod == 'card') &&
+                    typedReference.isEmpty) {
+                  _snack(
+                    context,
+                    _paymentMethod == 'mpesa'
+                        ? 'Enter the M-Pesa receipt/reference code.'
+                        : 'Enter the card approval/batch reference.',
+                    error: true,
+                  );
+                  return;
+                }
+                final tendered = num.tryParse(_cashTenderedCtrl.text) ?? amount;
+                if (_paymentMethod == 'cash') {
+                  if (tendered <= 0) {
+                    _snack(
+                        context, 'Enter cash tendered before posting payment.',
+                        error: true);
+                    return;
+                  }
+                  if (tendered < amount) {
+                    _snack(context,
+                        'Cash tendered is short by ${_money(amount - tendered)}.',
+                        error: true);
+                    return;
+                  }
+                }
+                final booking = _createdBooking ?? await _createBookingRow();
+                if (mounted && _createdBooking == null) {
+                  setState(() => _createdBooking = booking);
+                }
+                final bookingId =
+                    (booking['id'] ?? booking['bookingId'] ?? '').toString();
+                if (bookingId.isEmpty) {
+                  throw StateError(
+                      'The created booking did not return a reservation id.');
+                }
+                final confirmationRaw = booking['confirmationNumber'] ??
+                    booking['confirmation_number'];
+                final confirmation = (confirmationRaw ??
+                        bookingId.substring(
+                            0, bookingId.length < 8 ? bookingId.length : 8))
+                    .toString();
+                final reference = typedReference.isNotEmpty
+                    ? typedReference
+                    : 'DEP-CASH-$confirmation-${DateFormat('yyyyMMddHHmm').format(DateTime.now())}';
+                if (_paymentReferenceCtrl.text.trim().isEmpty) {
+                  _paymentReferenceCtrl.text = reference;
+                }
+                final receipt =
+                    await widget.repo.settleRoomFolioPayment(bookingId, {
+                  'amount': amount,
+                  'method': _paymentMethod,
+                  'reference': reference,
+                  'amount_tendered': _paymentMethod == 'cash' ? tendered : 0,
+                  'change_given': _paymentMethod == 'cash'
+                      ? (tendered - amount).clamp(0, double.infinity)
+                      : 0,
+                  'payment_purpose': 'checkin_payment',
+                });
+                if (!mounted) return;
+                setState(() {
+                  _createdBooking = booking;
+                  _cashierPaymentReceipt = receipt;
+                  _payAmountCtrl.text = amount.toStringAsFixed(0);
+                });
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                _snack(context,
+                    'Payment posted to guest folio. It will reflect on the bill at checkout.');
+              } catch (error) {
+                if (mounted) {
+                  _snack(context, 'Payment failed: $error', error: true);
+                }
+              } finally {
+                if (mounted) setState(() => _payNowBusy = false);
+                if (dialogContext.mounted) {
+                  setDialogState(() => _payNowBusy = false);
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Cashier Station Payment'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _KeyValueList(rows: [
+                      {'label': 'Guest', 'value': _selected!.name},
+                      {
+                        'label': 'Room',
+                        'value': 'Room ${widget.room.displayNumber}'
+                      },
+                      {'label': 'Amount', 'value': _money(amount)},
+                    ]),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _paymentMethod,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment Method'),
+                      items: const [
+                        DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                        DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                        DropdownMenuItem(value: 'card', child: Text('Card')),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _paymentMethod = value ?? 'cash');
+                        setDialogState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _cashTenderedCtrl,
+                      keyboardType: TextInputType.number,
+                      enabled: _paymentMethod == 'cash',
+                      decoration: const InputDecoration(
+                        labelText: 'Cash Tendered',
+                        prefixText: 'KES ',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _paymentReferenceCtrl,
+                      decoration: InputDecoration(
+                        labelText: _paymentMethod == 'cash'
+                            ? 'Cash receipt reference'
+                            : _paymentMethod == 'mpesa'
+                                ? 'M-Pesa reference *'
+                                : 'Card approval / batch reference *',
+                        hintText: _paymentMethod == 'cash'
+                            ? 'Auto-generated if left blank'
+                            : _paymentMethod == 'mpesa'
+                                ? 'Enter M-Pesa receipt code'
+                                : 'Enter card terminal approval/batch code',
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final created = await showDialog<Guest>(
-                      context: context, builder: (_) => _InlineGuestDialog());
-                  if (created != null) setState(() => selected = created);
-                },
-                icon: const Icon(Icons.person_add),
-                label: const Text('Create Guest'),
+              actions: [
+                TextButton(
+                  onPressed:
+                      _payNowBusy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _payNowBusy ? null : postPayment,
+                  child: _payNowBusy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Post Payment'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('MMM dd, yyyy');
+    return AlertDialog(
+      title: Text('Quick Check-in — Room ${widget.room.displayNumber}'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_selected != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppColors.kPrimary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person,
+                          size: 18, color: AppColors.kPrimary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_selected!.name,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        tooltip: 'Change guest',
+                        onPressed: () => setState(() => _selected = null),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search guest by name, phone or email',
+                    isDense: true,
+                  ),
+                  // Re-queries the backend (debounced) instead of just
+                  // filtering the initial branch-scoped snapshot — otherwise a
+                  // guest already in the system with no prior stay at THIS
+                  // branch could never be found here, pushing staff to
+                  // "Create Guest" and creating a duplicate record.
+                  onChanged: _onSearchChanged,
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 220,
+                  child: FutureBuilder<List<Guest>>(
+                    future: _guestsFuture,
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snap.hasError) {
+                        return Center(
+                            child: Text('Failed to load guests: ${snap.error}',
+                                style: const TextStyle(color: Colors.red)));
+                      }
+                      final query = _searchCtrl.text.trim();
+                      final guests = snap.data ?? const <Guest>[];
+                      if (guests.isEmpty) {
+                        return Center(
+                          child: Text(
+                            query.isEmpty
+                                ? 'No guests found. Create one below.'
+                                : 'No guests match "$query".',
+                            style: const TextStyle(color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+                      return ListView.builder(
+                        itemCount: guests.length,
+                        itemBuilder: (context, i) {
+                          final guest = guests[i];
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.person_outline),
+                            title: Text(guest.name),
+                            subtitle: Text(guest.phone ?? guest.email ?? '—'),
+                            onTap: () => setState(() => _selected = guest),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _createGuest,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Create Guest'),
+                ),
+              ],
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickDate(isCheckIn: true),
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text('In: ${fmt.format(_checkIn)}'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickDate(isCheckIn: false),
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text('Out: ${fmt.format(_checkOut)}'),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StepperField(
+                      label: 'Adults',
+                      value: _adults,
+                      min: 1,
+                      onChanged: (v) => setState(() => _adults = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _StepperField(
+                      label: 'Children',
+                      value: _children,
+                      min: 0,
+                      onChanged: (v) => setState(() => _children = v),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              OccupancyBreakfastCharges(
+                adults: _adults,
+                doubleOccCtrl: _doubleOccCtrl,
+                addBreakfast: _addBreakfast,
+                onAddBreakfastChanged: (v) => setState(() => _addBreakfast = v),
+                breakfastCtrl: _breakfastCtrl,
+              ),
+              const Divider(height: 24),
+              _KeyValueList(rows: [
+                {'label': 'Nights', 'value': '$_nights'},
+                {
+                  'label': 'Nightly Rate',
+                  'value': _money(widget.room.pricePerNight ?? 0),
+                },
+                if (_extrasTotal > 0)
+                  {'label': 'Extra Charges', 'value': _money(_extrasTotal)},
+                {'label': 'Total Amount', 'value': _money(_grandTotal)},
+              ]),
+              const SizedBox(height: 10),
+              const Padding(
+                padding: EdgeInsets.only(left: 2, bottom: 6),
+                child: Text(
+                  'Deposit / Payment Received (KES)',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.kTextPrimary),
+                ),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _payAmountCtrl,
+                      keyboardType: TextInputType.number,
+                      enabled: _cashierPaymentReceipt == null,
+                      decoration: const InputDecoration(
+                        hintText: '0',
+                        prefixText: 'KES ',
+                        helperText:
+                            'Use Pay Now to post received money through the cashier ledger.',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: (_submitting ||
+                            _payNowBusy ||
+                            _cashierPaymentReceipt != null)
+                        ? null
+                        : _openCheckInPaymentDialog,
+                    icon: Icon(_cashierPaymentReceipt == null
+                        ? Icons.point_of_sale
+                        : Icons.check_circle),
+                    label: Text(_payNowBusy
+                        ? 'Posting...'
+                        : _cashierPaymentReceipt == null
+                            ? 'Pay Now'
+                            : 'Paid'),
+                  ),
+                ],
+              ),
+              if (_cashierPaymentReceipt != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.kSuccess.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.kSuccess.withAlpha(89)),
+                  ),
+                  child: Text(
+                    'Cashier payment posted: ${_money(_num(_cashierPaymentReceipt!, [
+                          'amount'
+                        ]))} via ${_paymentMethod.toUpperCase()} • Ref: ${_text(_cashierPaymentReceipt!, [
+                              'cashier_transaction_number',
+                              'reference',
+                              'payment_reference'
+                            ]) ?? '-'}',
+                    style: const TextStyle(
+                      color: AppColors.kSuccess,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+              ],
             ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: selected == null
-                ? null
-                : () async {
-                    final booking = await repo.createBookingRow({
-                      'room_id': room.id,
-                      'guest_id': selected!.id,
-                      'check_in':
-                          DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                      'check_out': DateFormat('yyyy-MM-dd')
-                          .format(DateTime.now().add(const Duration(days: 1))),
-                      'adults': 1,
-                      'children': 0,
-                      'status': 'confirmed',
-                    });
-                    final bookingId =
-                        (booking['id'] ?? booking['bookingId'] ?? '')
-                            .toString();
-                    if (bookingId.isEmpty) {
-                      throw Exception(
-                          'Quick check-in could not continue because the booking ID was not returned.');
-                    }
-                    await repo.checkIn(bookingId);
-                    onSuccess();
-                    if (context.mounted) Navigator.pop(context);
-                  },
-            child: const Text('Check In'),
-          ),
-        ],
-      );
-    }),
-  );
+      ),
+      actions: [
+        TextButton(
+            onPressed: _submitting ? null : () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _selected == null || _submitting ? null : _continue,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Check In'),
+        ),
+      ],
+    );
+  }
+}
+
+class _StepperField extends StatelessWidget {
+  const _StepperField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.min = 0,
+  });
+  final String label;
+  final int value;
+  final int min;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline, size: 20),
+              onPressed: value > min ? () => onChanged(value - 1) : null,
+            ),
+            Text('$value',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              onPressed: () => onChanged(value + 1),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 Future<void> _showCheckoutDialog(
@@ -7880,8 +8712,8 @@ Future<void> _showCheckoutDialog(
       onPayAtCashier: onPayAtCashier);
 }
 
-Future<void> _showExtendStayDialog(
-    BuildContext context, WidgetRef ref, Booking booking, VoidCallback onSuccess) async {
+Future<void> _showExtendStayDialog(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onSuccess) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (_) => _ExtendStayDialog(booking: booking),
@@ -7962,16 +8794,19 @@ class _ExtendStayDialogState extends State<_ExtendStayDialog> {
                 children: [
                   Text(
                     widget.booking.guestName ?? 'Guest',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 4),
                   Text('Room: ${widget.booking.roomNumber ?? '-'}'),
-                  Text('Current Checkout: ${fmt.format(widget.booking.checkOut)}'),
+                  Text(
+                      'Current Checkout: ${fmt.format(widget.booking.checkOut)}'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Select Additional Nights:', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Select Additional Nights:',
+                style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -7988,7 +8823,8 @@ class _ExtendStayDialogState extends State<_ExtendStayDialog> {
             OutlinedButton.icon(
               onPressed: _pickCustomDate,
               icon: const Icon(Icons.edit_calendar, size: 18),
-              label: Text('Pick Checkout Date (${fmt.format(_newCheckoutDate)})'),
+              label:
+                  Text('Pick Checkout Date (${fmt.format(_newCheckoutDate)})'),
             ),
             const SizedBox(height: 16),
             Container(
@@ -8005,7 +8841,9 @@ class _ExtendStayDialogState extends State<_ExtendStayDialog> {
                   Expanded(
                     child: Text(
                       'New Checkout Date: ${fmt.format(_newCheckoutDate)} (+$_extraNights Night${_extraNights > 1 ? 's' : ''})',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade900),
                     ),
                   ),
                 ],
@@ -8038,23 +8876,32 @@ class _ExtendStayDialogState extends State<_ExtendStayDialog> {
                         final repo = ref.read(receptionRepositoryProvider);
                         await repo.extendStay(
                           widget.booking.id,
-                          newCheckOutDate: DateFormat('yyyy-MM-dd').format(_newCheckoutDate),
+                          newCheckOutDate:
+                              DateFormat('yyyy-MM-dd').format(_newCheckoutDate),
                           extraNights: _extraNights,
                           notes: _notesController.text.trim(),
                         );
                         if (context.mounted) {
-                          _snack(context, 'Stay extended to ${fmt.format(_newCheckoutDate)}');
+                          _snack(context,
+                              'Stay extended to ${fmt.format(_newCheckoutDate)}');
                           Navigator.of(context).pop(true);
                         }
                       } catch (e) {
                         if (context.mounted) {
-                          _snack(context, apiErrorMessage(e, fallback: 'Failed to extend stay'), error: true);
+                          _snack(
+                              context,
+                              apiErrorMessage(e,
+                                  fallback: 'Failed to extend stay'),
+                              error: true);
                           setState(() => _saving = false);
                         }
                       }
                     },
               icon: _saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.check),
               label: const Text('Confirm Extension'),
             );
@@ -8090,6 +8937,35 @@ Future<void> _checkIn(BuildContext context, WidgetRef ref, Booking booking,
       await repo.updateBooking(booking.id, bookingEdit);
     }
     await repo.checkIn(booking.id);
+
+    // Double Occupancy / Breakfast surcharges entered on the confirm dialog —
+    // posted to the folio so they land on the final bill with their own
+    // explicit description (see buildFolioInvoiceItems). A failed post here
+    // is reported but never undoes the already-completed check-in.
+    final charges = (result['charges'] as List?)?.whereType<Map>() ?? const [];
+    for (final charge in charges) {
+      final description = '${charge['description'] ?? ''}';
+      final amount = charge['amount'];
+      if (description.isEmpty || amount == null) continue;
+      try {
+        await repo.addFolioTransaction(booking.id, {
+          'description': description,
+          'amount': amount,
+          'type': 'charge',
+          'category': 'Additional Service',
+        });
+      } catch (e) {
+        if (context.mounted) {
+          _snack(
+            context,
+            'Checked in, but posting "$description" to the folio failed: '
+            '${apiErrorMessage(e)}. Add it from the Guest Folio screen instead.',
+            error: true,
+          );
+        }
+      }
+    }
+
     onSuccess();
     if (context.mounted) _snack(context, 'Guest checked in');
   } catch (e) {
@@ -8127,6 +9003,9 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
   late final TextEditingController _specialRequests;
   late DateTime _checkInDate;
   late DateTime _checkOutDate;
+  final _doubleOccCtrl = TextEditingController();
+  bool _addBreakfast = false;
+  final _breakfastCtrl = TextEditingController();
 
   // Snapshots for change detection (only changed fields are sent to the API).
   late final Map<String, String> _initial;
@@ -8191,10 +9070,27 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
     };
     _iCheckIn = b.checkIn;
     _iCheckOut = b.checkOut;
+    // Rebuilds when Adults/Meal plan changes so the Double Occupancy Charge
+    // field and the Breakfast option appear/disappear live as the
+    // receptionist edits these here.
+    _adults.addListener(_onAdultsChanged);
+    _mealPlan.addListener(_onAdultsChanged);
   }
+
+  void _onAdultsChanged() => setState(() {});
+
+  /// True once Meal Plan already includes breakfast (Bed & Breakfast, Half
+  /// Board, Full Board) — hides the "Add breakfast" option so staff can't
+  /// charge for something the room rate already covers.
+  bool get _breakfastIncluded =>
+      OccupancyBreakfastCharges.breakfastIncludedInMealPlan(_mealPlan.text);
 
   @override
   void dispose() {
+    _adults.removeListener(_onAdultsChanged);
+    _mealPlan.removeListener(_onAdultsChanged);
+    _doubleOccCtrl.dispose();
+    _breakfastCtrl.dispose();
     for (final c in [
       _firstName,
       _lastName,
@@ -8275,9 +9171,22 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
       bk['checkOutDate'] = fmt.format(_checkOutDate);
     }
 
+    final resolvedCharges = OccupancyBreakfastCharges.resolve(
+      adults: adults ?? widget.booking.adults,
+      doubleOccCtrl: _doubleOccCtrl,
+      addBreakfast: _addBreakfast,
+      breakfastCtrl: _breakfastCtrl,
+      breakfastIncluded: _breakfastIncluded,
+    );
+    final charges = <Map<String, dynamic>>[
+      for (final entry in resolvedCharges.entries)
+        {'description': entry.key, 'amount': entry.value},
+    ];
+
     Navigator.of(context).pop(<String, dynamic>{
       'guest': guest.isEmpty ? null : guest,
       'booking': bk.isEmpty ? null : bk,
+      'charges': charges,
     });
   }
 
@@ -8352,6 +9261,16 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
               _field(_mealPlan, 'Meal plan (BB, HB, FB, Room Only)'),
               const SizedBox(height: 10),
               _field(_specialRequests, 'Special requests', maxLines: 2),
+              const SizedBox(height: 4),
+              _sectionLabel('ADDITIONAL CHARGES'),
+              OccupancyBreakfastCharges(
+                adults: int.tryParse(_adults.text.trim()) ?? b.adults,
+                doubleOccCtrl: _doubleOccCtrl,
+                addBreakfast: _addBreakfast,
+                onAddBreakfastChanged: (v) => setState(() => _addBreakfast = v),
+                breakfastCtrl: _breakfastCtrl,
+                breakfastIncluded: _breakfastIncluded,
+              ),
             ],
           ),
         ),
@@ -9161,6 +10080,45 @@ Future<void> printReceptionPaymentReceipt({
   );
 }
 
+/// A folio transaction is a manually-entered guest-service surcharge (Double
+/// Occupancy Charge, Breakfast Charge (addition), or anything staff add via
+/// "Add Charge") rather than a room/POS-outlet charge. Mirrors
+/// check_out_screen.dart's `_isAdditionalServiceTransaction` so every invoice
+/// print path (this dashboard's and the Check-Out screen's) explains these
+/// charges with their own named line instead of folding them into a generic
+/// "Other Services / Incidentals" bucket — or, worse, dropping them from the
+/// itemised list entirely whenever POS Charge-to-Room lines are also present.
+bool _isAdditionalServiceTx(Map<String, dynamic> tx) {
+  final type =
+      '${tx['type'] ?? tx['transaction_type'] ?? ''}'.trim().toLowerCase();
+  final cat = '${tx['category'] ?? ''}'.trim().toLowerCase();
+  final dept = '${tx['department'] ?? ''}'.trim().toLowerCase();
+  final desc = '${tx['description'] ?? ''}'.trim().toLowerCase();
+  final status = '${tx['status'] ?? ''}'.trim().toLowerCase();
+  final voided = tx['voided'] == true;
+  if (voided ||
+      status == 'voided' ||
+      status == 'cancelled' ||
+      status == 'reversed') {
+    return false;
+  }
+  if (type == 'payment') return false;
+  if (dept == 'room' ||
+      desc.contains('room charge') ||
+      desc.contains('extended stay')) {
+    return false;
+  }
+  if (dept.contains('pos') ||
+      desc.contains('pos') ||
+      desc.contains('· bill ')) {
+    return false;
+  }
+  return cat == 'additional service' ||
+      type == 'additional_service' ||
+      type == 'checkout_service' ||
+      tx['is_manual_service'] == true;
+}
+
 Future<void> _downloadCheckoutBill(
     BuildContext context, WidgetRef ref, Booking booking,
     {bool asReceipt = false}) async {
@@ -9184,6 +10142,14 @@ Future<void> _downloadCheckoutBill(
             .map((e) => Map<String, dynamic>.from(e))
             .toList()
         : <Map<String, dynamic>>[];
+    final allTransactions = raw['transactions'] is List
+        ? (raw['transactions'] as List)
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+    final additionalServiceTxs =
+        allTransactions.where(_isAdditionalServiceTx).toList();
 
     double n(dynamic v) =>
         (v is num) ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? 0.0);
@@ -9207,13 +10173,49 @@ Future<void> _downloadCheckoutBill(
     final String checkOutStr =
         DateFormat('dd/MM/yyyy').format(booking.checkOut);
 
+    // Additional-service charges (Double Occupancy, Breakfast, etc.) are
+    // already folded into folio.other_charges — subtract them out before
+    // handing the folio to buildFolioInvoiceItems() so its "Other Services /
+    // Incidentals" fallback bucket (used only when there's no POS detail at
+    // all) doesn't double-count them, then add each back below as its own
+    // named line so it always survives regardless of which tier fires.
+    final additionalServicesTotal = additionalServiceTxs.fold<double>(
+      0,
+      (sum, tx) => sum + n(tx['amount']),
+    );
+    final otherCharges =
+        n(folioMap['other_charges'] ?? folioMap['otherCharges']);
+    final adjustedFolioMap = {
+      ...folioMap,
+      'other_charges':
+          (otherCharges - additionalServicesTotal).clamp(0.0, double.infinity),
+    };
+
     final items = buildFolioInvoiceItems(
-      folio: folioMap,
+      folio: adjustedFolioMap,
       folioItems: folioItems,
       chargeLines: chargeLines,
       roomLabel: 'Room ${booking.roomNumber ?? '-'}',
       bookingTotal: bookingTotal,
     );
+
+    final existingDescs = items
+        .map((e) => '${e['description'] ?? ''}'.trim().toLowerCase())
+        .toSet();
+    for (final tx in additionalServiceTxs) {
+      final amount = n(tx['amount']);
+      if (amount <= 0) continue;
+      final desc = '${tx['description'] ?? 'Additional Service'}'.trim();
+      if (existingDescs.contains(desc.toLowerCase())) continue;
+      items.add({
+        'description': desc,
+        'qty': 1,
+        'unitPrice': amount,
+        'totalAmount': amount,
+      });
+      existingDescs.add(desc.toLowerCase());
+    }
+
     if (items.isEmpty) {
       items.add({
         'description':
@@ -9500,57 +10502,6 @@ Future<void> _showFolioDialog(
             ),
           ],
         );
-      },
-    ),
-  );
-}
-
-Future<void> _showConferenceBookingDialog(BuildContext context, WidgetRef ref,
-    List<Map<String, dynamic>> halls, VoidCallback onSuccess) async {
-  final hallIds = halls
-      .map((h) => _text(h, ['id']) ?? '')
-      .where((id) => id.isNotEmpty)
-      .toList();
-  final hallLabels = <String, String>{
-    for (final h in halls)
-      if ((_text(h, ['id']) ?? '').isNotEmpty)
-        _text(h, ['id'])!: () {
-          final name = _text(h, ['name', 'hall_name', 'title']) ?? 'Hall';
-          final price = _num(h, [
-            'base_price_per_day',
-            'price_per_day',
-            'rate',
-            'price',
-            'amount'
-          ]);
-          return price > 0 ? '$name • ${_money(price)}/day' : name;
-        }(),
-  };
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _RecordDialog(
-      title: 'Book Conference Hall',
-      fields: [
-        _RecordField('hall_id', 'Hall',
-            options: hallIds.ifEmpty(['']), optionLabels: hallLabels),
-        const _RecordField('company_name', 'Company / Client'),
-        const _RecordField('contact_person', 'Contact person'),
-        const _RecordField('customer_phone', 'Phone'),
-        _RecordField('start_date', 'Start date/time',
-            initial: DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())),
-        _RecordField('end_date', 'End date/time',
-            initial: DateFormat('yyyy-MM-dd HH:mm')
-                .format(DateTime.now().add(const Duration(hours: 4)))),
-        const _RecordField('num_participants', 'Participants',
-            numeric: true, initial: '1'),
-        const _RecordField('total_amount', 'Total amount',
-            numeric: true, initial: '0'),
-      ],
-      onSubmit: (values) async {
-        await ref
-            .read(receptionRepositoryProvider)
-            .createConferenceBooking(values);
-        onSuccess();
       },
     ),
   );

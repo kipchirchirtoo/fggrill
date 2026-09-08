@@ -30,7 +30,8 @@ class BranchManagerRepository {
       [Map<String, dynamic>? query]) async {
     final branchId = await getBranchId();
     if (branchId.isEmpty) {
-      dev.log('WARNING: branchId is empty — branch_id will be omitted from request',
+      dev.log(
+          'WARNING: branchId is empty — branch_id will be omitted from request',
           name: 'BranchManagerRepository');
     }
     return {
@@ -212,9 +213,8 @@ class BranchManagerRepository {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
     final occupiedRooms = rooms.where((room) {
-      final status = '${room['status'] ?? room['room_status'] ?? ''}'
-          .trim()
-          .toLowerCase();
+      final status =
+          '${room['status'] ?? room['room_status'] ?? ''}'.trim().toLowerCase();
       return status == 'occupied' || status == 'checked_in';
     }).length;
 
@@ -464,7 +464,8 @@ class BranchManagerRepository {
   Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) =>
       postMap('/users', data: data);
 
-  Future<Map<String, dynamic>> updateUser(String id, Map<String, dynamic> data) =>
+  Future<Map<String, dynamic>> updateUser(
+          String id, Map<String, dynamic> data) =>
       putMap('/users/$id', data: data);
 
   Future<void> updateStaff(String id, Map<String, dynamic> data) async {
@@ -473,23 +474,44 @@ class BranchManagerRepository {
 
   Future<void> deleteStaff(String id) => delete('/staff/$id');
 
+  /// Individual staff member's performance row (for the staff-detail KPI
+  /// drill-down). '/staff/performance' (note the slash) doesn't exist as a
+  /// GET route — staff.routes.ts only registers it as POST (submitting a
+  /// review); a GET there falls through to `GET /staff/:id`, which treats
+  /// "performance" as a staff id and 404s ("requested record or route was
+  /// not found"). The real listing endpoint is the hyphenated
+  /// '/staff-performance' router, which returns `{performance: [...],
+  /// summary: {...}}` rather than a bare list, so this unwraps it manually
+  /// instead of going through the generic getList() (whose key-sniffing
+  /// doesn't know the 'performance' key and would wrap the whole payload as
+  /// a single bogus row).
   Future<List<Map<String, dynamic>>> staffPerformance({
     String period = 'month',
     String? department,
     String? staffId,
-  }) {
-    return getList('/staff/performance', query: {
-      'period': period,
+  }) async {
+    final periodDays = int.tryParse(period) ?? 30;
+    final map = await getMap('/staff-performance', query: {
+      'period': periodDays,
       if (department != null && department != 'all') 'department': department,
       if (staffId != null) 'staff_id': staffId,
     });
+    final rows = (map['performance'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        <Map<String, dynamic>>[];
+    // Defence in depth: filter client-side too, in case staff_id isn't
+    // honoured server-side for some reason.
+    if (staffId == null) return rows;
+    return rows.where((r) => '${r['staff_id']}' == staffId).toList();
   }
 
   Future<Map<String, dynamic>> staffPerformanceReport({
     int period = 30,
     String? department,
   }) {
-    return getMap('/staff/performance', query: {
+    return getMap('/staff-performance', query: {
       'period': period,
       if (department != null && department != 'all') 'department': department,
     });
@@ -574,8 +596,7 @@ class BranchManagerRepository {
   }
 
   Future<List<Map<String, dynamic>>> stockOut() {
-    return getList('/store/movements',
-        query: {'movement_type': 'STOCK_OUT'});
+    return getList('/store/movements', query: {'movement_type': 'STOCK_OUT'});
   }
 
   Future<void> createStockRequest(Map<String, dynamic> data) async {
@@ -649,6 +670,10 @@ class BranchManagerRepository {
     await postMap('/bar/categories', data: data);
   }
 
+  Future<List<Map<String, dynamic>>> conferenceHalls() {
+    return getList('/conference/halls');
+  }
+
   // ── Discounts & Offers ────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> offers({
     String? targetType,
@@ -664,7 +689,8 @@ class BranchManagerRepository {
     return postMap('/offers', data: data);
   }
 
-  Future<Map<String, dynamic>> updateOffer(String id, Map<String, dynamic> data) {
+  Future<Map<String, dynamic>> updateOffer(
+      String id, Map<String, dynamic> data) {
     return putMap('/offers/$id', data: data);
   }
 

@@ -1,4 +1,5 @@
 import { supabase } from '../config/database';
+import db from '../db';
 import crypto from 'crypto';
 
 export interface IGuest {
@@ -117,64 +118,46 @@ export class Guest implements IGuest {
   }
 
   static async search(query: string, branchId?: number, checkedInOnly?: boolean): Promise<Guest[]> {
-    let guestQuery = supabase.from('guests').select('*');
+    // Raw SQL (not supabase-js/PostgREST) on purpose: branch scoping used to
+    // fetch every matching reservations.guest_id client-side, then filter
+    // guests with `.in('id', ids)`. A branch with hundreds of reservations
+    // (e.g. Kyogong, 700+ distinct guest ids) builds a query string PostgREST
+    // rejects with "Bad Request" — which this method then swallowed into an
+    // empty array, so the guest picker silently showed "No guests found" for
+    // any branch with real history. A subquery run server-side in Postgres
+    // has no such limit and is a single round trip either way.
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-    // 1. Filter by search query if provided
     if (query) {
-      guestQuery = guestQuery.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%,id_number.ilike.%${query}%,car_number_plate.ilike.%${query}%`);
+      params.push(`%${query}%`);
+      const p = `$${params.length}`;
+      conditions.push(
+        `(g.first_name ILIKE ${p} OR g.last_name ILIKE ${p} OR g.email ILIKE ${p} ` +
+        `OR g.phone ILIKE ${p} OR g.id_number ILIKE ${p} OR g.car_number_plate ILIKE ${p})`
+      );
     }
 
-    // 2. Filter by branchId if provided (via reservations)
-    // If there's a search query, we might want to search globally anyway to find existing guest profiles.
-    // We only restrict to branchId if there's no search query (e.g. initial load of "My Guests").
+    // Branch scoping only applies when there's no search query — a search is
+    // meant to find any existing guest profile system-wide, not just ones
+    // with history at this branch.
     if (branchId && !query) {
-      const { data: branchGuestIds, error: branchError } = await supabase
-        .from('reservations')
-        .select('guest_id')
-        .eq('branch_id', branchId);
-
-      if (branchError) {
-        console.error('Error fetching branch guests:', branchError);
-      } else if (branchGuestIds && branchGuestIds.length > 0) {
-        const ids = [...new Set(branchGuestIds.map(r => r.guest_id).filter(id => id))] as string[];
-        if (ids.length > 0) {
-          guestQuery = guestQuery.in('id', ids);
-        }
-      } else {
-        // If no reservations for this branch, but we have a branchId filter, 
-        // it's possible the branch is new. Let's not return [] early if we want to allow 
-        // seeing guests who haven't stayed here yet (global list).
-        // For now, if branch has NO history, we'll show recently registered guests as a fallback.
-      }
+      params.push(branchId);
+      conditions.push(`g.id IN (SELECT guest_id FROM reservations WHERE branch_id = $${params.length} AND guest_id IS NOT NULL)`);
     }
 
-    // 3. Filter by checked-in status if requested
     if (checkedInOnly) {
-      const { data: activeReservations, error: reservationError } = await supabase
-        .from('reservations')
-        .select('guest_id')
-        .in('status', ['checked_in', 'checked-in']);
-
-      if (reservationError) {
-        console.error('Error fetching active reservations:', reservationError);
-      } else {
-        const activeIds = [...new Set(activeReservations?.map(r => r.guest_id).filter(id => id))] as string[];
-        if (activeIds.length > 0) {
-          guestQuery = guestQuery.in('id', activeIds);
-        } else {
-          return []; // No checked-in guests
-        }
-      }
+      conditions.push(`g.id IN (SELECT guest_id FROM reservations WHERE status IN ('checked_in', 'checked-in') AND guest_id IS NOT NULL)`);
     }
 
-    const { data: guestsData, error: guestsError } = await guestQuery;
-
-    if (guestsError) {
-      console.error('Error fetching guests:', guestsError);
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    try {
+      const { rows } = await db.query(`SELECT g.* FROM guests g ${where} ORDER BY g.created_at DESC NULLS LAST`, params);
+      return rows.map((d: any) => Guest.fromDatabase(d));
+    } catch (error) {
+      console.error('Error fetching guests:', error);
       return [];
     }
-
-    return (guestsData || []).map(d => Guest.fromDatabase(d));
   }
 
   /**

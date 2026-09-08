@@ -6,9 +6,10 @@ import { logger } from '../utils/logger';
  * Discounts & Offers controller.
  *
  * Offers are branch-manager-defined promotions that discount POS menu items
- * (restaurant / bar) or room rates. Active offers are surfaced at the POS till
- * as an "OFFER" tag and flow into the customer bill. See migration
- * 20260803_create_offers.sql for the schema.
+ * (restaurant / bar), room rates, or conference hall bookings. Active offers
+ * are surfaced at the POS till as an "OFFER" tag and flow into the customer
+ * bill / conference invoice. See migration 20260803_create_offers.sql for
+ * the schema.
  */
 
 type OfferRow = {
@@ -18,7 +19,7 @@ type OfferRow = {
     description: string | null;
     discount_type: 'percentage' | 'fixed';
     discount_value: number;
-    target_type: 'menu_item' | 'menu_category' | 'outlet' | 'room_type' | 'all_rooms' | 'guest';
+    target_type: 'menu_item' | 'menu_category' | 'outlet' | 'room_type' | 'room_number' | 'all_rooms' | 'conference_hall' | 'all_conference_halls' | 'guest';
     item_kind: 'restaurant' | 'bar' | null;
     target_id: string | null;
     target_label: string | null;
@@ -30,7 +31,7 @@ type OfferRow = {
     updated_at: string;
 };
 
-const TARGET_TYPES = ['menu_item', 'menu_category', 'outlet', 'room_type', 'all_rooms', 'guest'];
+const TARGET_TYPES = ['menu_item', 'menu_category', 'outlet', 'room_type', 'room_number', 'all_rooms', 'conference_hall', 'all_conference_halls', 'guest'];
 const DISCOUNT_TYPES = ['percentage', 'fixed'];
 
 const toBranchId = (value: unknown): number | null => {
@@ -181,7 +182,7 @@ export const createOffer = async (
             res.status(400).json({ success: false, message: 'item_kind (restaurant|bar) is required for menu offers' });
             return;
         }
-        const needsTargetId = targetType === 'menu_item' || targetType === 'menu_category' || targetType === 'room_type' || targetType === 'guest';
+        const needsTargetId = targetType === 'menu_item' || targetType === 'menu_category' || targetType === 'room_type' || targetType === 'room_number' || targetType === 'conference_hall' || targetType === 'guest';
         const targetId = nullableText(body.target_id);
         if (needsTargetId && !targetId) {
             res.status(400).json({ success: false, message: 'target_id is required for this target_type' });

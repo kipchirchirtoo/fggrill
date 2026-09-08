@@ -144,8 +144,12 @@ class _ConferenceBookingScreenState
         allBookings.add(row);
       }
       allBookings.sort((a, b) {
-        final dtA = DateTime.tryParse(_t(a, ['created_at', 'start_date', 'event_date']) ?? '') ?? DateTime(2000);
-        final dtB = DateTime.tryParse(_t(b, ['created_at', 'start_date', 'event_date']) ?? '') ?? DateTime(2000);
+        final dtA = DateTime.tryParse(
+                _t(a, ['created_at', 'start_date', 'event_date']) ?? '') ??
+            DateTime(2000);
+        final dtB = DateTime.tryParse(
+                _t(b, ['created_at', 'start_date', 'event_date']) ?? '') ??
+            DateTime(2000);
         return dtB.compareTo(dtA);
       });
 
@@ -234,7 +238,8 @@ class _ConferenceBookingScreenState
           await _repo.addConferencePayment(id, {
             'payment_amount': amount,
             'payment_method': method,
-            'payment_reference': '$method-${DateTime.now().millisecondsSinceEpoch}',
+            'payment_reference':
+                '$method-${DateTime.now().millisecondsSinceEpoch}',
           });
           if (mounted) {
             _load();
@@ -253,7 +258,10 @@ class _ConferenceBookingScreenState
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel Booking'),
         content: Text(
-            'Are you sure you want to cancel the event booking for "${_t(booking, ['company_name', 'client_name']) ?? 'this client'}"?'),
+            'Are you sure you want to cancel the event booking for "${_t(booking, [
+                      'company_name',
+                      'client_name'
+                    ]) ?? 'this client'}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -303,7 +311,8 @@ class _ConferenceBookingScreenState
             Text('Conference & Catering Bookings',
                 style: theme.textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold)),
-            Text('Manage conference hall reservations, outside catering events, packages, and billing',
+            Text(
+                'Manage conference hall reservations, outside catering events, packages, and billing',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: AppColors.kTextSecondary)),
           ],
@@ -432,8 +441,7 @@ class _HallCard extends StatelessWidget {
     final name = _t(hall, ['name', 'hall_name']) ?? 'Conference Hall';
     final capacity = _n(hall, ['capacity']).toInt();
     final priceDay = _n(hall, ['base_price_per_day', 'price_per_day', 'rate']);
-    final priceHour =
-        _n(hall, ['base_price_per_hour', 'price_per_hour']);
+    final priceHour = _n(hall, ['base_price_per_hour', 'price_per_hour']);
     final status = _t(hall, ['status']) ?? 'available';
     final description = _t(hall, ['description']) ?? '';
     final amenities = hall['amenities'];
@@ -477,13 +485,12 @@ class _HallCard extends StatelessWidget {
             if (priceDay > 0)
               _InfoRow(Icons.today_outlined, 'Per day', _money(priceDay)),
             if (priceHour > 0)
-              _InfoRow(
-                  Icons.timer_outlined, 'Per hour', _money(priceHour)),
+              _InfoRow(Icons.timer_outlined, 'Per hour', _money(priceHour)),
             if (description.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(description,
-                  style: TextStyle(
-                      fontSize: 11, color: AppColors.kTextSecondary),
+                  style:
+                      TextStyle(fontSize: 11, color: AppColors.kTextSecondary),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis),
             ],
@@ -495,8 +502,8 @@ class _HallCard extends StatelessWidget {
                 children: amenities
                     .take(4)
                     .map((a) => Chip(
-                          label: Text('$a',
-                              style: const TextStyle(fontSize: 10)),
+                          label:
+                              Text('$a', style: const TextStyle(fontSize: 10)),
                           padding: EdgeInsets.zero,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
@@ -523,9 +530,8 @@ class _HallCard extends StatelessWidget {
                 PopupMenuButton<String>(
                   tooltip: 'Change status',
                   icon: const Icon(Icons.more_vert, size: 18),
-                  onSelected: (s) => id.isNotEmpty
-                      ? onStatusChange(id, s)
-                      : null,
+                  onSelected: (s) =>
+                      id.isNotEmpty ? onStatusChange(id, s) : null,
                   itemBuilder: (_) => [
                     for (final s in ['available', 'occupied', 'maintenance'])
                       PopupMenuItem(
@@ -567,11 +573,10 @@ class _InfoRow extends StatelessWidget {
           Icon(icon, size: 13, color: AppColors.kTextSecondary),
           const SizedBox(width: 5),
           Text('$label: ',
-              style: TextStyle(
-                  fontSize: 12, color: AppColors.kTextSecondary)),
+              style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
           Text(value,
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600)),
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -639,7 +644,10 @@ class _BookingsTab extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
                     label: Text(
-                      '${_capitalize(f)} (${f == 'all' ? allBookings.length : allBookings.where((b) => (_t(b, ['booking_status', 'status']) ?? '') == f).length})',
+                      '${_capitalize(f)} (${f == 'all' ? allBookings.length : allBookings.where((b) => (_t(b, [
+                                'booking_status',
+                                'status'
+                              ]) ?? '') == f).length})',
                       style: const TextStyle(fontSize: 12),
                     ),
                     selected: filter == f,
@@ -668,8 +676,7 @@ class _BookingsTab extends StatelessWidget {
                         filter == 'all'
                             ? 'No bookings yet'
                             : 'No ${filter} bookings',
-                        style:
-                            TextStyle(color: AppColors.kTextSecondary),
+                        style: TextStyle(color: AppColors.kTextSecondary),
                       ),
                     ],
                   ),
@@ -712,14 +719,16 @@ class _BookingCard extends StatelessWidget {
     final contact = _t(booking, ['contact_person', 'customer_name']) ?? '';
     final phone = _t(booking, ['customer_phone', 'phone']) ?? '';
     final hallName = _t(booking, ['hall.name', 'hall_name']) ?? 'Hall';
-    final participants = _n(booking, ['num_participants', 'participants']).toInt();
+    final participants =
+        _n(booking, ['num_participants', 'participants']).toInt();
     final startRaw = _t(booking, ['start_date', 'check_in']) ?? '';
     final endRaw = _t(booking, ['end_date', 'check_out']) ?? '';
     final total = _n(booking, ['total_amount', 'amount']);
     final paid = _n(booking, ['paid_amount', 'amount_paid']);
     final balance = total - paid;
     final status = _t(booking, ['booking_status', 'status']) ?? 'pending';
-    final payStatus = _t(booking, ['payment_status']) ?? (balance <= 0 ? 'paid' : 'unpaid');
+    final payStatus =
+        _t(booking, ['payment_status']) ?? (balance <= 0 ? 'paid' : 'unpaid');
 
     final startDt = DateTime.tryParse(startRaw);
     final endDt = DateTime.tryParse(endRaw);
@@ -787,25 +796,18 @@ class _BookingCard extends StatelessWidget {
               spacing: 16,
               runSpacing: 6,
               children: [
-                if (invoice.isNotEmpty)
-                  _Detail('Invoice', invoice),
-                if (contact.isNotEmpty)
-                  _Detail('Contact', contact),
-                if (phone.isNotEmpty)
-                  _Detail('Phone', phone),
+                if (invoice.isNotEmpty) _Detail('Invoice', invoice),
+                if (contact.isNotEmpty) _Detail('Contact', contact),
+                if (phone.isNotEmpty) _Detail('Phone', phone),
                 if (participants > 0)
                   _Detail('Participants', '$participants pax'),
-                if (startDt != null)
-                  _Detail('Start', _kDate.format(startDt)),
-                if (endDt != null)
-                  _Detail('End', _kDate.format(endDt)),
+                if (startDt != null) _Detail('Start', _kDate.format(startDt)),
+                if (endDt != null) _Detail('End', _kDate.format(endDt)),
                 _Detail('Total', _money(total)),
                 if (paid > 0)
-                  _Detail('Paid', _money(paid),
-                      color: AppColors.kSuccess),
+                  _Detail('Paid', _money(paid), color: AppColors.kSuccess),
                 if (balance > 0)
-                  _Detail('Balance', _money(balance),
-                      color: AppColors.kError),
+                  _Detail('Balance', _money(balance), color: AppColors.kError),
               ],
             ),
 
@@ -820,7 +822,8 @@ class _BookingCard extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: () {
                         final billRef = invoice.isNotEmpty ? invoice : id;
-                        context.push('/reception/cashier?billId=${Uri.encodeComponent(billRef)}');
+                        context.push(
+                            '/reception/cashier?billId=${Uri.encodeComponent(billRef)}');
                       },
                       icon: const Icon(Icons.point_of_sale, size: 15),
                       label: const Text('Pay at Cashier',
@@ -849,8 +852,8 @@ class _BookingCard extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: () => onStatusChange(id, 'confirmed'),
                       icon: const Icon(Icons.check_circle_outline, size: 15),
-                      label: const Text('Confirm',
-                          style: TextStyle(fontSize: 12)),
+                      label:
+                          const Text('Confirm', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.kPrimary,
                           side: BorderSide(color: AppColors.kPrimary),
@@ -860,11 +863,14 @@ class _BookingCard extends StatelessWidget {
                     ),
                   OutlinedButton.icon(
                     onPressed: () {
-                      final days = (startDt != null && endDt != null && endDt.difference(startDt).inDays > 0)
+                      final days = (startDt != null &&
+                              endDt != null &&
+                              endDt.difference(startDt).inDays > 0)
                           ? endDt.difference(startDt).inDays
                           : 1;
                       final pkgRate = _n(booking, ['amount_per_pax']);
-                      final pkgTitle = _t(booking, ['menu_package']) ?? 'Conference Package';
+                      final pkgTitle =
+                          _t(booking, ['menu_package']) ?? 'Conference Package';
                       printConferenceBookingInvoice(
                         bookingRef: invoice.isNotEmpty
                             ? invoice
@@ -879,7 +885,9 @@ class _BookingCard extends StatelessWidget {
                         packageTitle: pkgTitle,
                         packageRate: pkgRate > 0
                             ? pkgRate
-                            : (participants > 0 ? total / (participants * days) : 0),
+                            : (participants > 0
+                                ? total / (participants * days)
+                                : 0),
                         pax: participants > 0 ? participants : 1,
                         days: days,
                         packageTotal: total,
@@ -910,8 +918,7 @@ class _BookingCard extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: onCancel,
                     icon: const Icon(Icons.cancel_outlined, size: 15),
-                    label: const Text('Cancel',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text('Cancel', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.kError,
                         side: BorderSide(color: AppColors.kError),
@@ -947,9 +954,7 @@ class _Detail extends StatelessWidget {
                 fontWeight: FontWeight.w500)),
         Text(value,
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color)),
+                fontSize: 12, fontWeight: FontWeight.w600, color: color)),
       ],
     );
   }
@@ -996,7 +1001,8 @@ class _ConferenceBookingDialogState
   final _orgCtrl = TextEditingController();
 
   // Package & Custom Pricing
-  String _selectedPackage = 'half_day'; // half_day | full_day | half_board | full_board | none | custom
+  String _selectedPackage =
+      'half_day'; // half_day | full_day | half_board | full_board | none | custom
   final Map<String, Map<String, dynamic>> _packages = {
     'half_day': {
       'title': 'Half day',
@@ -1063,6 +1069,14 @@ class _ConferenceBookingDialogState
   // Hall Selection
   Map<String, dynamic>? _selectedHall;
 
+  // Active Branch-Manager-defined offers targeting conference halls
+  // (target_type = 'conference_hall' | 'all_conference_halls'). Applied as a
+  // pre-fill discount on the hall fee — same "nudge, don't force" pattern as
+  // room-rate offers in _NewReservationDialog — staff can still edit the fee
+  // manually afterwards.
+  List<Map<String, dynamic>> _hallOffers = [];
+  Map<String, dynamic>? _appliedHallOffer;
+
   // Equipment Add-ons
   bool _addProjector = false;
   bool _addPaSystem = false;
@@ -1093,6 +1107,27 @@ class _ConferenceBookingDialogState
       _selectedHall = widget.initialHall;
     } else if (widget.halls.isNotEmpty) {
       _selectedHall = widget.halls.first;
+    }
+    _loadHallOffers();
+  }
+
+  Future<void> _loadHallOffers() async {
+    final offers = await widget.repo.getActiveConferenceHallOffers();
+    if (!mounted) return;
+    setState(() {
+      _hallOffers = offers;
+      _appliedHallOffer = _bestHallOfferFor(_selectedHall);
+    });
+    // Only the "Hall Only" preset's default fee is safe to auto-discount —
+    // every other preset zeroes the hall fee out and expects staff to fill
+    // it in themselves, so an unsolicited overwrite there would look like
+    // the app silently changing what they typed.
+    if (_appliedHallOffer != null &&
+        _selectedPackage == 'none' &&
+        _hallFeeCtrl.text.trim() == '$_defaultHallBaseRate') {
+      setState(() {
+        _hallFeeCtrl.text = '$_discountedHallBaseRate';
+      });
     }
   }
 
@@ -1184,7 +1219,7 @@ class _ConferenceBookingDialogState
         });
       } else if (key == 'none') {
         _rateCtrl.text = '0';
-        _hallFeeCtrl.text = '$_defaultHallBaseRate';
+        _hallFeeCtrl.text = '$_discountedHallBaseRate';
         _selectedInclusions.clear();
       } else if (key == 'custom') {
         // Leave existing values for custom editing
@@ -1215,6 +1250,64 @@ class _ConferenceBookingDialogState
     if (name.contains('zion')) return 5000;
     if (name.contains('garden')) return 15000;
     return 5000;
+  }
+
+  /// Human-readable discount badge (e.g. "15% OFF" or "KES 500 OFF").
+  String _hallOfferBadge(Map<String, dynamic> offer) {
+    final v = num.tryParse('${offer['discount_value']}') ?? 0;
+    return '${offer['discount_type']}' == 'percentage'
+        ? '$v% OFF'
+        : 'KES $v OFF';
+  }
+
+  /// Amount saved by [offer] on a fee of [baseRate].
+  num _offerSaving(Map<String, dynamic> offer, num baseRate) {
+    final v = num.tryParse('${offer['discount_value']}') ?? 0;
+    return '${offer['discount_type']}' == 'percentage'
+        ? baseRate * v / 100
+        : v.clamp(0, baseRate);
+  }
+
+  /// Best matching active offer for [hall] — 'all_conference_halls' always
+  /// matches; 'conference_hall' matches only when its target_id is this
+  /// hall's id.
+  Map<String, dynamic>? _bestHallOfferFor(Map<String, dynamic>? hall) {
+    if (hall == null || _hallOffers.isEmpty) return null;
+    final hallId = '${hall['id'] ?? ''}'.trim();
+    Map<String, dynamic>? best;
+    num bestSaving = 0;
+    for (final o in _hallOffers) {
+      final tt = '${o['target_type']}';
+      final matches = tt == 'all_conference_halls' ||
+          (tt == 'conference_hall' &&
+              hallId.isNotEmpty &&
+              '${o['target_id'] ?? ''}'.trim() == hallId);
+      if (!matches) continue;
+      final saving = _offerSaving(o, _defaultHallBaseRate);
+      if (saving > bestSaving) {
+        best = o;
+        bestSaving = saving;
+      }
+    }
+    return best;
+  }
+
+  /// [_defaultHallBaseRate] after applying [_appliedHallOffer], if any.
+  num get _discountedHallBaseRate {
+    final base = _defaultHallBaseRate;
+    final offer = _appliedHallOffer;
+    if (offer == null) return base;
+    return (base - _offerSaving(offer, base)).clamp(0, base);
+  }
+
+  void _onHallSelected(Map<String, dynamic> hall) {
+    setState(() {
+      _selectedHall = hall;
+      _appliedHallOffer = _bestHallOfferFor(hall);
+      if (_selectedPackage == 'none') {
+        _hallFeeCtrl.text = '$_discountedHallBaseRate';
+      }
+    });
   }
 
   num get _hallRate =>
@@ -1306,10 +1399,15 @@ class _ConferenceBookingDialogState
 
     setState(() => _submitting = true);
     try {
-      final hallId = _selectedHall != null ? _t(_selectedHall!, ['id']) : 'CATERING';
+      final hallId =
+          _selectedHall != null ? _t(_selectedHall!, ['id']) : 'CATERING';
       final hallName = _eventType == 'catering'
-          ? (_venueCtrl.text.trim().isNotEmpty ? _venueCtrl.text.trim() : 'Outside Catering Venue')
-          : (_selectedHall != null ? (_t(_selectedHall!, ['name']) ?? 'Conference Hall') : 'Conference Hall');
+          ? (_venueCtrl.text.trim().isNotEmpty
+              ? _venueCtrl.text.trim()
+              : 'Outside Catering Venue')
+          : (_selectedHall != null
+              ? (_t(_selectedHall!, ['name']) ?? 'Conference Hall')
+              : 'Conference Hall');
       final endDate = _bookingDate.add(Duration(days: _days));
       final deposit = double.tryParse(_depositCtrl.text.trim()) ?? 0;
 
@@ -1319,17 +1417,26 @@ class _ConferenceBookingDialogState
         detailsList.add('[OUTSIDE CATERING EVENT]');
       }
       if (_packageRate > 0) {
-        detailsList.add('Package: $_selectedPackageTitle @ KES $_packageRate/pp');
+        detailsList
+            .add('Package: $_selectedPackageTitle @ KES $_packageRate/pp');
         detailsList.add('Inclusions: $_selectedInclusionsText');
       }
       if (_hallRate > 0) {
         detailsList.add('Venue/Hall Fee: KES $_hallRate/day');
       }
+      if (_appliedHallOffer != null) {
+        detailsList.add(
+          'Offer Applied: ${_appliedHallOffer!['name'] ?? 'Discount'} '
+          '(${_hallOfferBadge(_appliedHallOffer!)})',
+        );
+      }
       if (_addProjector) detailsList.add('Projector @ KES $_projectorRate/day');
       if (_addPaSystem) detailsList.add('PA System @ KES $_paSystemRate/day');
       if (_chargeGarden) detailsList.add('Garden Space @ KES $_gardenRate');
-      if (_chargeVideoShoot) detailsList.add('Video Shoot @ KES $_videoShootRate');
-      if (_chargePartySpace) detailsList.add('Party Space @ KES $_partySpaceRate');
+      if (_chargeVideoShoot)
+        detailsList.add('Video Shoot @ KES $_videoShootRate');
+      if (_chargePartySpace)
+        detailsList.add('Party Space @ KES $_partySpaceRate');
       if (_notesCtrl.text.trim().isNotEmpty) {
         detailsList.add('Notes: ${_notesCtrl.text.trim()}');
       }
@@ -1368,6 +1475,9 @@ class _ConferenceBookingDialogState
             : (deposit > 0 ? 'partial' : 'unpaid'),
         'notes': detailsList.join(' | '),
         'venue': hallName,
+        if (_appliedHallOffer != null) 'offer_id': _appliedHallOffer!['id'],
+        if (_appliedHallOffer != null)
+          'offer_label': _appliedHallOffer!['name'],
       };
 
       if (_eventType == 'catering') {
@@ -1393,7 +1503,9 @@ class _ConferenceBookingDialogState
           customerPhone: _phoneCtrl.text.trim(),
           organization: _orgCtrl.text.trim(),
           hallName: hallName,
-          hallCapacity: _selectedHall != null ? _n(_selectedHall!, ['capacity']).toInt() : _pax,
+          hallCapacity: _selectedHall != null
+              ? _n(_selectedHall!, ['capacity']).toInt()
+              : _pax,
           packageTitle: _selectedPackageTitle,
           packageInclusions: _selectedInclusionsText,
           packageRate: _packageRate,
@@ -1446,7 +1558,8 @@ class _ConferenceBookingDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final maxHeight = math.min(840.0, MediaQuery.of(context).size.height * 0.90);
+    final maxHeight =
+        math.min(840.0, MediaQuery.of(context).size.height * 0.90);
 
     final availableHalls = _availableHalls;
 
@@ -1473,8 +1586,7 @@ class _ConferenceBookingDialogState
                         const SizedBox(height: 2),
                         Text('Ref: $_bookingRef',
                             style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.kTextSecondary)),
+                                fontSize: 12, color: AppColors.kTextSecondary)),
                       ],
                     ),
                   ),
@@ -1518,7 +1630,8 @@ class _ConferenceBookingDialogState
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: AppColors.kPrimary.withOpacity(0.1),
+                                      color:
+                                          AppColors.kPrimary.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
@@ -1562,9 +1675,8 @@ class _ConferenceBookingDialogState
                               controller: _clientCtrl,
                               decoration:
                                   _inputDec('Client / organizer name *'),
-                              validator: (v) => (v ?? '').trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                              validator: (v) =>
+                                  (v ?? '').trim().isEmpty ? 'Required' : null,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1573,9 +1685,8 @@ class _ConferenceBookingDialogState
                               controller: _phoneCtrl,
                               decoration: _inputDec('Phone number *'),
                               keyboardType: TextInputType.phone,
-                              validator: (v) => (v ?? '').trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                              validator: (v) =>
+                                  (v ?? '').trim().isEmpty ? 'Required' : null,
                             ),
                           ),
                         ],
@@ -1598,8 +1709,11 @@ class _ConferenceBookingDialogState
                               isSelected: _eventType == 'conference',
                               onTap: () => setState(() {
                                 _eventType = 'conference';
-                                if (_selectedHall == null && widget.halls.isNotEmpty) {
+                                if (_selectedHall == null &&
+                                    widget.halls.isNotEmpty) {
                                   _selectedHall = widget.halls.first;
+                                  _appliedHallOffer =
+                                      _bestHallOfferFor(_selectedHall);
                                 }
                               }),
                             ),
@@ -1613,6 +1727,7 @@ class _ConferenceBookingDialogState
                               onTap: () => setState(() {
                                 _eventType = 'catering';
                                 _selectedHall = null;
+                                _appliedHallOffer = null;
                                 if (_selectedPackage == 'half_day') {
                                   _selectPreset('catering_buffet');
                                 }
@@ -1641,18 +1756,26 @@ class _ConferenceBookingDialogState
                         runSpacing: 8,
                         children: _eventType == 'catering'
                             ? [
-                                _packagePresetChip('catering_buffet', 'Buffet Catering (KES 2,000)'),
-                                _packagePresetChip('catering_tea', 'Tea Break Catering (KES 800)'),
-                                _packagePresetChip('catering_full', 'Full Day Catering (KES 2,800)'),
+                                _packagePresetChip('catering_buffet',
+                                    'Buffet Catering (KES 2,000)'),
+                                _packagePresetChip('catering_tea',
+                                    'Tea Break Catering (KES 800)'),
+                                _packagePresetChip('catering_full',
+                                    'Full Day Catering (KES 2,800)'),
                                 _packagePresetChip('custom', 'Custom Rate'),
                               ]
                             : [
-                                _packagePresetChip('half_day', 'Half Day (KES 1,800)'),
-                                _packagePresetChip('full_day', 'Full Day (KES 2,500)'),
-                                _packagePresetChip('half_board', 'Half Board (KES 6,500)'),
-                                _packagePresetChip('full_board', 'Full Board (KES 7,500)'),
+                                _packagePresetChip(
+                                    'half_day', 'Half Day (KES 1,800)'),
+                                _packagePresetChip(
+                                    'full_day', 'Full Day (KES 2,500)'),
+                                _packagePresetChip(
+                                    'half_board', 'Half Board (KES 6,500)'),
+                                _packagePresetChip(
+                                    'full_board', 'Full Board (KES 7,500)'),
                                 _packagePresetChip('custom', 'Custom Rate'),
-                                _packagePresetChip('none', 'Hall Only (No Catering)'),
+                                _packagePresetChip(
+                                    'none', 'Hall Only (No Catering)'),
                               ],
                       ),
                       const SizedBox(height: 16),
@@ -1687,7 +1810,8 @@ class _ConferenceBookingDialogState
                                 }
                               }),
                               validator: (v) {
-                                final val = num.tryParse((v ?? '').replaceAll(',', ''));
+                                final val =
+                                    num.tryParse((v ?? '').replaceAll(',', ''));
                                 if (val == null || val < 0) {
                                   return 'Invalid rate';
                                 }
@@ -1716,7 +1840,8 @@ class _ConferenceBookingDialogState
                       const SizedBox(height: 18),
 
                       // ── 4. What it includes (Inclusions) ─────────────────
-                      _SectionHeader('What it includes (Breakfast, Lunch, Tea etc.) *'),
+                      _SectionHeader(
+                          'What it includes (Breakfast, Lunch, Tea etc.) *'),
                       const SizedBox(height: 4),
                       Wrap(
                         spacing: 8,
@@ -1740,7 +1865,9 @@ class _ConferenceBookingDialogState
                               inc,
                               style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: checked ? FontWeight.bold : FontWeight.normal,
+                                fontWeight: checked
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                                 color: checked ? AppColors.kPrimary : null,
                               ),
                             ),
@@ -1762,7 +1889,8 @@ class _ConferenceBookingDialogState
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _inclusionsCtrl,
-                        decoration: _inputDec('Custom inclusions / menu details (optional)'),
+                        decoration: _inputDec(
+                            'Custom inclusions / menu details (optional)'),
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 14),
@@ -1770,8 +1898,10 @@ class _ConferenceBookingDialogState
                       // ── 5. Venue / Hall Rental Fee ───────────────────────
                       TextFormField(
                         controller: _hallFeeCtrl,
-                        decoration: _inputDec('Hall rental fee (KES per day) *').copyWith(
-                          helperText: 'Set to 0 if venue rental is included in per-pax package rate',
+                        decoration: _inputDec('Hall rental fee (KES per day) *')
+                            .copyWith(
+                          helperText:
+                              'Set to 0 if venue rental is included in per-pax package rate',
                         ),
                         keyboardType: TextInputType.number,
                         onChanged: (_) => setState(() {}),
@@ -1795,7 +1925,9 @@ class _ConferenceBookingDialogState
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Warning: Participant count ($_pax pax) exceeds selected hall\'s capacity (${_n(_selectedHall!, ['capacity']).toInt()} pax max).',
+                                  'Warning: Participant count ($_pax pax) exceeds selected hall\'s capacity (${_n(_selectedHall!, [
+                                        'capacity'
+                                      ]).toInt()} pax max).',
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -1814,95 +1946,97 @@ class _ConferenceBookingDialogState
                         _SectionHeader('Event Venue / Offsite Location'),
                         TextFormField(
                           controller: _venueCtrl,
-                          decoration: _inputDec('Event venue or client address * (e.g. Client Premises, Garden Venue)'),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          decoration: _inputDec(
+                              'Event venue or client address * (e.g. Client Premises, Garden Venue)'),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Required'
+                              : null,
                         ),
                       ] else ...[
                         _SectionHeader('Select Hall'),
                         if (availableHalls.isEmpty)
-                          const Text('No conference halls found for this branch.')
+                          const Text(
+                              'No conference halls found for this branch.')
                         else
-                        GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: 3,
-                          childAspectRatio: 2.2,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                          children: availableHalls.map((hall) {
-                            final id = _t(hall, ['id']);
-                            final isSelected =
-                                _t(_selectedHall ?? {}, ['id']) == id;
-                            final name =
-                                _t(hall, ['name']) ?? 'Conference Hall';
-                            final capacity =
-                                _n(hall, ['capacity']).toInt();
-                            final rate = () {
-                              final r =
-                                  _n(hall, ['base_price_per_day', 'rate']);
-                              if (r > 0) return r;
-                              final n = name.toLowerCase();
-                              if (n.contains('sinai') ||
-                                  n.contains('boardroom') ||
-                                  n.contains('rooftop')) return 10000;
-                              if (n.contains('olive')) return 7000;
-                              if (n.contains('zion')) return 5000;
-                              if (n.contains('garden')) return 15000;
-                              return 5000;
-                            }();
+                          GridView.count(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: 3,
+                            childAspectRatio: 2.2,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                            children: availableHalls.map((hall) {
+                              final id = _t(hall, ['id']);
+                              final isSelected =
+                                  _t(_selectedHall ?? {}, ['id']) == id;
+                              final name =
+                                  _t(hall, ['name']) ?? 'Conference Hall';
+                              final capacity = _n(hall, ['capacity']).toInt();
+                              final rate = () {
+                                final r =
+                                    _n(hall, ['base_price_per_day', 'rate']);
+                                if (r > 0) return r;
+                                final n = name.toLowerCase();
+                                if (n.contains('sinai') ||
+                                    n.contains('boardroom') ||
+                                    n.contains('rooftop')) return 10000;
+                                if (n.contains('olive')) return 7000;
+                                if (n.contains('zion')) return 5000;
+                                if (n.contains('garden')) return 15000;
+                                return 5000;
+                              }();
 
-                            return InkWell(
-                              onTap: () =>
-                                  setState(() => _selectedHall = hall),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppColors.kPrimary.withOpacity(0.12)
-                                      : (isDark
-                                          ? const Color(0xFF0F172A)
-                                          : Colors.white),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
+                              return InkWell(
+                                onTap: () => _onHallSelected(hall),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
                                     color: isSelected
-                                        ? AppColors.kPrimary
-                                        : Colors.grey.shade300,
-                                    width: isSelected ? 2 : 1,
+                                        ? AppColors.kPrimary.withOpacity(0.12)
+                                        : (isDark
+                                            ? const Color(0xFF0F172A)
+                                            : Colors.white),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppColors.kPrimary
+                                          : Colors.grey.shade300,
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12),
+                                        textAlign: TextAlign.center,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Cap: $capacity pax',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: AppColors.kTextSecondary),
+                                      ),
+                                      Text(
+                                        '${_money(rate)}/day',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.kPrimary),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12),
-                                      textAlign: TextAlign.center,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Cap: $capacity pax',
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          color: AppColors.kTextSecondary),
-                                    ),
-                                    Text(
-                                      '${_money(rate)}/day',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.kPrimary),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
+                              );
+                            }).toList(),
+                          ),
                       ],
 
                       const SizedBox(height: 20),
@@ -2020,8 +2154,16 @@ class _ConferenceBookingDialogState
                               ),
                             if (_hallRate > 0)
                               _SummaryLine(
-                                'Hall (${_t(_selectedHall ?? {}, ['name']) ?? 'Hall'} × $_days d)',
+                                'Hall (${_t(_selectedHall ?? {}, [
+                                          'name'
+                                        ]) ?? 'Hall'} × $_days d)',
                                 '${_money(_hallRate)} × $_days d = ${_money(_hallTotal)}',
+                              ),
+                            if (_appliedHallOffer != null)
+                              _SummaryLine(
+                                'Offer Applied',
+                                '${_appliedHallOffer!['name'] ?? 'Discount'} — '
+                                    '${_hallOfferBadge(_appliedHallOffer!)}',
                               ),
                             if (_addOnsTotal > 0)
                               _SummaryLine('Add-ons (equipment × days)',
@@ -2031,8 +2173,7 @@ class _ConferenceBookingDialogState
                                   _money(_otherChargesTotal)),
                             const Divider(height: 16),
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('Total (VAT inclusive)',
                                     style: TextStyle(
@@ -2082,8 +2223,7 @@ class _ConferenceBookingDialogState
                                 DropdownMenuItem(
                                     value: 'mpesa', child: Text('M-Pesa')),
                                 DropdownMenuItem(
-                                    value: 'bank',
-                                    child: Text('Card / Bank')),
+                                    value: 'bank', child: Text('Card / Bank')),
                                 DropdownMenuItem(
                                     value: 'invoice',
                                     child: Text('Invoice / Bill Later')),
@@ -2105,8 +2245,7 @@ class _ConferenceBookingDialogState
                               value: 'pending',
                               child: Text('Pending (tentative)')),
                         ],
-                        onChanged: (v) =>
-                            setState(() => _bookingStatus = v!),
+                        onChanged: (v) => setState(() => _bookingStatus = v!),
                       ),
                     ],
                   ),
@@ -2154,7 +2293,9 @@ class _ConferenceBookingDialogState
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.receipt_long, size: 18),
-                        label: Text(_submitting ? 'Saving & Printing…' : 'Save Booking & Invoice'),
+                        label: Text(_submitting
+                            ? 'Saving & Printing…'
+                            : 'Save Booking & Invoice'),
                       ),
                     ],
                   ),
@@ -2342,8 +2483,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     final balance = total - paid;
 
     return AlertDialog(
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: Row(
         children: [
           Icon(Icons.payments_outlined, color: AppColors.kSuccess),
@@ -2374,8 +2514,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             controller: _ctrl,
             autofocus: !_isCorporate,
             enabled: !_isCorporate,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: _inputDec(
                 _isCorporate ? 'Amount (full balance)' : 'Amount (KES) *'),
           ),
@@ -2386,12 +2525,10 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             items: [
               const DropdownMenuItem(value: 'cash', child: Text('Cash')),
               const DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-              const DropdownMenuItem(
-                  value: 'card', child: Text('Card / Bank')),
+              const DropdownMenuItem(value: 'card', child: Text('Card / Bank')),
               if (widget.corporateCustomers.isNotEmpty)
                 const DropdownMenuItem(
-                    value: 'corporate_credit',
-                    child: Text('Corporate Credit')),
+                    value: 'corporate_credit', child: Text('Corporate Credit')),
             ],
             onChanged: (v) => setState(() {
               _method = v ?? 'cash';
@@ -2426,9 +2563,12 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               ? null
               : () {
                   Navigator.pop(context);
-                  final invoice = _t(widget.booking, ['invoice_number']) ?? _t(widget.booking, ['id']) ?? '';
+                  final invoice = _t(widget.booking, ['invoice_number']) ??
+                      _t(widget.booking, ['id']) ??
+                      '';
                   if (invoice.isNotEmpty) {
-                    context.push('/reception/cashier?billId=${Uri.encodeComponent(invoice)}');
+                    context.push(
+                        '/reception/cashier?billId=${Uri.encodeComponent(invoice)}');
                   }
                 },
           icon: const Icon(Icons.point_of_sale, size: 14),
@@ -2440,8 +2580,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               : () async {
                   // Corporate charges the whole outstanding balance; other
                   // methods use whatever was typed.
-                  final amount =
-                      _isCorporate ? _balance : (num.tryParse(_ctrl.text.trim()) ?? 0);
+                  final amount = _isCorporate
+                      ? _balance
+                      : (num.tryParse(_ctrl.text.trim()) ?? 0);
                   if (amount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -2464,15 +2605,16 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                   }
                   setState(() => _loading = true);
                   try {
-                    await widget.onSubmit(amount, _method, _corporateCustomerId);
+                    await widget.onSubmit(
+                        amount, _method, _corporateCustomerId);
                     if (mounted) Navigator.pop(context);
                   } catch (e) {
                     if (mounted) {
                       setState(() => _loading = false);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                            content: Text(apiErrorMessage(e,
-                                fallback: 'Payment failed')),
+                            content: Text(
+                                apiErrorMessage(e, fallback: 'Payment failed')),
                             backgroundColor: AppColors.kError),
                       );
                     }
@@ -2492,7 +2634,6 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 
 InputDecoration _inputDec(String label) => InputDecoration(
       labelText: label,
@@ -2633,8 +2774,8 @@ Future<void> printConferenceBookingInvoice({
   await printBookingInvoicePDF(
     invoiceNumber: bookingRef,
     invoiceDate: DateFormat('dd MMM yyyy').format(bookingDate),
-    dueDate: DateFormat('dd MMM yyyy')
-        .format(bookingDate.add(Duration(days: days))),
+    dueDate:
+        DateFormat('dd MMM yyyy').format(bookingDate.add(Duration(days: days))),
     clientName: clientName,
     clientPhone: customerPhone,
     clientDetails: eventDetails,
@@ -2683,14 +2824,16 @@ class _EventTypeButton extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 18,
-                color: isSelected ? AppColors.kPrimary : AppColors.kTextSecondary),
+                color:
+                    isSelected ? AppColors.kPrimary : AppColors.kTextSecondary),
             const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? AppColors.kPrimary : AppColors.kTextSecondary,
+                color:
+                    isSelected ? AppColors.kPrimary : AppColors.kTextSecondary,
               ),
             ),
           ],

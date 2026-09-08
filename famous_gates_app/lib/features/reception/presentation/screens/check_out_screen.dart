@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -24,6 +24,12 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   bool _isSearching = false;
   bool _isSubmitting = false;
   bool _loadingFolio = false;
+  // Set on a failed/timed-out folio load. Distinct from _loadingFolio: once
+  // this is true, the balance shown/used below is UNKNOWN, not zero — the
+  // Complete Check-Out button must stay locked (never silently let a guest
+  // check out on an apparent KES 0.00 balance that's actually just a folio
+  // that failed to load) until a retry succeeds.
+  bool _folioLoadFailed = false;
 
   // Folio data
   Map<String, dynamic>? _folio;
@@ -43,23 +49,34 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   bool _savingService = false;
 
   bool _isAdditionalServiceTransaction(Map<String, dynamic> tx) {
-    final type = '${tx['type'] ?? tx['transaction_type'] ?? ''}'.trim().toLowerCase();
+    final type =
+        '${tx['type'] ?? tx['transaction_type'] ?? ''}'.trim().toLowerCase();
     final cat = '${tx['category'] ?? ''}'.trim().toLowerCase();
     final dept = '${tx['department'] ?? ''}'.trim().toLowerCase();
     final desc = '${tx['description'] ?? ''}'.trim().toLowerCase();
     final status = '${tx['status'] ?? ''}'.trim().toLowerCase();
     final voided = tx['voided'] == true;
-    if (voided || status == 'voided' || status == 'cancelled' || status == 'reversed') {
+    if (voided ||
+        status == 'voided' ||
+        status == 'cancelled' ||
+        status == 'reversed') {
       return false;
     }
     if (type == 'payment') return false;
-    if (dept == 'room' || desc.contains('room charge') || desc.contains('extended stay')) {
+    if (dept == 'room' ||
+        desc.contains('room charge') ||
+        desc.contains('extended stay')) {
       return false;
     }
-    if (dept.contains('pos') || desc.contains('pos') || desc.contains('· bill ')) {
+    if (dept.contains('pos') ||
+        desc.contains('pos') ||
+        desc.contains('· bill ')) {
       return false;
     }
-    return cat == 'additional service' || type == 'additional_service' || type == 'checkout_service' || tx['is_manual_service'] == true;
+    return cat == 'additional service' ||
+        type == 'additional_service' ||
+        type == 'checkout_service' ||
+        tx['is_manual_service'] == true;
   }
 
   List<Map<String, dynamic>> get _additionalServiceTransactions =>
@@ -186,11 +203,27 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   }
 
   Future<void> _loadFolio() async {
-    if (_selectedBooking == null || _selectedBooking!.id.isEmpty) return;
+    if (_selectedBooking == null || _selectedBooking!.id.isEmpty) {
+      // No real booking id to load a folio for (e.g. the room-checkout
+      // lookup couldn't resolve an actual reservation) — the true balance is
+      // unknown, not zero, so checkout must stay locked rather than default
+      // to an apparently-clear KES 0.00 balance.
+      if (mounted) setState(() => _folioLoadFailed = true);
+      return;
+    }
 
-    setState(() => _loadingFolio = true);
+    setState(() {
+      _loadingFolio = true;
+      _folioLoadFailed = false;
+    });
     try {
-      final raw = await _repository.getFolio(_selectedBooking!.id);
+      // Bounded wait so a slow/stuck connection surfaces as a retryable
+      // error instead of leaving the screen spinning indefinitely — Dio's
+      // own receiveTimeout is 60s, long enough that staff would otherwise
+      // just be left staring at a spinner with no way to know it's stuck.
+      final raw = await _repository
+          .getFolio(_selectedBooking!.id)
+          .timeout(const Duration(seconds: 20));
       final folioMap = (raw['folio'] is Map)
           ? Map<String, dynamic>.from(raw['folio'] as Map)
           : raw;
@@ -259,16 +292,16 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
       if (reservationMap != null && reservationMap.isNotEmpty) {
         refreshedBooking = Booking.fromJson({
           ...reservationMap,
-          'guest_name': reservationMap['guest_name'] ??
-              _selectedBooking?.guestName,
-          'guest_phone': reservationMap['guest_phone'] ??
-              _selectedBooking?.guestPhone,
-          'guest_email': reservationMap['guest_email'] ??
-              _selectedBooking?.guestEmail,
-          'room_number': reservationMap['room_number'] ??
-              _selectedBooking?.roomNumber,
-          'room_type': reservationMap['room_type'] ??
-              _selectedBooking?.roomType,
+          'guest_name':
+              reservationMap['guest_name'] ?? _selectedBooking?.guestName,
+          'guest_phone':
+              reservationMap['guest_phone'] ?? _selectedBooking?.guestPhone,
+          'guest_email':
+              reservationMap['guest_email'] ?? _selectedBooking?.guestEmail,
+          'room_number':
+              reservationMap['room_number'] ?? _selectedBooking?.roomNumber,
+          'room_type':
+              reservationMap['room_type'] ?? _selectedBooking?.roomType,
           'confirmation_number': reservationMap['confirmation_number'] ??
               _selectedBooking?.confirmationNumber,
         });
@@ -292,12 +325,14 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         _loadingFolio = false;
       });
     } catch (e) {
-      setState(() => _loadingFolio = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load folio: $e')),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _loadingFolio = false;
+        _folioLoadFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load folio: $e')),
+      );
     }
   }
 
@@ -444,6 +479,20 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
   Future<void> _performCheckOut() async {
     if (_selectedBooking == null) return;
+    if (_folioLoadFailed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "The folio balance couldn't be confirmed — retry loading it "
+              'before checking out.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     if (_displayBalance > 0) {
       if (mounted) {
@@ -785,6 +834,32 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                   const Divider(),
                   if (_loadingFolio)
                     const Center(child: CircularProgressIndicator())
+                  else if (_folioLoadFailed)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: Colors.red.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                "Couldn't load the folio balance — checkout "
+                                'stays locked until this loads successfully.',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _loadFolio,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    )
                   else ...[
                     _infoRow('Room Charges',
                         'KES ${roomCharges.toStringAsFixed(2)}'),
@@ -1284,12 +1359,14 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  onPressed:
-                      _isSubmitting || _loadingFolio || _displayBalance > 0
-                          ? null
-                          : _performCheckOut,
+                  onPressed: _isSubmitting ||
+                          _loadingFolio ||
+                          _folioLoadFailed ||
+                          _displayBalance > 0
+                      ? null
+                      : _performCheckOut,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _displayBalance > 0
+                    backgroundColor: _folioLoadFailed || _displayBalance > 0
                         ? Colors.orange.shade700
                         : AppColors.kPrimary,
                     foregroundColor: Colors.white,
@@ -1303,9 +1380,11 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                               color: Colors.white, strokeWidth: 2),
                         )
                       : Text(
-                          _displayBalance > 0
-                              ? 'Awaiting Cashier Payment Confirmation'
-                              : 'Complete Check-Out',
+                          _folioLoadFailed
+                              ? 'Folio Failed to Load — Retry Above'
+                              : _displayBalance > 0
+                                  ? 'Awaiting Cashier Payment Confirmation'
+                                  : 'Complete Check-Out',
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),

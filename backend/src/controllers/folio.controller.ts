@@ -4,6 +4,44 @@ import { AppError } from '../middleware/errorHandler';
 import { supabase } from '../config/database';
 import { automationService } from '../services/automation.service';
 
+// Lazy-creates the folio for a reservation if one doesn't exist yet. Used by
+// both getFolio (the original lazy-create site) and addTransaction — posting
+// a charge (e.g. a Double Occupancy / Breakfast charge entered right at
+// check-in) used to 404 with "Folio not found" whenever nobody had opened
+// the guest folio screen yet, since that GET was the only thing that ever
+// created the row.
+async function ensureFolioForReservation(reservationId: string): Promise<InstanceType<typeof Folio>> {
+  const existing = await Folio.findByReservationId(reservationId);
+  if (existing) return existing;
+
+  const { data: reservation, error: resError } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('id', reservationId)
+    .single();
+  if (resError || !reservation) {
+    throw new AppError('Reservation not found', 404);
+  }
+
+  const resRoomCharge = Number(reservation.total_amount || 0);
+  const folio = new Folio({
+    reservationId: reservation.id,
+    guestId: reservation.guest_id,
+    branchId: reservation.branch_id,
+    folioNumber: reservation.confirmation_number,
+    status: 'open',
+    roomCharges: resRoomCharge,
+    foodCharges: 0,
+    beverageCharges: 0,
+    otherCharges: 0,
+    totalCharges: resRoomCharge,
+    totalPayments: 0,
+    balance: resRoomCharge
+  });
+  await folio.save();
+  return folio;
+}
+
 export const getFolio = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reservationId } = req.params;
@@ -27,32 +65,8 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       resError = refreshed.error;
     }
 
-    let folio = await Folio.findByReservationId(reservationId);
-
-    // Lazy creation: if folio doesn't exist, create it
-    if (!folio) {
-      if (resError || !reservation) {
-        throw new AppError('Reservation not found', 404);
-      }
-
-      const resRoomCharge = Number(reservation.total_amount || 0);
-
-      folio = new Folio({
-        reservationId: reservation.id,
-        guestId: reservation.guest_id,
-        branchId: reservation.branch_id,
-        folioNumber: reservation.confirmation_number,
-        status: 'open',
-        roomCharges: resRoomCharge,
-        foodCharges: 0,
-        beverageCharges: 0,
-        otherCharges: 0,
-        totalCharges: resRoomCharge,
-        totalPayments: 0,
-        balance: resRoomCharge
-      });
-      await folio.save();
-    } else if (reservation) {
+    let folio = await ensureFolioForReservation(reservationId);
+    if (reservation) {
       // Sync room_charges, POS charges from folio_transactions, and additional services from transactions
       const resRoomCharge = Number(reservation.total_amount || 0);
 
@@ -436,8 +450,10 @@ export const recomputeFolioTotals = async (folioId: string, reservationId?: stri
 export const addTransaction = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reservationId } = req.params;
-    const folio = await Folio.findByReservationId(reservationId);
-    if (!folio) throw new AppError('Folio not found', 404);
+    // Lazily creates the folio if this is the first charge ever posted for
+    // the stay (e.g. a Double Occupancy / Breakfast charge entered right at
+    // check-in, before anyone has opened the Guest Folio screen).
+    const folio = await ensureFolioForReservation(reservationId);
 
     const description = String(req.body?.description || '').trim();
     const amount = Number(req.body?.amount || 0);

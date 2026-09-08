@@ -40,6 +40,38 @@ const fullName = (user: any): string => {
   return name || user.email || 'Unknown';
 };
 
+// Resolves a display name per void-audit row, given its cashier_id (via a
+// users lookup) and shift_id (via cashier_shift_logs.cashier_name, a
+// denormalized snapshot taken when the shift opened — it never got wired
+// into the users-join path here, so a row whose cashier_id doesn't resolve
+// (deleted user, a stale/legacy row, etc.) always showed "Unknown cashier"
+// even when the shift itself unambiguously knew who it was). Falls back
+// users -> shift-log snapshot -> 'Unknown cashier' in that order.
+const resolveCashierNames = async (
+  rows: any[]
+): Promise<Map<string, string>> => {
+  const cashierIds = [...new Set(rows.map((r: any) => r.cashier_id).filter(Boolean))];
+  const shiftIds = [...new Set(rows.map((r: any) => r.shift_id).filter(Boolean))];
+  const [{ data: cashiers }, { data: shiftLogs }] = await Promise.all([
+    cashierIds.length
+      ? supabase.from('users').select('id, first_name, last_name, email').in('id', cashierIds)
+      : Promise.resolve({ data: [] as any[] }),
+    shiftIds.length
+      ? supabase.from('cashier_shift_logs').select('id, cashier_name').in('id', shiftIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const cashiersById = new Map((cashiers || []).map((c: any) => [c.id, c]));
+  const shiftNameById = new Map((shiftLogs || []).map((s: any) => [s.id, s.cashier_name]));
+
+  const namesByAuditRow = new Map<string, string>();
+  for (const row of rows) {
+    const viaUser = fullName(cashiersById.get(row.cashier_id));
+    const viaShiftLog = String(shiftNameById.get(row.shift_id) || '').trim();
+    namesByAuditRow.set(row.id, viaUser !== 'Unknown' ? viaUser : (viaShiftLog || 'Unknown cashier'));
+  }
+  return namesByAuditRow;
+};
+
 export const listVoidAudits = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertVoidAuditAccess(req);
@@ -61,20 +93,18 @@ export const listVoidAudits = async (req: Request, res: Response, next: NextFunc
     if (error) throw error;
 
     const rows = data || [];
-    const cashierIds = [...new Set(rows.map((r: any) => r.cashier_id).filter(Boolean))];
     const branchIds = [...new Set(rows.map((r: any) => r.branch_id).filter(Boolean))];
-    const [{ data: cashiers }, { data: branches }] = await Promise.all([
-      cashierIds.length ? supabase.from('users').select('id, first_name, last_name, email').in('id', cashierIds) : Promise.resolve({ data: [] as any[] }),
+    const [namesByAuditRow, { data: branches }] = await Promise.all([
+      resolveCashierNames(rows),
       branchIds.length ? supabase.from('branches').select('id, name').in('id', branchIds) : Promise.resolve({ data: [] as any[] }),
     ]);
-    const cashiersById = new Map((cashiers || []).map((c: any) => [c.id, c]));
     const branchesById = new Map((branches || []).map((b: any) => [b.id, b]));
 
     res.json({
       success: true,
       data: rows.map((row: any) => ({
         ...row,
-        cashier_name: fullName(cashiersById.get(row.cashier_id)),
+        cashier_name: namesByAuditRow.get(row.id) || 'Unknown cashier',
         branch_name: branchesById.get(row.branch_id)?.name || null,
       }))
     });
@@ -95,6 +125,14 @@ export const getVoidAuditDetail = async (req: Request, res: Response, next: Next
       .single();
     if (error || !auditRow) throw new AppError('Void audit not found', 404);
     ensureBranchAccess(req, auditRow.branch_id);
+
+    // This endpoint never joined a cashier_name in at all (unlike
+    // listVoidAudits) — auditRow only carries cashier_id, so the frontend's
+    // `data['cashier_name'] ?? 'Unknown cashier'` fell back to "Unknown" on
+    // every single detail view, regardless of whether the cashier was
+    // actually resolvable.
+    const namesByAuditRow = await resolveCashierNames([auditRow]);
+    const cashierName = namesByAuditRow.get(auditRow.id) || 'Unknown cashier';
 
     const outletShiftIds: string[] = auditRow.outlet_shift_ids || [];
 
@@ -232,6 +270,7 @@ export const getVoidAuditDetail = async (req: Request, res: Response, next: Next
       success: true,
       data: {
         ...auditRow,
+        cashier_name: cashierName,
         records,
         per_server: perServerBreakdown,
         per_reason: Array.from(perReason.values()),

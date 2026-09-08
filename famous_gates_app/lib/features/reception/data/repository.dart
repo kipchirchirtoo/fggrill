@@ -29,6 +29,14 @@ class ReceptionRepository {
     return await storage.read(key: AuthRepository.branchIdKey) ?? '';
   }
 
+  /// The logged-in staff member's own branch name (e.g. "Kyogong"), as
+  /// stored at login. Used to default dialogs like ConferenceBookingDialog
+  /// to the CURRENT branch instead of a hardcoded fallback.
+  Future<String> get branchName async {
+    final storage = _ref.read(secureStorageProvider);
+    return await storage.read(key: AuthRepository.branchNameKey) ?? '';
+  }
+
   Future<Map<String, dynamic>> _branchParams(
       [Map<String, dynamic>? params]) async {
     final branchId = await _branchId;
@@ -739,7 +747,29 @@ class ReceptionRepository {
       );
       return _mapList(response.data).where((o) {
         final t = '${o['target_type'] ?? ''}';
-        return t == 'room_type' || t == 'all_rooms' || t == 'guest';
+        return t == 'room_type' ||
+            t == 'room_number' ||
+            t == 'all_rooms' ||
+            t == 'guest';
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Active Branch-Manager-defined offers that apply to conference hall
+  /// bookings (target_type = 'conference_hall' | 'all_conference_halls').
+  /// Same fail-safe pattern as [getActiveRoomOffers] — never blocks the
+  /// booking flow on offer-fetch failure.
+  Future<List<Map<String, dynamic>>> getActiveConferenceHallOffers() async {
+    try {
+      final response = await _dio.get(
+        '/offers/active',
+        queryParameters: await _branchParams(),
+      );
+      return _mapList(response.data).where((o) {
+        final t = '${o['target_type'] ?? ''}';
+        return t == 'conference_hall' || t == 'all_conference_halls';
       }).toList();
     } catch (_) {
       return [];

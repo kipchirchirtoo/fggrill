@@ -82,6 +82,11 @@ class WindowClassRegistrar {
   static WindowClassRegistrar* instance_;
 
   bool class_registered_ = false;
+
+  // Solid brush painted behind the window before Flutter's engine has
+  // presented its first frame (and for as long as it takes to do so). Kept
+  // alive for the app's lifetime and freed in UnregisterWindowClass().
+  HBRUSH background_brush_ = nullptr;
 };
 
 WindowClassRegistrar* WindowClassRegistrar::instance_ = nullptr;
@@ -97,7 +102,19 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
     window_class.hInstance = GetModuleHandle(nullptr);
     window_class.hIcon =
         LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
-    window_class.hbrBackground = 0;
+    // hbrBackground was 0 (no background brush), meaning Win32 never erases
+    // the window's own client area — it's entirely up to the app to paint
+    // something there. Flutter only starts painting once its engine has
+    // initialized and presented a first frame; on machines where that takes
+    // a while (or never completes — older GPUs/drivers on Windows 10 and
+    // below can be slow or fail to negotiate ANGLE's Direct3D 11 backend),
+    // the user was staring at whatever the Desktop Window Manager clears a
+    // brand-new, unpainted window surface to — white. Painting this brush
+    // (matching the app's #0F172A navy used on every login/loading screen)
+    // means that gap is navy instead of a blank white window, and if Flutter
+    // never manages to render at all, the window at least isn't blank.
+    background_brush_ = CreateSolidBrush(RGB(15, 23, 42));
+    window_class.hbrBackground = background_brush_;
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
     RegisterClass(&window_class);
@@ -109,6 +126,10 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
 void WindowClassRegistrar::UnregisterWindowClass() {
   UnregisterClass(kWindowClassName, nullptr);
   class_registered_ = false;
+  if (background_brush_) {
+    DeleteObject(background_brush_);
+    background_brush_ = nullptr;
+  }
 }
 
 Win32Window::Win32Window() {

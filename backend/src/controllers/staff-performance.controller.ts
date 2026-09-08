@@ -13,14 +13,14 @@ export const getStaffPerformance = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { branch_id, period, department } = req.query;
+        const { branch_id, period, department, staff_id } = req.query;
         const periodDays = parseInt(period as string) || 30;
         // Use DATE string (YYYY-MM-DD) — attendance_date is a DATE column, not TIMESTAMPTZ
         const startDate = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000)
             .toISOString()
             .split('T')[0];
 
-        console.log('🔍 [Staff Performance] Fetching performance:', { branch_id, period: periodDays, department });
+        console.log('🔍 [Staff Performance] Fetching performance:', { branch_id, period: periodDays, department, staff_id });
 
         // Query staff_profiles — staff_attendance.staff_id references staff_profiles(id),
         // not users(id). Querying users gave wrong IDs and zero attendance for everyone.
@@ -35,6 +35,11 @@ export const getStaffPerformance = async (
 
         if (department) {
             staffQuery = staffQuery.eq('department', department);
+        }
+
+        // Single-member lookup — used by the staff-detail KPI drill-down.
+        if (staff_id) {
+            staffQuery = staffQuery.eq('id', staff_id as string);
         }
 
         const { data: staff, error: staffError } = await staffQuery;

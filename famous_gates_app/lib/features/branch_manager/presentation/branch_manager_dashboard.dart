@@ -151,12 +151,12 @@ class _BranchManagerDashboardState
             return status == 'present' || status == 'late';
           }).length;
           _bookingsInHouse = overviewBookings
-              .where((row) =>
-                  _text(row, ['status']).toLowerCase() == 'checked_in')
+              .where(
+                  (row) => _text(row, ['status']).toLowerCase() == 'checked_in')
               .length;
           _bookingsUpcoming = overviewBookings
-              .where((row) =>
-                  _text(row, ['status']).toLowerCase() == 'confirmed')
+              .where(
+                  (row) => _text(row, ['status']).toLowerCase() == 'confirmed')
               .length;
           _rows = [];
           break;
@@ -518,7 +518,8 @@ class _BranchManagerDashboardState
           fields: const ['document_type', 'file_name', 'created_at', 'status'],
           actionsBuilder: (row) => [
             _miniButton('View', () => _showRow(row)),
-            _miniButton('Download', () => _snack('Document download coming soon')),
+            _miniButton(
+                'Download', () => _snack('Document download coming soon')),
           ],
         );
       default:
@@ -1887,7 +1888,10 @@ class _BranchManagerDashboardState
                 prefixIcon: Icon(Icons.search, size: 18),
                 hintText: 'Search',
               ),
-              onChanged: (v) { _search = v; if (v.isEmpty) _load(); },
+              onChanged: (v) {
+                _search = v;
+                if (v.isEmpty) _load();
+              },
               onSubmitted: (value) {
                 _search = value;
                 _load();
@@ -2311,12 +2315,14 @@ class _BranchManagerDashboardState
           _miniButton('Clock out', () => _staffClock(id, false)),
           _miniButton('Edit', () => _editGeneric(row)),
           if (_text(row, ['user_id']).isEmpty)
-            _miniButton('Create login', () => _showCreateUserForStaffDialog(row)),
+            _miniButton(
+                'Create login', () => _showCreateUserForStaffDialog(row)),
         ];
       case BranchManagerSection.users:
         return [
           _miniButton('View', () => _showRow(row)),
-          _miniButton('Reset password', () => _showResetUserPasswordDialog(row)),
+          _miniButton(
+              'Reset password', () => _showResetUserPasswordDialog(row)),
         ];
       case BranchManagerSection.leave:
       case BranchManagerSection.staffLeave:
@@ -2332,14 +2338,16 @@ class _BranchManagerDashboardState
       case BranchManagerSection.waiterSales:
         return [_miniButton('Detail', () => _showRow(row))];
       case BranchManagerSection.staffPerformance:
-        return [_miniButton('Detail', () {
-          final id = _id(row);
-          if (id.isNotEmpty) {
-            _openDetail(BranchManagerSection.staffDetail, id);
-          } else {
-            _showRow(row);
-          }
-        })];
+        return [
+          _miniButton('Detail', () {
+            final id = _id(row);
+            if (id.isNotEmpty) {
+              _openDetail(BranchManagerSection.staffDetail, id);
+            } else {
+              _showRow(row);
+            }
+          })
+        ];
       default:
         return [_miniButton('View', () => _showRow(row))];
     }
@@ -2527,23 +2535,64 @@ class _BranchManagerDashboardState
     bool createAccount = true;
 
     const depts = [
-      'restaurant', 'bar_lounge', 'kitchen', 'housekeeping', 'reception',
-      'front_office', 'maintenance', 'finance', 'accounts', 'management',
-      'hr', 'security', 'store', 'procurement', 'logistics', 'administration',
-      'food_beverage', 'it', 'general', 'operations',
+      'restaurant',
+      'bar_lounge',
+      'kitchen',
+      'housekeeping',
+      'reception',
+      'front_office',
+      'maintenance',
+      'finance',
+      'accounts',
+      'management',
+      'hr',
+      'security',
+      'store',
+      'procurement',
+      'logistics',
+      'administration',
+      'food_beverage',
+      'it',
+      'general',
+      'operations',
     ];
     const positions = [
-      'waiter', 'bartender', 'chef', 'receptionist', 'housekeeper',
-      'supervisor', 'manager', 'cashier', 'security_guard', 'driver',
-      'accountant', 'storekeeper', 'maintenance_technician', 'kitchen_staff',
-      'barista', 'porter', 'cleaner', 'laundry_attendant', 'employee',
+      'waiter',
+      'bartender',
+      'chef',
+      'receptionist',
+      'housekeeper',
+      'supervisor',
+      'manager',
+      'cashier',
+      'security_guard',
+      'driver',
+      'accountant',
+      'storekeeper',
+      'maintenance_technician',
+      'kitchen_staff',
+      'barista',
+      'porter',
+      'cleaner',
+      'laundry_attendant',
+      'employee',
     ];
     const shifts = ['morning', 'afternoon', 'night', 'full_day', 'split'];
     const empTypes = ['permanent', 'contract', 'casual', 'intern', 'part_time'];
     const loginRoles = [
-      'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
-      'chef', 'storekeeper', 'kitchen_operations', 'choma_zone_kds', 'branch_manager',
-      'hr_manager', 'auditor', 'employee',
+      'waiter',
+      'bartender',
+      'cashier',
+      'receptionist',
+      'housekeeper',
+      'chef',
+      'storekeeper',
+      'kitchen_operations',
+      'choma_zone_kds',
+      'branch_manager',
+      'hr_manager',
+      'auditor',
+      'employee',
     ];
 
     Widget dropRow(String label, String value, List<String> options,
@@ -2553,7 +2602,8 @@ class _BranchManagerDashboardState
           initialValue: options.contains(value) ? value : options.first,
           decoration: InputDecoration(labelText: label),
           items: options
-              .map((o) => DropdownMenuItem(value: o, child: Text(o.replaceAll('_', ' '))))
+              .map((o) => DropdownMenuItem(
+                  value: o, child: Text(o.replaceAll('_', ' '))))
               .toList(),
           onChanged: (v) {
             if (v != null) {
@@ -2613,7 +2663,8 @@ class _BranchManagerDashboardState
                       child: dropRow('Employment Type', empType, empTypes,
                           (v) => setDs(() => empType = v)),
                     ),
-                    _dialogField(salaryCtrl, 'Basic Salary (KES)', number: true),
+                    _dialogField(salaryCtrl, 'Basic Salary (KES)',
+                        number: true),
                   ]),
                   const SizedBox(height: 14),
                   SwitchListTile(
@@ -2652,8 +2703,8 @@ class _BranchManagerDashboardState
                     lnCtrl.text.trim().isEmpty ||
                     idCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                      content:
-                          Text('First name, last name and national ID are required')));
+                      content: Text(
+                          'First name, last name and national ID are required')));
                   return;
                 }
                 if (createAccount) {
@@ -2670,7 +2721,9 @@ class _BranchManagerDashboardState
                     return;
                   }
                   if (p.isNotEmpty && !RegExp(r'^[RMNCE]\d{4}$').hasMatch(p)) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                        content: Text(
+                            'POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
                     return;
                   }
                 }
@@ -2687,16 +2740,13 @@ class _BranchManagerDashboardState
                   'shift': shift,
                   'employment_type': empType,
                   if (salaryCtrl.text.trim().isNotEmpty)
-                    'basic_salary':
-                        num.tryParse(salaryCtrl.text.trim()) ??
-                            salaryCtrl.text.trim(),
+                    'basic_salary': num.tryParse(salaryCtrl.text.trim()) ??
+                        salaryCtrl.text.trim(),
                   'create_user_account': createAccount,
                   if (createAccount) 'user_role': userRole,
-                  if (createAccount &&
-                      passwordCtrl.text.trim().isNotEmpty)
+                  if (createAccount && passwordCtrl.text.trim().isNotEmpty)
                     'password': passwordCtrl.text.trim(),
-                  if (createAccount &&
-                      pinCtrl.text.trim().isNotEmpty)
+                  if (createAccount && pinCtrl.text.trim().isNotEmpty)
                     'pos_pin': pinCtrl.text.trim(),
                 };
                 Navigator.pop(ctx, data);
@@ -2709,8 +2759,14 @@ class _BranchManagerDashboardState
     );
 
     for (final c in [
-      fnCtrl, lnCtrl, idCtrl, emailCtrl, phoneCtrl,
-      salaryCtrl, passwordCtrl, pinCtrl
+      fnCtrl,
+      lnCtrl,
+      idCtrl,
+      emailCtrl,
+      phoneCtrl,
+      salaryCtrl,
+      passwordCtrl,
+      pinCtrl
     ]) {
       c.dispose();
     }
@@ -2727,7 +2783,8 @@ class _BranchManagerDashboardState
     }, success: 'Staff registered');
   }
 
-  Future<void> _showCreateUserForStaffDialog([Map<String, dynamic>? staff]) async {
+  Future<void> _showCreateUserForStaffDialog(
+      [Map<String, dynamic>? staff]) async {
     final staffOptions = staff == null
         ? await _loadIdOptions('staff_profile_id')
         : <_SelectOption>[];
@@ -2737,9 +2794,19 @@ class _BranchManagerDashboardState
         ? 'employee'
         : _text(staff, ['role', 'position']).ifEmpty('employee');
     const loginRoleOptions = [
-      'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
-      'chef', 'storekeeper', 'kitchen_operations', 'choma_zone_kds', 'branch_manager',
-      'hr_manager', 'auditor', 'employee',
+      'waiter',
+      'bartender',
+      'cashier',
+      'receptionist',
+      'housekeeper',
+      'chef',
+      'storekeeper',
+      'kitchen_operations',
+      'choma_zone_kds',
+      'branch_manager',
+      'hr_manager',
+      'auditor',
+      'employee',
     ];
     final passwordController = TextEditingController();
     final pinController = TextEditingController();
@@ -2825,7 +2892,6 @@ class _BranchManagerDashboardState
         ),
       ),
     );
-
 
     passwordController.dispose();
     pinController.dispose();
@@ -3239,7 +3305,10 @@ class _BranchManagerDashboardState
   }
 
   void _openDetail(BranchManagerSection section, String id) {
-    if (id.isEmpty) { _snack('No record ID available'); return; }
+    if (id.isEmpty) {
+      _snack('No record ID available');
+      return;
+    }
     setState(() {
       _section = section;
       _recordId = id;
@@ -3800,8 +3869,9 @@ class _EmptyNotice extends StatelessWidget {
 }
 
 /// Discounts & Offers management. Branch managers create discounts against POS
-/// menu items (restaurant/bar) or room rates. Active offers are surfaced at the
-/// POS as an OFFER tag (via GET /offers/active) and flow into customer bills.
+/// menu items (restaurant/bar), room rates, or conference hall bookings.
+/// Active offers are surfaced at the POS as an OFFER tag (via GET
+/// /offers/active) and flow into customer bills / conference invoices.
 class _OffersSection extends ConsumerStatefulWidget {
   const _OffersSection();
 
@@ -3947,8 +4017,9 @@ class _OffersSectionState extends ConsumerState<_OffersSection> {
                         style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 4),
                     const Text(
-                      'Create discounts on menu items and room rates. Active offers '
-                      'show as an OFFER tag at the POS and on customer bills.',
+                      'Create discounts on restaurant/bar menu items, room rates, '
+                      'or conference hall bookings. Active offers show as an '
+                      'OFFER tag at the POS and on customer bills.',
                       style: TextStyle(color: AppColors.kTextSecondary),
                     ),
                   ],
@@ -3978,7 +4049,14 @@ class _OffersSectionState extends ConsumerState<_OffersSection> {
                     value: 'menu_category', child: Text('Menu categories')),
                 DropdownMenuItem(value: 'outlet', child: Text('Whole outlet')),
                 DropdownMenuItem(value: 'room_type', child: Text('Room types')),
+                DropdownMenuItem(
+                    value: 'room_number', child: Text('Specific rooms')),
                 DropdownMenuItem(value: 'all_rooms', child: Text('All rooms')),
+                DropdownMenuItem(
+                    value: 'conference_hall', child: Text('Conference halls')),
+                DropdownMenuItem(
+                    value: 'all_conference_halls',
+                    child: Text('All conference halls')),
                 DropdownMenuItem(value: 'guest', child: Text('Specific Guest')),
               ],
               onChanged: (value) {
@@ -4108,9 +4186,8 @@ class _OffersSectionState extends ConsumerState<_OffersSection> {
     final type = '${offer['target_type']}';
     final label = '${offer['target_label'] ?? ''}'.trim();
     final kind = '${offer['item_kind'] ?? ''}'.trim();
-    final kindText = kind.isEmpty
-        ? ''
-        : ' (${kind[0].toUpperCase()}${kind.substring(1)})';
+    final kindText =
+        kind.isEmpty ? '' : ' (${kind[0].toUpperCase()}${kind.substring(1)})';
     switch (type) {
       case 'menu_item':
         return 'Menu item: ${label.isEmpty ? '—' : label}$kindText';
@@ -4120,8 +4197,14 @@ class _OffersSectionState extends ConsumerState<_OffersSection> {
         return 'Whole ${kind.isEmpty ? 'outlet' : kind} menu';
       case 'room_type':
         return 'Room type: ${label.isEmpty ? '—' : label}';
+      case 'room_number':
+        return 'Room: ${label.isEmpty ? '—' : label}';
       case 'all_rooms':
         return 'All rooms';
+      case 'conference_hall':
+        return 'Conference hall: ${label.isEmpty ? '—' : label}';
+      case 'all_conference_halls':
+        return 'All conference halls';
       case 'guest':
         return 'Guest: ${label.isEmpty ? '—' : label}';
       default:
@@ -4156,8 +4239,11 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
   late final TextEditingController _desc;
   late final TextEditingController _value;
   String _discountType = 'percentage';
-  String _targetType = 'menu_item';
-  String _itemKind = 'restaurant';
+  // Nullable and unset by default for a new offer — nothing pre-chosen, staff
+  // must actively pick what this applies to instead of it silently starting
+  // on "Specific menu item" / "Restaurant" as if already decided.
+  String? _targetType;
+  String? _itemKind;
   String _targetId = '';
   String _targetLabel = '';
   bool _active = true;
@@ -4168,6 +4254,11 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
   final Set<String> _selectedGuestIds = {};
   // bookingId → display label (e.g. "Gabriel — Room 204")
   final Map<String, String> _guestLabelById = {};
+  // The guest-search Autocomplete's field controller, captured from
+  // fieldViewBuilder so onSelected can clear it after adding a guest —
+  // Autocomplete otherwise leaves the picked option's label sitting in the
+  // box instead of resetting for the next search.
+  TextEditingController? _guestFieldCtrl;
 
   bool _loadingOptions = false;
   List<_SelectOption> _options = [];
@@ -4183,6 +4274,8 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
       _targetType == 'menu_item' ||
       _targetType == 'menu_category' ||
       _targetType == 'room_type' ||
+      _targetType == 'room_number' ||
+      _targetType == 'conference_hall' ||
       _targetType == 'guest';
 
   @override
@@ -4196,9 +4289,15 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
             ? ''
             : '${init!['discount_value']}');
     _discountType = '${init?['discount_type'] ?? 'percentage'}';
-    _targetType = '${init?['target_type'] ?? 'menu_item'}';
-    final kind = '${init?['item_kind'] ?? ''}';
-    _itemKind = (kind == 'bar') ? 'bar' : 'restaurant';
+    // Editing an existing offer: show its real saved values. Creating a new
+    // one: leave both unset so staff must actively choose rather than
+    // silently inherit "Specific menu item" / "Restaurant" as a default.
+    final initialTargetType = init?['target_type'];
+    _targetType = initialTargetType == null ? null : '$initialTargetType';
+    final initialKind = init?['item_kind'];
+    _itemKind = (initialKind == 'bar' || initialKind == 'restaurant')
+        ? '$initialKind'
+        : null;
     _targetId = '${init?['target_id'] ?? ''}';
     _targetLabel = '${init?['target_label'] ?? ''}';
     _active = init?['is_active'] == null ? true : init!['is_active'] == true;
@@ -4221,6 +4320,13 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
 
   Future<void> _loadOptions() async {
     if (!_needsPicker) {
+      setState(() => _options = []);
+      return;
+    }
+    // Menu (Restaurant/Bar) hasn't been chosen yet — wait for it instead of
+    // silently defaulting to Restaurant, which would fetch the wrong list
+    // for staff who haven't picked a menu yet.
+    if (_needsKind && _itemKind == null) {
       setState(() => _options = []);
       return;
     }
@@ -4253,20 +4359,59 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
             opts.add(_SelectOption(value: t, label: t));
           }
         }
+      } else if (_targetType == 'room_number') {
+        final rows = await _repo.rooms();
+        opts = rows
+            .map((r) {
+              final number =
+                  '${r['room_number'] ?? r['number'] ?? r['name'] ?? ''}'
+                      .trim();
+              final type = '${r['room_type'] ?? r['type'] ?? ''}'.trim();
+              final label =
+                  type.isNotEmpty ? 'Room $number ($type)' : 'Room $number';
+              return _SelectOption(value: '${r['id']}', label: label);
+            })
+            .where((o) => o.value.isNotEmpty && o.value != 'null')
+            .toList();
+      } else if (_targetType == 'conference_hall') {
+        final rows = await _repo.conferenceHalls();
+        opts = rows
+            .map((r) => _SelectOption(
+                value: '${r['id']}',
+                label: '${r['name'] ?? r['hall_name'] ?? 'Hall'}'))
+            .where((o) => o.value.isNotEmpty && o.value != 'null')
+            .toList();
       } else if (_targetType == 'guest') {
         final rows = await _repo.bookings(status: 'checked_in');
-        opts = rows.map((b) {
-          final guestName =
-              '${b['guest_name'] ?? b['guestName'] ?? b['guest']?['name'] ?? 'Guest'}'
-                  .trim();
-          final roomNum =
-              '${b['room_number'] ?? b['roomNumber'] ?? b['room']?['room_number'] ?? ''}'
-                  .trim();
-          final label =
-              roomNum.isNotEmpty ? '$guestName — Room $roomNum' : guestName;
-          final id = '${b['id'] ?? ''}';
-          return _SelectOption(value: id, label: label);
-        }).where((o) => o.value.isNotEmpty).toList();
+        opts = rows
+            .map((b) {
+              final guestName =
+                  '${b['guest_name'] ?? b['guestName'] ?? b['guest']?['name'] ?? 'Guest'}'
+                      .trim();
+              final roomNum =
+                  '${b['room_number'] ?? b['roomNumber'] ?? b['room']?['room_number'] ?? ''}'
+                      .trim();
+              final confirmation =
+                  '${b['confirmation_number'] ?? b['confirmationNumber'] ?? ''}'
+                      .trim();
+              // Room number + confirmation number both included so staff can
+              // tell apart same-named guests, and so "guest" and "room" are
+              // both confirmed by a single searchable pick.
+              final parts = [
+                guestName,
+                if (roomNum.isNotEmpty) 'Room $roomNum',
+                if (confirmation.isNotEmpty) confirmation,
+              ];
+              final label = parts.join(' — ');
+              final id = '${b['id'] ?? ''}';
+              return _SelectOption(
+                value: id,
+                label: label,
+                searchText: [guestName, roomNum, confirmation].join(' '),
+              );
+            })
+            .where((o) => o.value.isNotEmpty)
+            .toList();
       }
       if (!mounted) return;
       setState(() {
@@ -4285,6 +4430,7 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
   void _onTargetTypeChanged(String value) {
     setState(() {
       _targetType = value;
+      _itemKind = null;
       _targetId = '';
       _targetLabel = '';
       _options = [];
@@ -4325,6 +4471,14 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
       _snack('Percentage cannot exceed 100');
       return;
     }
+    if (_targetType == null) {
+      _snack('Select what this offer applies to');
+      return;
+    }
+    if (_needsKind && _itemKind == null) {
+      _snack('Select a menu (Restaurant or Bar)');
+      return;
+    }
 
     // ── Guest target: validate multi-selection ──
     if (_targetType == 'guest') {
@@ -4334,7 +4488,7 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
       }
       final desc = _desc.text.trim().isEmpty ? null : _desc.text.trim();
       final starts = _start == null ? null : _ymd(_start!);
-      final ends   = _end   == null ? null : _ymd(_end!);
+      final ends = _end == null ? null : _ymd(_end!);
       // One offer row per guest
       final offers = _selectedGuestIds.map((id) {
         final lbl = _guestLabelById[id] ?? id;
@@ -4365,6 +4519,7 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
     String label = _targetLabel;
     if (_targetType == 'outlet') label = _outletLabel();
     if (_targetType == 'all_rooms') label = 'All rooms';
+    if (_targetType == 'all_conference_halls') label = 'All conference halls';
 
     Navigator.pop(context, <String, dynamic>{
       'name': name,
@@ -4385,238 +4540,525 @@ class _OfferFormDialogState extends ConsumerState<_OfferFormDialog> {
     AppNotifier.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
+  /// Small bold caps label heading a group of related fields — same visual
+  /// language as the section labels used elsewhere in the app's dialogs.
+  Widget _sectionLabel(String text, {IconData? icon}) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: AppColors.kPrimary),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.kPrimary,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// "15% OFF" / "KES 500 OFF" — live preview of what's currently typed, so
+  /// staff can see at a glance what the offer will actually read like on
+  /// the POS tag / customer bill before saving.
+  String? get _discountPreview {
+    final v = num.tryParse(_value.text.trim());
+    if (v == null || v <= 0) return null;
+    return _discountType == 'percentage'
+        ? '${v % 1 == 0 ? v.toInt() : v}% OFF'
+        : 'KES ${v % 1 == 0 ? v.toInt() : v} OFF';
+  }
+
+  IconData get _targetTypeIcon {
+    switch (_targetType) {
+      case 'menu_item':
+      case 'menu_category':
+      case 'outlet':
+        return Icons.restaurant_menu_outlined;
+      case 'room_type':
+      case 'room_number':
+      case 'all_rooms':
+        return Icons.bed_outlined;
+      case 'conference_hall':
+      case 'all_conference_halls':
+        return Icons.meeting_room_outlined;
+      case 'guest':
+        return Icons.person_outline;
+      default:
+        return Icons.sell_outlined;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pickerValue =
-        _options.any((o) => o.value == _targetId) ? _targetId : null;
-    return AlertDialog(
-      title: Text(widget.initial == null ? 'New Offer' : 'Edit Offer'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(labelText: 'Offer name *'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _desc,
-                decoration:
-                    const InputDecoration(labelText: 'Description (optional)'),
-              ),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _discountType,
-                    decoration:
-                        const InputDecoration(labelText: 'Discount type'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'percentage', child: Text('Percentage (%)')),
-                      DropdownMenuItem(
-                          value: 'fixed', child: Text('Fixed amount (KES)')),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _discountType = v ?? 'percentage'),
+    final isEditing = widget.initial != null;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 820),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header ──────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 20, 12, 20),
+              color: AppColors.kPrimary,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.local_offer_outlined,
+                        color: AppColors.kAccent, size: 22),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _value,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Value *',
-                      prefixText: _discountType == 'fixed' ? 'KES ' : null,
-                      suffixText: _discountType == 'percentage' ? '%' : null,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(isEditing ? 'Edit Offer' : 'New Offer',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 2),
+                        Text(
+                          isEditing
+                              ? 'Update this discount\'s details'
+                              : 'Create a discount for menu items, rooms, or conference halls',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              fontSize: 12.5),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _targetType,
-                decoration: const InputDecoration(labelText: 'Applies to'),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'menu_item', child: Text('Specific menu item')),
-                  DropdownMenuItem(
-                      value: 'menu_category', child: Text('Menu category')),
-                  DropdownMenuItem(
-                      value: 'outlet', child: Text('Whole outlet menu')),
-                  DropdownMenuItem(
-                      value: 'room_type', child: Text('Room type')),
-                  DropdownMenuItem(
-                      value: 'all_rooms', child: Text('All rooms')),
-                  DropdownMenuItem(
-                      value: 'guest', child: Text('Specific checked-in guest')),
-                ],
-                onChanged: (v) => _onTargetTypeChanged(v ?? 'menu_item'),
-              ),
-              if (_needsKind) ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _itemKind,
-                  decoration: const InputDecoration(labelText: 'Menu'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'restaurant', child: Text('Restaurant')),
-                    DropdownMenuItem(value: 'bar', child: Text('Bar')),
-                  ],
-                  onChanged: (v) => _onKindChanged(v ?? 'restaurant'),
-                ),
-              ],
-              if (_needsPicker) ...[
-                const SizedBox(height: 10),
-                if (_loadingOptions)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Center(
-                        child: SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))),
-                  )
-                else if (_targetType == 'guest') ...[
-                  // ── Multi-select chip checklist ──
-                  Text(
-                    'Checked-in guests * — tap to select one or more',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.kTextSecondary),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon:
+                        const Icon(Icons.close, color: Colors.white, size: 20),
+                    tooltip: 'Close',
                   ),
-                  const SizedBox(height: 6),
-                  if (_options.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('No guests currently checked in.',
-                          style: TextStyle(
-                              color: AppColors.kTextSecondary, fontSize: 12)),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 180),
-                      child: SingleChildScrollView(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: _options.map((o) {
-                            final selected =
-                                _selectedGuestIds.contains(o.value);
-                            return FilterChip(
-                              label: Text(o.label,
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: selected
-                                          ? Colors.white
-                                          : AppColors.kTextPrimary)),
-                              selected: selected,
-                              selectedColor: AppColors.kSuccess,
-                              checkmarkColor: Colors.white,
-                              backgroundColor: AppColors.kSurface,
-                              side: BorderSide(
-                                  color: selected
-                                      ? AppColors.kSuccess
-                                      : AppColors.kDivider),
-                              onSelected: (on) => setState(() {
-                                if (on) {
-                                  _selectedGuestIds.add(o.value);
-                                  _guestLabelById[o.value] = o.label;
-                                } else {
-                                  _selectedGuestIds.remove(o.value);
-                                  _guestLabelById.remove(o.value);
-                                }
-                              }),
-                            );
-                          }).toList(),
+                ],
+              ),
+            ),
+            // ── Body ────────────────────────────────────────────────────
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionLabel('OFFER DETAILS',
+                        icon: Icons.description_outlined),
+                    TextField(
+                      controller: _name,
+                      decoration: const InputDecoration(
+                        labelText: 'Offer name *',
+                        hintText: 'e.g. Weekday Deluxe Discount',
+                        prefixIcon: Icon(Icons.sell_outlined, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _desc,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Description (optional)',
+                        alignLabelWithHint: true,
+                        prefixIcon: Icon(Icons.notes_outlined, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionLabel('DISCOUNT', icon: Icons.percent_outlined),
+                    Row(children: [
+                      Expanded(
+                        flex: 5,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _discountType,
+                          decoration:
+                              const InputDecoration(labelText: 'Discount type'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'percentage',
+                                child: Text('Percentage (%)')),
+                            DropdownMenuItem(
+                                value: 'fixed',
+                                child: Text('Fixed amount (KES)')),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _discountType = v ?? 'percentage'),
                         ),
                       ),
-                    ),
-                  if (_selectedGuestIds.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '${_selectedGuestIds.length} guest${_selectedGuestIds.length == 1 ? '' : 's'} selected — one offer per guest will be created.',
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.kSuccess,
-                            fontWeight: FontWeight.w600),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 4,
+                        child: TextField(
+                          controller: _value,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            labelText: 'Value *',
+                            prefixText:
+                                _discountType == 'fixed' ? 'KES ' : null,
+                            suffixText:
+                                _discountType == 'percentage' ? '%' : null,
+                          ),
+                        ),
                       ),
+                    ]),
+                    if (_discountPreview != null) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.kAccent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                                color:
+                                    AppColors.kAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.local_offer,
+                                  size: 13, color: Color(0xFFB4841F)),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${_discountPreview!} — how this will show as the OFFER tag',
+                                style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFB4841F)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    _sectionLabel('APPLIES TO', icon: Icons.gps_fixed_outlined),
+                    DropdownButtonFormField<String>(
+                      initialValue: _targetType,
+                      hint: const Text('Select what this applies to'),
+                      decoration: InputDecoration(
+                        labelText: 'Applies to *',
+                        prefixIcon: Icon(_targetTypeIcon, size: 18),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'menu_item',
+                            child: Text('Specific menu item')),
+                        DropdownMenuItem(
+                            value: 'menu_category',
+                            child: Text('Menu category')),
+                        DropdownMenuItem(
+                            value: 'outlet', child: Text('Whole outlet menu')),
+                        DropdownMenuItem(
+                            value: 'room_type', child: Text('Room type')),
+                        DropdownMenuItem(
+                            value: 'room_number', child: Text('Specific room')),
+                        DropdownMenuItem(
+                            value: 'all_rooms', child: Text('All rooms')),
+                        DropdownMenuItem(
+                            value: 'conference_hall',
+                            child: Text('Conference hall')),
+                        DropdownMenuItem(
+                            value: 'all_conference_halls',
+                            child: Text('All conference halls')),
+                        DropdownMenuItem(
+                            value: 'guest',
+                            child: Text('Specific checked-in guest')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) _onTargetTypeChanged(v);
+                      },
                     ),
-                ] else ...[
-                  // ── Single-select dropdown for all other picker targets ──
-                  DropdownButtonFormField<String>(
-                    initialValue: pickerValue,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: _targetType == 'room_type'
-                          ? 'Room type *'
-                          : _targetType == 'menu_category'
-                              ? 'Category *'
-                              : 'Menu item *',
-                    ),
-                    items: _options
-                        .map((o) => DropdownMenuItem(
-                              value: o.value,
-                              child: Text(o.label,
-                                  overflow: TextOverflow.ellipsis),
-                            ))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      final match = _options.firstWhere(
-                          (o) => o.value == v,
-                          orElse: () => _SelectOption(value: v, label: v));
-                      setState(() {
-                        _targetId = v;
-                        _targetLabel = match.label;
-                      });
-                    },
-                  ),
-                  if (_options.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text('No options found for this selection.',
+                    if (_needsKind) ...[
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: _itemKind,
+                        hint: const Text('Select restaurant or bar'),
+                        decoration: const InputDecoration(
+                          labelText: 'Menu *',
+                          prefixIcon: Icon(Icons.storefront_outlined, size: 18),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'restaurant', child: Text('Restaurant')),
+                          DropdownMenuItem(value: 'bar', child: Text('Bar')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) _onKindChanged(v);
+                        },
+                      ),
+                    ],
+                    if (_needsPicker) ...[
+                      const SizedBox(height: 14),
+                      if (_loadingOptions)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(
+                              child: SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2))),
+                        )
+                      else if (_targetType == 'guest') ...[
+                        // ── Search-to-add multi-select: blank until typed, never
+                        // dumps every checked-in guest unprompted. Matches on
+                        // name, room number, AND confirmation number, so a
+                        // specific room+guest can be pinned down precisely
+                        // instead of relying on name alone.
+                        const Text(
+                          'Checked-in guest(s) * — search by name, room or confirmation number',
                           style: TextStyle(
-                              color: AppColors.kTextSecondary, fontSize: 12)),
+                              fontSize: 12, color: AppColors.kTextSecondary),
+                        ),
+                        const SizedBox(height: 6),
+                        Autocomplete<_SelectOption>(
+                          displayStringForOption: (o) => o.label,
+                          optionsBuilder: (textEditingValue) {
+                            final q =
+                                textEditingValue.text.trim().toLowerCase();
+                            if (q.isEmpty) return const Iterable.empty();
+                            return _options
+                                .where(
+                                    (o) => !_selectedGuestIds.contains(o.value))
+                                .where((o) =>
+                                    o.searchText.toLowerCase().contains(q))
+                                .take(30);
+                          },
+                          onSelected: (o) {
+                            setState(() {
+                              _selectedGuestIds.add(o.value);
+                              _guestLabelById[o.value] = o.label;
+                            });
+                            // Clear the search box so staff can immediately look
+                            // up the next guest instead of it holding the label
+                            // of the one just added.
+                            _guestFieldCtrl?.clear();
+                          },
+                          fieldViewBuilder: (ctx, ctrl, focusNode, onSubmit) {
+                            _guestFieldCtrl = ctrl;
+                            return TextField(
+                              controller: ctrl,
+                              focusNode: focusNode,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                prefixIcon: Icon(Icons.search, size: 18),
+                                hintText: 'Search checked-in guests...',
+                              ),
+                            );
+                          },
+                        ),
+                        if (_options.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text('No guests currently checked in.',
+                                style: TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                    fontSize: 12)),
+                          ),
+                        if (_selectedGuestIds.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: _selectedGuestIds.map((id) {
+                              return Chip(
+                                label: Text(_guestLabelById[id] ?? id,
+                                    style: const TextStyle(fontSize: 12.5)),
+                                backgroundColor:
+                                    AppColors.kSuccess.withValues(alpha: 0.12),
+                                side: BorderSide(
+                                    color: AppColors.kSuccess
+                                        .withValues(alpha: 0.4)),
+                                onDeleted: () => setState(() {
+                                  _selectedGuestIds.remove(id);
+                                  _guestLabelById.remove(id);
+                                }),
+                              );
+                            }).toList(),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '${_selectedGuestIds.length} guest${_selectedGuestIds.length == 1 ? '' : 's'} selected — one offer per guest will be created.',
+                              style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.kSuccess,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ] else ...[
+                        // ── Search-to-select for every other picker target — blank
+                        // until typed, autocomplete-filtered, instead of a plain
+                        // dropdown that (with room types, menu items, etc.) could
+                        // dump dozens of options open at once.
+                        Autocomplete<_SelectOption>(
+                          initialValue: TextEditingValue(text: _targetLabel),
+                          displayStringForOption: (o) => o.label,
+                          optionsBuilder: (textEditingValue) {
+                            final q =
+                                textEditingValue.text.trim().toLowerCase();
+                            if (q.isEmpty) return const Iterable.empty();
+                            return _options
+                                .where((o) =>
+                                    o.searchText.toLowerCase().contains(q))
+                                .take(30);
+                          },
+                          onSelected: (o) {
+                            setState(() {
+                              _targetId = o.value;
+                              _targetLabel = o.label;
+                            });
+                          },
+                          fieldViewBuilder: (ctx, ctrl, focusNode, onSubmit) {
+                            return TextField(
+                              controller: ctrl,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: _targetType == 'room_type'
+                                    ? 'Room type *'
+                                    : _targetType == 'room_number'
+                                        ? 'Room *'
+                                        : _targetType == 'menu_category'
+                                            ? 'Category *'
+                                            : _targetType == 'conference_hall'
+                                                ? 'Conference hall *'
+                                                : 'Menu item *',
+                                hintText: 'Search...',
+                                prefixIcon: const Icon(Icons.search, size: 18),
+                                suffixIcon: _targetId.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(Icons.close, size: 18),
+                                        onPressed: () {
+                                          ctrl.clear();
+                                          setState(() {
+                                            _targetId = '';
+                                            _targetLabel = '';
+                                          });
+                                        },
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                        if (_options.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text('No options found for this selection.',
+                                style: TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                    fontSize: 12)),
+                          ),
+                      ],
+                    ],
+                    const SizedBox(height: 24),
+                    _sectionLabel('VALIDITY & STATUS',
+                        icon: Icons.event_available_outlined),
+                    Row(children: [
+                      Expanded(
+                          child: _dateField('Starts (optional)', _start,
+                              (d) => setState(() => _start = d))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: _dateField('Ends (optional)', _end,
+                              (d) => setState(() => _end = d))),
+                    ]),
+                    const SizedBox(height: 14),
+                    // Tinted/bordered background set directly via
+                    // tileColor+shape (not a wrapping DecoratedBox) — a
+                    // ListTile paints its own background and ink splashes on
+                    // its nearest Material ancestor, so an intermediate
+                    // DecoratedBox between them silently hides both.
+                    SwitchListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 14),
+                      tileColor: _active
+                          ? AppColors.kSuccess.withValues(alpha: 0.08)
+                          : AppColors.kSurface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: _active
+                              ? AppColors.kSuccess.withValues(alpha: 0.35)
+                              : AppColors.kDivider,
+                        ),
+                      ),
+                      value: _active,
+                      activeThumbColor: AppColors.kSuccess,
+                      onChanged: (v) => setState(() => _active = v),
+                      title: const Text('Active',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle:
+                          const Text('Active offers apply immediately at POS.'),
                     ),
-                ],
-              ],
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: _dateField('Starts (optional)', _start,
-                    (d) => setState(() => _start = d))),
-                const SizedBox(width: 12),
-                Expanded(child: _dateField('Ends (optional)', _end,
-                    (d) => setState(() => _end = d))),
-              ]),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _active,
-                onChanged: (v) => setState(() => _active = v),
-                title: const Text('Active'),
-                subtitle: const Text('Active offers apply immediately at POS.'),
+                    const SizedBox(height: 4),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+            // ── Footer ──────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.kDivider)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      side: const BorderSide(color: AppColors.kDivider),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.kPrimary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 22, vertical: 14),
+                    ),
+                    icon: Icon(isEditing ? Icons.check : Icons.add, size: 18),
+                    label: Text(isEditing ? 'Save Changes' : 'Create Offer'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        ElevatedButton(onPressed: _submit, child: const Text('Save')),
-      ],
     );
   }
 
-  Widget _dateField(String label, DateTime? value, ValueChanged<DateTime?> onPick) {
+  Widget _dateField(
+      String label, DateTime? value, ValueChanged<DateTime?> onPick) {
     return InkWell(
       onTap: () async {
         final picked = await showDatePicker(
@@ -4654,11 +5096,18 @@ class _SelectOption {
     required this.value,
     required this.label,
     this.subtitle = '',
-  });
+    String? searchText,
+  }) : searchText = searchText ?? label;
 
   final String value;
   final String label;
   final String subtitle;
+
+  /// Text matched against while typing in the Autocomplete search field —
+  /// defaults to [label], but can carry extra unlabelled terms (e.g. a
+  /// guest's room number and confirmation number) so they're searchable
+  /// even though [label] already shows them formatted.
+  final String searchText;
 }
 
 extension _EmptyString on String {

@@ -4934,6 +4934,13 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       };
     });
 
+    // The per-staff summary (feeding the "Outstanding Credit Bills" / "Salary
+    // Advances" / "Staff Loans" / "Outstanding" / "Net Payable" cards and the
+    // Staff Summary table) is built from `unifiedRecords` — i.e. scoped to
+    // start_date/end_date, same as the Transactions tab — so these cards move
+    // when the date range changes. Only bills/advances/loans RAISED within the
+    // selected window are counted; widen the range to include debt raised
+    // outside it.
     unifiedRecords.forEach(record => {
       if (!record.staff_id || !staffSummary[record.staff_id]) {
         return;

@@ -37,6 +37,12 @@ import 'supplier_folio_screen.dart';
 // Reuse the branch accountant's self-contained Sold Items analytics section.
 import '../../branch_accountant/presentation/branch_accountant_dashboard.dart'
     show SoldItemsSection;
+// Daily Controls is a self-contained, role-agnostic widget (its own inline
+// "Back" button, no accountant-specific state) already fetching from
+// /kitchen/shifts/*, which KITCHEN_ROLES already authorizes branch
+// storekeepers for — rendering it here is a straight reuse, same as
+// SoldItemsSection above.
+import '../../branch_accountant/presentation/daily_controls_screen.dart';
 
 enum BranchStorekeeperSection {
   overview,
@@ -62,6 +68,7 @@ enum BranchStorekeeperSection {
   kitchenStocktake,
   recordSpoilage,
   wastageReport,
+  dailyControls,
   soldItems,
   reports,
   notifications,
@@ -1084,6 +1091,12 @@ class _BranchStorekeeperDashboardState
           icon: Icons.report_problem_outlined,
           group: 'Stock Takes',
         ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.dailyControls,
+          label: 'Daily Controls',
+          icon: Icons.fact_check_outlined,
+          group: 'Stock Takes',
+        ),
         MasterNavItem(
           section: BranchStorekeeperSection.purchaseOrders,
           label: 'Purchase Orders',
@@ -1209,6 +1222,11 @@ class _BranchStorekeeperDashboardState
         );
       case BranchStorekeeperSection.wastageReport:
         return const WastageReportScreen();
+      case BranchStorekeeperSection.dailyControls:
+        return DailyControlsScreen(
+          onBack: () =>
+              setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.soldItems:
         // Lighter default window so it loads fast; the range can be widened
         // from the date picker inside the screen.

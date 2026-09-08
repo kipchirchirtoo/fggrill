@@ -320,6 +320,38 @@ export const createBooking = async (
 // @desc    Update booking
 // @route   PUT /api/bookings/:id
 // @access  Private
+// Booking.save() only ever reads the camelCase properties on the instance
+// (checkInDate, specialRequests, ...) — a caller sending the snake_case
+// DB-column spelling instead (e.g. the Reservation Ledger's "Edit" dialog,
+// which sends check_in/check_out/special_requests) used to have those
+// silently discarded: Object.assign attached them as unrelated ad-hoc
+// properties nobody reads, save() persisted the guest's ORIGINAL unedited
+// dates back unchanged, and the request still came back 200 OK. Only
+// adults/children happened to survive, because those two keys are spelled
+// identically either way. Accept both spellings here, same pattern as
+// guest.controller.ts's updateGuest.
+const UPDATE_BOOKING_FIELD_ALIASES: [string, string[]][] = [
+  ['checkInDate', ['check_in_date', 'check_in', 'checkIn']],
+  ['checkOutDate', ['check_out_date', 'check_out', 'checkOut']],
+  ['roomId', ['room_id']],
+  ['roomTypeId', ['room_type_id']],
+  ['guestId', ['guest_id']],
+  ['ratePlanId', ['rate_plan_id']],
+  ['mealPlanId', ['meal_plan_id']],
+  ['mealPlan', ['meal_plan']],
+  ['specialRequests', ['special_requests']],
+  ['internalNotes', ['internal_notes']],
+  ['paymentMethod', ['payment_method']],
+  ['bookingSource', ['booking_source']],
+  ['depositAmount', ['deposit_amount']],
+  ['depositPaid', ['deposit_paid']],
+  ['totalAmount', ['total_amount']],
+  ['roomRate', ['room_rate']],
+  ['taxAmount', ['tax_amount']],
+  ['serviceCharge', ['service_charge']],
+  ['discountAmount', ['discount_amount']],
+];
+
 export const updateBooking = async (
   req: Request,
   res: Response,
@@ -330,7 +362,19 @@ export const updateBooking = async (
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
-    Object.assign(booking, req.body);
+
+    const body = req.body || {};
+    const normalized: Record<string, any> = { ...body };
+    for (const [camel, snakeKeys] of UPDATE_BOOKING_FIELD_ALIASES) {
+      for (const key of [camel, ...snakeKeys]) {
+        if (body[key] !== undefined) {
+          normalized[camel] = body[key];
+          break;
+        }
+      }
+    }
+
+    Object.assign(booking, normalized);
     const updatedBooking = await booking.save();
 
     res.status(200).json({
@@ -420,6 +464,18 @@ export const getAvailableRooms = async (
     const checkOut = req.query.checkOut || req.query.check_out_date;
     if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
 
+    // `reservations` is the ONLY table the reception flow keeps live —
+    // create/check-in/check-out (booking.controller's own handlers) all read
+    // and write it exclusively. The separate literal `bookings` table used to
+    // ALSO be checked here, but nothing in the codebase ever transitions a
+    // bookings row to checked_out on a real front-desk checkout (its only
+    // writers are an invoice-linking update and an unrelated guest-portal
+    // update) — so once a bookings row existed for a stay, that room stayed
+    // permanently "unavailable" for those dates even after the guest
+    // genuinely checked out via reservations. Verified against production
+    // data: every currently-occupied room is also covered by an active
+    // reservations row, so dropping the bookings check doesn't risk a double
+    // booking — it just stops stale rows from blocking rooms forever.
     const { data: bookedResv } = await supabase
       .from('reservations')
       .select('room_id')
@@ -427,17 +483,9 @@ export const getAvailableRooms = async (
       .lt('check_in_date', checkOut as string)
       .gt('check_out_date', checkIn as string);
 
-    const { data: bookedBk } = await supabase
-      .from('bookings')
-      .select('room_id')
-      .not('status', 'in', '(cancelled,canceled,checked_out,completed,no_show,expired)')
-      .lt('check_in_date', checkOut as string)
-      .gt('check_out_date', checkIn as string);
-
-    const bookedIds = Array.from(new Set([
-      ...(bookedResv || []).map((b: any) => b.room_id),
-      ...(bookedBk || []).map((b: any) => b.room_id)
-    ])).filter(Boolean);
+    const bookedIds = Array.from(new Set(
+      (bookedResv || []).map((b: any) => b.room_id)
+    )).filter(Boolean);
 
     let query = supabase
       .from('rooms')

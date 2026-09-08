@@ -5439,27 +5439,50 @@ export const getPendingVoidsCashier = async (req: Request, res: Response, next: 
 
 // ── Manager Stage 2 queue and void history ─────────────────────────────────
 
+// PostgREST caps an unranged select at its configured db-max-rows (1000 on
+// this project) and supabase-js does the same via .limit() — either way a
+// single call silently truncates once a table passes that size. Both queues
+// below are staff-facing (accountant/manager review lists, not a public
+// feed), and are small enough in absolute terms (low thousands) to return in
+// full, so this pages through in chunks server-side and concatenates rather
+// than lying about the total via a truncated response — the "Item Voids
+// (1000)" / "Void History (500)" labels were literally the fetched page
+// size, not the real count, hiding whatever didn't fit on page one.
+const PAGE_CHUNK = 1000;
+async function fetchAllRows(buildQuery: (from: number, to: number) => any): Promise<any[]> {
+  const rows: any[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await buildQuery(from, from + PAGE_CHUNK - 1);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < PAGE_CHUNK) break;
+    from += PAGE_CHUNK;
+  }
+  return rows;
+}
+
 export const getPendingVoidsManager = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
     if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
     const { branchId, isGlobal } = resolveEffectiveBranchId(req);
 
-    let query = supabase
-      .from('pos_item_void_requests')
-      .select('*')
-      .eq('status', 'void_acknowledged')
-      .order('cashier_acknowledged_at', { ascending: true });
-
-    if (branchId) {
-      query = query.eq('branch_id', branchId);
-    } else if (!isGlobal) {
-      query = query.eq('branch_id', -1);
-    }
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = data || [];
+    const rows = await fetchAllRows((from, to) => {
+      let query = supabase
+        .from('pos_item_void_requests')
+        .select('*')
+        .eq('status', 'void_acknowledged')
+        .order('cashier_acknowledged_at', { ascending: true })
+        .range(from, to);
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      } else if (!isGlobal) {
+        query = query.eq('branch_id', -1);
+      }
+      return query;
+    });
     const userIds = Array.from(new Set(
       rows.flatMap((r: any) => [r.requested_by, r.cashier_id]).filter(Boolean)
     ));
@@ -5488,27 +5511,24 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
     const requestedBy = nullableText(String(req.query.requested_by || ''));
     const cashierId = nullableText(String(req.query.cashier_id || ''));
 
-    let query = supabase
-      .from('pos_item_void_requests')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(500);
-
-    if (branchId) {
-      query = query.eq('branch_id', branchId);
-    } else if (!isGlobal) {
-      query = query.eq('branch_id', -1);
-    }
-    if (status) query = query.eq('status', status);
-    if (from) query = query.gte('created_at', from);
-    if (to) query = query.lte('created_at', to);
-    if (requestedBy) query = query.eq('requested_by', requestedBy);
-    if (cashierId) query = query.eq('cashier_id', cashierId);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = data || [];
+    const rows = await fetchAllRows((rangeFrom, rangeTo) => {
+      let query = supabase
+        .from('pos_item_void_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(rangeFrom, rangeTo);
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      } else if (!isGlobal) {
+        query = query.eq('branch_id', -1);
+      }
+      if (status) query = query.eq('status', status);
+      if (from) query = query.gte('created_at', from);
+      if (to) query = query.lte('created_at', to);
+      if (requestedBy) query = query.eq('requested_by', requestedBy);
+      if (cashierId) query = query.eq('cashier_id', cashierId);
+      return query;
+    });
     const userIds = Array.from(new Set(
       rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.manager_id, r.actioned_by, r.kitchen_id]).filter(Boolean)
     ));

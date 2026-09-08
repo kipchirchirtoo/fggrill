@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/api_error_message.dart';
 import '../../domain/models.dart';
 import '../../data/repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'move_room_screen.dart';
+import '../widgets/occupancy_breakfast_charges.dart';
 
 class CheckInScreen extends ConsumerStatefulWidget {
   final Booking? booking;
@@ -28,6 +30,12 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   // Documents
   final List<Map<String, dynamic>> _uploadedDocuments = [];
 
+  // Additional charges — Double Occupancy / Breakfast, posted to the folio
+  // once check-in succeeds. See OccupancyBreakfastCharges.
+  final _doubleOccCtrl = TextEditingController();
+  bool _addBreakfast = false;
+  final _breakfastCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +49,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _doubleOccCtrl.dispose();
+    _breakfastCtrl.dispose();
     super.dispose();
   }
 
@@ -57,7 +67,16 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
 
     setState(() => _isSearching = true);
     try {
-      final bookings = await _repository.getBookings(status: 'confirmed');
+      // getBookings defaults to the backend's page size (10, most-recently-
+      // created first) when no limit is given — the search below then only
+      // ever ran over those 10 rows, so a guest's confirmed booking simply
+      // wasn't in the fetched set unless it happened to be one of the 10
+      // newest confirmed bookings branch-wide. Request enough rows that a
+      // realistic "confirmed, not yet checked in" queue is never truncated.
+      final bookings = await _repository.getBookings(
+        status: 'confirmed',
+        params: {'limit': 500},
+      );
       final found = bookings.where((b) {
         final q = query.toLowerCase();
         return (b.confirmationNumber?.toLowerCase().contains(q) ?? false) ||
@@ -68,7 +87,14 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       if (found.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No matching confirmed bookings found')),
+            const SnackBar(
+              content: Text(
+                'No confirmed (not yet checked-in) booking matches that. '
+                'Already checked in or checked out? Look them up from the '
+                'Check-in / Check-out queues instead.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
           );
         }
       } else if (found.length == 1) {
@@ -93,7 +119,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                     final booking = found[index];
                     return ListTile(
                       title: Text(booking.guestName ?? 'Guest'),
-                      subtitle: Text('${booking.confirmationNumber ?? "-"} • Room ${booking.roomNumber ?? "TBA"}'),
+                      subtitle: Text(
+                          '${booking.confirmationNumber ?? "-"} • Room ${booking.roomNumber ?? "TBA"}'),
                       onTap: () => Navigator.of(context).pop(booking),
                     );
                   },
@@ -125,23 +152,26 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     // For now, show a placeholder message
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Document upload feature - add file_picker package')),
+        const SnackBar(
+            content: Text('Document upload feature - add file_picker package')),
       );
     }
   }
 
   Future<void> _performCheckIn() async {
     if (_selectedBooking == null) return;
+    final booking = _selectedBooking!;
 
     setState(() => _isSubmitting = true);
     try {
       // Perform check-in
-      await _repository.checkInBooking(_selectedBooking!.id);
+      await _repository.checkInBooking(booking.id);
+      await _postOccupancyAndBreakfastCharges(booking);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Guest checked in to Room ${_selectedBooking!.roomNumber}'),
+            content: Text('Guest checked in to Room ${booking.roomNumber}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -153,6 +183,43 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Check-in failed: $e')),
         );
+      }
+    }
+  }
+
+  /// Posts the optional Double Occupancy / Breakfast surcharges to the
+  /// guest's folio once check-in has succeeded, so they show up on the final
+  /// bill/invoice as their own explicitly-described lines. A failure here is
+  /// reported but never undoes the already-completed check-in.
+  Future<void> _postOccupancyAndBreakfastCharges(Booking booking) async {
+    final charges = OccupancyBreakfastCharges.resolve(
+      adults: booking.adults,
+      doubleOccCtrl: _doubleOccCtrl,
+      addBreakfast: _addBreakfast,
+      breakfastCtrl: _breakfastCtrl,
+      breakfastIncluded: OccupancyBreakfastCharges.breakfastIncludedInMealPlan(
+          booking.mealPlan),
+    );
+    for (final entry in charges.entries) {
+      try {
+        await _repository.addFolioTransaction(booking.id, {
+          'description': entry.key,
+          'amount': entry.value,
+          'type': 'charge',
+          'category': 'Additional Service',
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Checked in, but posting "${entry.key}" to the folio failed: '
+                '${apiErrorMessage(e)}. Add it from the Guest Folio screen instead.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -230,10 +297,13 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Booking Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('Booking Details',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.close),
-                        onPressed: () => setState(() => _selectedBooking = null),
+                        onPressed: () =>
+                            setState(() => _selectedBooking = null),
                       ),
                     ],
                   ),
@@ -242,15 +312,21 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   _infoRow('Guest', booking.guestName ?? '-'),
                   _infoRow('Room', booking.roomNumber ?? 'To be assigned'),
                   _infoRow('Room Type', booking.roomType ?? '-'),
-                  _infoRow('Check-In', DateFormat('MMM dd, yyyy').format(booking.checkIn)),
-                  _infoRow('Check-Out', DateFormat('MMM dd, yyyy').format(booking.checkOut)),
+                  _infoRow('Check-In',
+                      DateFormat('MMM dd, yyyy').format(booking.checkIn)),
+                  _infoRow('Check-Out',
+                      DateFormat('MMM dd, yyyy').format(booking.checkOut)),
                   _infoRow('Nights', '$nights'),
-                  _infoRow('Guests', '${booking.adults} Adults, ${booking.children} Children'),
-                  if (booking.specialRequests != null && booking.specialRequests!.isNotEmpty) ...[
+                  _infoRow('Guests',
+                      '${booking.adults} Adults, ${booking.children} Children'),
+                  if (booking.specialRequests != null &&
+                      booking.specialRequests!.isNotEmpty) ...[
                     const Divider(),
-                    const Text('Special Requests:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Special Requests:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(booking.specialRequests!, style: const TextStyle(fontStyle: FontStyle.italic)),
+                    Text(booking.specialRequests!,
+                        style: const TextStyle(fontStyle: FontStyle.italic)),
                   ],
                   // Move Room button — only show for checked-in bookings
                   if (booking.status == 'checked_in') ...[
@@ -270,8 +346,10 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                               bookingId: booking.id,
                               currentRoom: booking.roomNumber ?? 'Current Room',
                               guestName: booking.guestName ?? 'Guest',
-                              checkIn: DateFormat('yyyy-MM-dd').format(booking.checkIn),
-                              checkOut: DateFormat('yyyy-MM-dd').format(booking.checkOut),
+                              checkIn: DateFormat('yyyy-MM-dd')
+                                  .format(booking.checkIn),
+                              checkOut: DateFormat('yyyy-MM-dd')
+                                  .format(booking.checkOut),
                             ),
                           ),
                         );
@@ -295,11 +373,47 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Financial Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('Financial Summary',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const Divider(),
-                  _infoRow('Total Amount', 'KES ${(booking.totalAmount ?? 0).toStringAsFixed(2)}'),
-                  _infoRow('Amount Paid', 'KES ${(booking.amountPaid ?? 0).toStringAsFixed(2)}'),
-                  _infoRow('Balance Due', 'KES ${balance.toStringAsFixed(2)}', bold: true),
+                  _infoRow('Total Amount',
+                      'KES ${(booking.totalAmount ?? 0).toStringAsFixed(2)}'),
+                  _infoRow('Amount Paid',
+                      'KES ${(booking.amountPaid ?? 0).toStringAsFixed(2)}'),
+                  _infoRow('Balance Due', 'KES ${balance.toStringAsFixed(2)}',
+                      bold: true),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Additional Charges — Double Occupancy / Breakfast, posted to the
+          // folio on check-in so they show up on the final bill with their
+          // own explicit description.
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Additional Charges',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  OccupancyBreakfastCharges(
+                    adults: booking.adults,
+                    doubleOccCtrl: _doubleOccCtrl,
+                    addBreakfast: _addBreakfast,
+                    onAddBreakfastChanged: (v) =>
+                        setState(() => _addBreakfast = v),
+                    breakfastCtrl: _breakfastCtrl,
+                    breakfastIncluded:
+                        OccupancyBreakfastCharges.breakfastIncludedInMealPlan(
+                            booking.mealPlan),
+                  ),
                 ],
               ),
             ),
@@ -319,17 +433,21 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning_amber, color: Colors.orange.shade700),
+                        Icon(Icons.warning_amber,
+                            color: Colors.orange.shade700),
                         const SizedBox(width: 8),
-                        const Text('Outstanding Balance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text('Outstanding Balance',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Balance: KES ${balance.toStringAsFixed(2)}', 
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Balance: KES ${balance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    const Text('Payment can be collected at check-out', 
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text('Payment can be collected at check-out',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
               ),
@@ -348,7 +466,9 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Guest Documents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text('Guest Documents',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       IconButton(
                         icon: const Icon(Icons.add_circle_outline),
                         onPressed: _pickDocument,
@@ -357,13 +477,15 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   ),
                   const Divider(),
                   if (_uploadedDocuments.isEmpty)
-                    const Text('No documents uploaded', style: TextStyle(color: Colors.grey))
+                    const Text('No documents uploaded',
+                        style: TextStyle(color: Colors.grey))
                   else
                     ..._uploadedDocuments.map((doc) {
                       return ListTile(
                         leading: const Icon(Icons.insert_drive_file),
                         title: Text(doc['name']),
-                        subtitle: Text('${(doc['size'] / 1024).toStringAsFixed(1)} KB'),
+                        subtitle: Text(
+                            '${(doc['size'] / 1024).toStringAsFixed(1)} KB'),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () {
@@ -390,9 +512,11 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
                   )
-                : const Text('Complete Check-In', style: TextStyle(fontSize: 16)),
+                : const Text('Complete Check-In',
+                    style: TextStyle(fontSize: 16)),
           ),
         ],
       ),

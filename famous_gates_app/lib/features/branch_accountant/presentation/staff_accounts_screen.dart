@@ -449,22 +449,22 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
       return trimmed;
     }
 
-    // Owed roll-up is all-time: what each staff member actually owes, independent
-    // of the From/To range (which only scopes the transaction lists). A payment
-    // applied to an out-of-window bill must still reduce the total shown here.
-    for (final m in _credit) {
+    // Owed roll-up is scoped to the From/To range (via _fCredit/_fAdvances/
+    // _fLoans, already staff+date filtered) so it moves with the date chips,
+    // matching the totals panel above and the per-ledger tabs below.
+    for (final m in _fCredit) {
       if (_isOpenCredit(m)) {
         final sid = canonicalStaffId(_t(m, ['staff_id']));
         add(sid, 'credit', _creditBalance(m));
       }
     }
-    for (final m in _advances) {
+    for (final m in _fAdvances) {
       if (_isOpenAdvance(m)) {
         final sid = canonicalStaffId(_t(m, ['staff_id']));
         add(sid, 'adv', _n(m, ['amount']));
       }
     }
-    for (final m in _loans) {
+    for (final m in _fLoans) {
       if (_isActiveLoan(m)) {
         final sid = canonicalStaffId(_t(m, ['staff_id']));
         add(sid, 'loan',
@@ -778,20 +778,19 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
 
   // ── Totals panel (Tax/Total/Paid/Balance style) ────────────────────────────
   Widget _totalsPanel() {
-    // All-time outstanding (not date-scoped): these header totals are the true
-    // amounts owed, so a payment against any bill — including one outside the
-    // From/To window — is reflected immediately.
+    // Scoped to the From/To range (via _fCredit/_fAdvances/_fLoans, which
+    // already apply _inRange + the staff filter) so these cards move when the
+    // date chips change, matching the Credit Bills / Advances / Loans lists
+    // below them. Note this counts a bill/advance/loan only if IT was raised
+    // within the window — widen the range to see debt raised outside it.
     num creditOut = 0, advOut = 0, loanOut = 0;
-    for (final m in _credit) {
-      if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
+    for (final m in _fCredit) {
       if (_isOpenCredit(m)) creditOut += _creditBalance(m);
     }
-    for (final m in _advances) {
-      if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
+    for (final m in _fAdvances) {
       if (_isOpenAdvance(m)) advOut += _n(m, ['amount']);
     }
-    for (final m in _loans) {
-      if (_staff != 'all' && _t(m, ['staff_id']) != _staff) continue;
+    for (final m in _fLoans) {
       if (_isActiveLoan(m))
         loanOut += _n(m, ['remaining_balance', 'total_amount']);
     }
@@ -799,14 +798,31 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _totalBox('Credit Bills', creditOut, _warning, Icons.credit_card),
-          _totalBox('Salary Advances', advOut, const Color(0xFF4F46E5),
-              Icons.payments),
-          _totalBox('Staff Loans', loanOut, _success, Icons.account_balance),
-          _totalBox('Total Outstanding', total, _danger, Icons.summarize,
-              emphasize: true),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              'Bills/advances/loans raised between '
+              '${DateFormat('dd MMM yyyy').format(_from)} and '
+              '${DateFormat('dd MMM yyyy').format(_to)}. Widen the From/To '
+              'range to include debt raised outside this window.',
+              style: const TextStyle(
+                  fontSize: 10.5, color: _muted, fontStyle: FontStyle.italic),
+            ),
+          ),
+          Row(
+            children: [
+              _totalBox('Credit Bills', creditOut, _warning, Icons.credit_card),
+              _totalBox('Salary Advances', advOut, const Color(0xFF4F46E5),
+                  Icons.payments),
+              _totalBox(
+                  'Staff Loans', loanOut, _success, Icons.account_balance),
+              _totalBox('Total Outstanding', total, _danger, Icons.summarize,
+                  emphasize: true),
+            ],
+          ),
         ],
       ),
     );
@@ -1169,14 +1185,17 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
   /// Full record of every recorded paid-bill payment (money already applied to a
   /// staff credit bill). Read-only history — distinct from the "Paid Bills" tab,
   /// which holds cashier-collected money still awaiting the accountant to apply.
-  /// The Paid History entries after the staff + search filters (but NOT the date
-  /// range — this is a complete audit record of every paid bill, independent of
-  /// the From/To chips).
+  /// Unlike the outstanding-balance figures (which must stay all-time so a
+  /// payment against an old bill is never hidden), a payment here is already
+  /// settled — filtering settled, closed-loop entries by date range doesn't
+  /// hide any unresolved money, so this DOES honour the From/To chips (plus
+  /// staff + search), matching every other tab's filter behaviour.
   List<Map<String, dynamic>> get _fPayments {
     String nameOf(Map e) => _t(e, ['staff_name'])
         .ifEmpty(_staffName(_staffIndex[_t(e, ['staff_id'])] ?? const {}));
     return _payments.where((e) {
       if (_staff != 'all' && _t(e, ['staff_id']) != _staff) return false;
+      if (!_inRange(e, const ['created_at'])) return false;
       if (_query.trim().isNotEmpty &&
           !('${nameOf(e)} ${_t(e, ['bill_number', 'description', 'reference'])}')
               .toLowerCase()
@@ -1212,7 +1231,9 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
           child: Text(
-            'Every paid bill recorded against staff credit (all dates) — '
+            'Paid bills recorded against staff credit between '
+            '${DateFormat('dd MMM yyyy').format(_from)} and '
+            '${DateFormat('dd MMM yyyy').format(_to)} — '
             '${entries.length} payment(s) totalling ${_money(total)}. Use '
             '"Record Paid Bill" to add one; it reduces the staff member\'s '
             'oldest credit bill.',
