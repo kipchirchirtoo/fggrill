@@ -57,74 +57,78 @@ export class InventoryBalanceService {
       [input.itemSku],
     );
 
+    let sourceRow: { sku: string; item_name: string };
     if (existing.rows[0]) {
-      try {
-        await client.query(
-          `
-            INSERT INTO inventory_item_catalog (source_table, source_item_key, sku, item_name, default_unit_cost)
-            VALUES ('inventory_items', $1, $1, $2, $3)
-            ON CONFLICT (source_table, source_item_key) DO NOTHING
-          `,
-          [existing.rows[0].sku, existing.rows[0].item_name, input.unitCost ?? 0],
-        );
-      } catch (_) {}
-      return existing.rows[0];
+      sourceRow = existing.rows[0];
+    } else {
+      const catalogLookup = await client.query<{
+        description: string | null;
+        item_name: string | null;
+        unit: string | null;
+      }>(
+        `
+          SELECT
+            COALESCE(item_name, description, $1) AS item_name,
+            description,
+            COALESCE(unit_of_measure, unit, 'units') AS unit
+          FROM simple_items
+          WHERE sku = $1
+          LIMIT 1
+        `,
+        [input.itemSku],
+      ).catch(async () => ({ rows: [] as any[] }));
+
+      const source = (catalogLookup.rows[0] || {}) as {
+        description?: string | null;
+        item_name?: string | null;
+        unit?: string | null;
+      };
+
+      const insert = await client.query<{ id: string; sku: string; item_name: string }>(
+        `
+          INSERT INTO inventory_items (
+            sku,
+            item_name,
+            unit,
+            cost_price
+          )
+          VALUES ($1, $2, COALESCE($3, 'units'), COALESCE($4, 0))
+          RETURNING id, sku, item_name
+        `,
+        [
+          input.itemSku,
+          source.item_name || input.itemName || input.itemSku,
+          source.unit || 'units',
+          input.unitCost ?? 0,
+        ],
+      );
+      sourceRow = insert.rows[0];
     }
 
-    const catalogLookup = await client.query<{
-      description: string | null;
-      item_name: string | null;
-      unit: string | null;
-    }>(
+    // inventory_document_lines.item_id has a foreign key to
+    // inventory_item_catalog(id) -- a SEPARATE table from inventory_items,
+    // with its own independently-generated ids. Both branches above used to
+    // upsert a matching row into inventory_item_catalog but then return the
+    // inventory_items row's id anyway (wrapped in a try/catch that silently
+    // swallowed any error), so the id handed back here never actually
+    // existed in inventory_item_catalog -- every insert into
+    // inventory_document_lines using it violated the FK
+    // (inventory_document_lines_item_id_fkey), and since that failure
+    // rolled back the whole posting transaction, the catalog upsert never
+    // stuck either (inventory_item_catalog stayed permanently empty in
+    // production). Upsert-and-return the REAL catalog row's id instead.
+    const catalogRow = await client.query<{ id: string }>(
       `
-        SELECT
-          COALESCE(item_name, description, $1) AS item_name,
-          description,
-          COALESCE(unit_of_measure, unit, 'units') AS unit
-        FROM simple_items
-        WHERE sku = $1
-        LIMIT 1
+        INSERT INTO inventory_item_catalog (source_table, source_item_key, sku, item_name, default_unit_cost)
+        VALUES ('inventory_items', $1, $1, $2, $3)
+        ON CONFLICT (source_table, source_item_key)
+        DO UPDATE SET item_name = EXCLUDED.item_name, updated_at = NOW()
+        RETURNING id
       `,
-      [input.itemSku],
-    ).catch(async () => ({ rows: [] as any[] }));
-
-    const source = (catalogLookup.rows[0] || {}) as {
-      description?: string | null;
-      item_name?: string | null;
-      unit?: string | null;
-    };
-
-    const insert = await client.query<{ id: string; sku: string; item_name: string }>(
-      `
-        INSERT INTO inventory_items (
-          sku,
-          item_name,
-          unit,
-          cost_price
-        )
-        VALUES ($1, $2, COALESCE($3, 'units'), COALESCE($4, 0))
-        RETURNING id, sku, item_name
-      `,
-      [
-        input.itemSku,
-        source.item_name || input.itemName || input.itemSku,
-        source.unit || 'units',
-        input.unitCost ?? 0,
-      ],
+      [sourceRow.sku, sourceRow.item_name, input.unitCost ?? 0],
     );
 
-    try {
-      await client.query(
-        `
-          INSERT INTO inventory_item_catalog (source_table, source_item_key, sku, item_name, default_unit_cost)
-          VALUES ('inventory_items', $1, $1, $2, $3)
-          ON CONFLICT (source_table, source_item_key) DO NOTHING
-        `,
-        [insert.rows[0].sku, insert.rows[0].item_name, input.unitCost ?? 0],
-      );
-    } catch (_) {}
-
-    return insert.rows[0];
+    return { id: catalogRow.rows[0].id, sku: sourceRow.sku, item_name: sourceRow.item_name };
   }
 
   static async ensureLocation(client: PoolClient, input: InventoryPostingLocationInput) {
