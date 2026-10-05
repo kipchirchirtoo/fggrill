@@ -15,7 +15,7 @@ import '../../auth/domain/role_routes.dart';
 import '../../auth/data/auth_repository.dart';
 
 const _storage = FlutterSecureStorage();
-const _appVersion = 'v3.9.9.75 (Famous Gates)';
+const _appVersion = 'v3.9.9.81 (Famous Gates)';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
