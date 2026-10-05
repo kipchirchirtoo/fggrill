@@ -2285,8 +2285,7 @@ export async function generatePayrollBatchPDF(
   batch: any,
   lines: any[],
   branchName: string,
-  staffRoleMap?: Map<string, string>,
-  staffCreditBills?: any[]
+  staffRoleMap?: Map<string, string>
 ) {
   const MARGIN = 34;
   const doc = new PDFDocument({ margin: MARGIN, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
@@ -2343,6 +2342,7 @@ export async function generatePayrollBatchPDF(
     { label: 'PAYE', width: 62, align: 'right' },
     { label: 'Loans', width: 62, align: 'right' },
     { label: 'Advances', width: 68, align: 'right' },
+    { label: 'Credit Bills', width: 72, align: 'right' },
     { label: 'Absent', width: 62, align: 'right' },
     { label: 'Uniform', width: 68, align: 'right' },
     { label: 'Other Ded.', width: 72, align: 'right' },
@@ -2372,7 +2372,7 @@ export async function generatePayrollBatchPDF(
   y = drawTHeader(doc, y);
 
   let sumBasic = 0, sumGross = 0, sumNssf = 0, sumShif = 0, sumPaye = 0;
-  let sumLoans = 0, sumAdvances = 0, sumAbsent = 0, sumUniform = 0, sumOther = 0, sumTotalDed = 0, sumNet = 0;
+  let sumLoans = 0, sumAdvances = 0, sumCredit = 0, sumAbsent = 0, sumUniform = 0, sumOther = 0, sumTotalDed = 0, sumNet = 0;
 
   const sorted = [...lines].sort((a, b) => String(a.staff_name || '').localeCompare(String(b.staff_name || '')));
 
@@ -2388,12 +2388,14 @@ export async function generatePayrollBatchPDF(
     doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica');
 
     const basic = Number(r.basic_salary || 0);
-    const gross = Number(r.gross_pay || 0);
+    // The batch line stores gross as `gross_salary` (this used to read `gross_pay`, so Gross printed 0).
+    const gross = Number(r.gross_salary ?? r.gross_pay ?? 0);
     const nssf = Number(r.nssf || 0);
     const shif = Number(r.sha || 0);
     const paye = Number(r.paye || 0);
     const loans = Number(r.loan_deduction || 0);
     const advances = Number(r.advance_deduction || 0);
+    const creditBills = Number(r.credit_bill_deduction || 0);
     const absent = Number(r.absent_deduction || 0);
     const uniform = Number(r.uniform_deduction || 0);
     const other = Number(r.other_deductions || 0);
@@ -2401,27 +2403,30 @@ export async function generatePayrollBatchPDF(
     const netPay = Number(r.net_pay || 0);
 
     sumBasic += basic; sumGross += gross; sumNssf += nssf; sumShif += shif; sumPaye += paye;
-    sumLoans += loans; sumAdvances += advances; sumAbsent += absent; sumUniform += uniform;
+    sumLoans += loans; sumAdvances += advances; sumCredit += creditBills; sumAbsent += absent; sumUniform += uniform;
     sumOther += other; sumTotalDed += totalDed; sumNet += netPay;
 
-    const values = [
-      { v: String(i + 1), x: C[0].x, w: C[0].width },
-      { v: oneLine(r.staff_number), x: C[1].x, w: C[1].width },
-      { v: oneLine(r.staff_name), x: C[2].x, w: C[2].width },
-      { v: oneLine(staffRoleMap?.get(String(r.staff_id)) || r.designation || r.department, 'Staff'), x: C[3].x, w: C[3].width },
-      { v: money(basic), x: C[4].x, w: C[4].width, a: 'right' },
-      { v: money(gross), x: C[5].x, w: C[5].width, a: 'right' },
-      { v: moneyOrDash(nssf), x: C[6].x, w: C[6].width, a: 'right' },
-      { v: moneyOrDash(shif), x: C[7].x, w: C[7].width, a: 'right' },
-      { v: moneyOrDash(paye), x: C[8].x, w: C[8].width, a: 'right' },
-      { v: moneyOrDash(loans), x: C[9].x, w: C[9].width, a: 'right' },
-      { v: moneyOrDash(advances), x: C[10].x, w: C[10].width, a: 'right' },
-      { v: moneyOrDash(absent), x: C[11].x, w: C[11].width, a: 'right' },
-      { v: moneyOrDash(uniform), x: C[12].x, w: C[12].width, a: 'right' },
-      { v: moneyOrDash(other), x: C[13].x, w: C[13].width, a: 'right' },
-      { v: money(totalDed), x: C[14].x, w: C[14].width, a: 'right' },
-      { v: money(netPay), x: C[15].x, w: C[15].width, a: 'right' },
+    // Cells in column order — positions come from C[] so adding a column can't misalign the rest.
+    const cells: Array<{ v: string; right?: boolean }> = [
+      { v: String(i + 1) },
+      { v: oneLine(r.staff_number) },
+      { v: oneLine(r.staff_name) },
+      { v: oneLine(staffRoleMap?.get(String(r.staff_id)) || r.designation || r.department, 'Staff') },
+      { v: money(basic), right: true },
+      { v: money(gross), right: true },
+      { v: moneyOrDash(nssf), right: true },
+      { v: moneyOrDash(shif), right: true },
+      { v: moneyOrDash(paye), right: true },
+      { v: moneyOrDash(loans), right: true },
+      { v: moneyOrDash(advances), right: true },
+      { v: moneyOrDash(creditBills), right: true },
+      { v: moneyOrDash(absent), right: true },
+      { v: moneyOrDash(uniform), right: true },
+      { v: moneyOrDash(other), right: true },
+      { v: money(totalDed), right: true },
+      { v: money(netPay), right: true },
     ];
+    const values = cells.map((cell, idx) => ({ v: cell.v, x: C[idx].x, w: C[idx].width, a: cell.right ? 'right' : undefined }));
 
     values.forEach(val => {
       doc.text(val.v, val.x + PADDING_X, y + 5, { width: val.w - (PADDING_X * 2), align: (val.a as any) || 'left', lineBreak: false, ellipsis: true });
@@ -2441,20 +2446,12 @@ export async function generatePayrollBatchPDF(
   doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica-Bold');
   doc.text('TOTALS', C[0].x + PADDING_X, y + 7, { width: (C[0].width + C[1].width + C[2].width + C[3].width) - (PADDING_X * 2), lineBreak: false });
 
-  const sumCols = [
-    { v: money(sumBasic), x: C[4].x, w: C[4].width },
-    { v: money(sumGross), x: C[5].x, w: C[5].width },
-    { v: money(sumNssf), x: C[6].x, w: C[6].width },
-    { v: money(sumShif), x: C[7].x, w: C[7].width },
-    { v: money(sumPaye), x: C[8].x, w: C[8].width },
-    { v: money(sumLoans), x: C[9].x, w: C[9].width },
-    { v: money(sumAdvances), x: C[10].x, w: C[10].width },
-    { v: money(sumAbsent), x: C[11].x, w: C[11].width },
-    { v: money(sumUniform), x: C[12].x, w: C[12].width },
-    { v: money(sumOther), x: C[13].x, w: C[13].width },
-    { v: money(sumTotalDed), x: C[14].x, w: C[14].width },
-    { v: money(sumNet), x: C[15].x, w: C[15].width },
+  const sumValues = [
+    sumBasic, sumGross, sumNssf, sumShif, sumPaye, sumLoans, sumAdvances, sumCredit,
+    sumAbsent, sumUniform, sumOther, sumTotalDed, sumNet,
   ];
+  // Money columns start at index 4 (after #, Emp ID, Staff Name, Role).
+  const sumCols = sumValues.map((value, idx) => ({ v: money(value), x: C[idx + 4].x, w: C[idx + 4].width }));
 
   sumCols.forEach(sc => {
     doc.text(sc.v, sc.x + PADDING_X, y + 7, { width: sc.w - (PADDING_X * 2), align: 'right', lineBreak: false, ellipsis: true });
@@ -2469,171 +2466,12 @@ export async function generatePayrollBatchPDF(
   drawSummaryBox(doc, y, [
     { label: 'Gross Salary Total', value: money(sumGross) },
     { label: 'Total Deductions', value: money(sumTotalDed) },
+    { label: 'Credit Bills Deducted', value: money(sumCredit) },
     { label: 'Net Pay Total', value: money(sumNet) },
   ]);
 
-  // ===== CREDIT BILLS SECTION =====
-  y += 110;
-  if (staffCreditBills && staffCreditBills.length > 0) {
-    if (y + 80 > FOOTER_TOP) {
-      doc.addPage();
-      y = drawHeader(doc, title + ' (credit bills)', subtitle);
-    }
-
-    // Group credit bills by staff
-    const creditBillsByStaff = new Map<string, any[]>();
-    staffCreditBills.forEach(bill => {
-      const staffId = String(bill.staff_id || '');
-      if (!creditBillsByStaff.has(staffId)) {
-        creditBillsByStaff.set(staffId, []);
-      }
-      creditBillsByStaff.get(staffId)!.push(bill);
-    });
-
-    // Draw section header
-    doc.fillColor(PRIMARY).fontSize(12).font('Helvetica-Bold');
-    doc.text('STAFF CREDIT BILLS', MARGIN, y);
-    y += 24;
-
-    // Credit bills table columns
-    const cbCols = [
-      { label: 'Staff Name', width: 160 },
-      { label: 'Bill Date', width: 90 },
-      { label: 'Bill Number', width: 100 },
-      { label: 'Description', width: 180 },
-      { label: 'Amount', width: 90, align: 'right' },
-      { label: 'Paid', width: 90, align: 'right' },
-      { label: 'Balance', width: 90, align: 'right' },
-      { label: 'Status', width: 80 },
-    ];
-
-    const cbSpecWidth = cbCols.reduce((sum, col) => sum + col.width, 0);
-    const cbScale = TABLE_W / cbSpecWidth;
-    let cbCursorX = MARGIN;
-    const CB = cbCols.map(col => {
-      const width = col.width * cbScale;
-      const next = { ...col, x: cbCursorX, width };
-      cbCursorX += width;
-      return next;
-    });
-
-    // Draw credit bills table header
-    doc.rect(MARGIN, y, TABLE_W, HEADER_H).fill(HEADER_BG);
-    doc.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
-    CB.forEach(col => {
-      doc.text(col.label, col.x + PADDING_X, y + 7, {
-        width: col.width - (PADDING_X * 2),
-        align: (col.align as any) || 'left',
-        lineBreak: false,
-        ellipsis: true
-      });
-    });
-    y += HEADER_H;
-
-    // Build staff name map from lines
-    const staffNameMap = new Map<string, string>();
-    sorted.forEach(line => {
-      staffNameMap.set(String(line.staff_id), String(line.staff_name || ''));
-    });
-
-    let creditBillIndex = 0;
-    let totalCreditAmount = 0;
-    let totalCreditPaid = 0;
-    let totalCreditBalance = 0;
-
-    // Draw each staff's credit bills
-    creditBillsByStaff.forEach((bills, staffId) => {
-      bills.forEach(bill => {
-        if (y + ROW_H > FOOTER_TOP - 4) {
-          doc.addPage();
-          y = drawHeader(doc, title + ' (credit bills cont.)', subtitle);
-          // Redraw header
-          doc.rect(MARGIN, y, TABLE_W, HEADER_H).fill(HEADER_BG);
-          doc.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
-          CB.forEach(col => {
-            doc.text(col.label, col.x + PADDING_X, y + 7, {
-              width: col.width - (PADDING_X * 2),
-              align: (col.align as any) || 'left',
-              lineBreak: false,
-              ellipsis: true
-            });
-          });
-          y += HEADER_H;
-        }
-
-        const shade = creditBillIndex % 2 === 0;
-        if (shade) doc.rect(MARGIN, y, TABLE_W, ROW_H).fill(ROW_BG);
-        doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica');
-
-        const staffName = staffNameMap.get(staffId) || 'Unknown';
-        const billDate = bill.bill_date ? new Date(bill.bill_date).toLocaleDateString('en-KE') : '—';
-        const billNumber = oneLine(bill.bill_number || bill.id);
-        const description = oneLine(bill.description || bill.notes || 'Credit Bill');
-        const amount = Number(bill.amount || 0);
-        const paid = Number(bill.paid_amount || 0);
-        const balance = Number(bill.balance || (amount - paid));
-        const status = String(bill.status || 'open').toUpperCase();
-
-        totalCreditAmount += amount;
-        totalCreditPaid += paid;
-        totalCreditBalance += balance;
-
-        const cbValues = [
-          { v: staffName, x: CB[0].x, w: CB[0].width },
-          { v: billDate, x: CB[1].x, w: CB[1].width },
-          { v: billNumber, x: CB[2].x, w: CB[2].width },
-          { v: description, x: CB[3].x, w: CB[3].width },
-          { v: money(amount), x: CB[4].x, w: CB[4].width, a: 'right' },
-          { v: money(paid), x: CB[5].x, w: CB[5].width, a: 'right' },
-          { v: money(balance), x: CB[6].x, w: CB[6].width, a: 'right' },
-          { v: status, x: CB[7].x, w: CB[7].width },
-        ];
-
-        cbValues.forEach(val => {
-          doc.text(val.v, val.x + PADDING_X, y + 5, {
-            width: val.w - (PADDING_X * 2),
-            align: (val.a as any) || 'left',
-            lineBreak: false,
-            ellipsis: true
-          });
-        });
-
-        doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + ROW_H).lineTo(PAGE_W - MARGIN, y + ROW_H).stroke();
-        y += ROW_H;
-        creditBillIndex++;
-      });
-    });
-
-    // Draw totals row for credit bills
-    if (y + 22 > FOOTER_TOP) {
-      doc.addPage();
-      y = drawHeader(doc, title + ' (credit bills totals)', subtitle);
-    }
-
-    doc.rect(MARGIN, y, TABLE_W, 22).fill('#eef2f7');
-    doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica-Bold');
-    doc.text('TOTALS', CB[0].x + PADDING_X, y + 7, {
-      width: (CB[0].width + CB[1].width + CB[2].width + CB[3].width) - (PADDING_X * 2),
-      lineBreak: false
-    });
-
-    const cbSumCols = [
-      { v: money(totalCreditAmount), x: CB[4].x, w: CB[4].width },
-      { v: money(totalCreditPaid), x: CB[5].x, w: CB[5].width },
-      { v: money(totalCreditBalance), x: CB[6].x, w: CB[6].width },
-    ];
-
-    cbSumCols.forEach(sc => {
-      doc.text(sc.v, sc.x + PADDING_X, y + 7, {
-        width: sc.w - (PADDING_X * 2),
-        align: 'right',
-        lineBreak: false,
-        ellipsis: true
-      });
-    });
-
-    y += 34;
-  }
+  // Credit bills are a column in the main table above (credit_bill_deduction per staff);
+  // they are intentionally NOT repeated as separate pages.
 
   const totalPages = doc.bufferedPageRange().count;
   for (let p = 0; p < totalPages; p++) {

@@ -25,8 +25,27 @@ export interface LedgerTotals {
     gross_collections: number;
     transaction_count: number;
 
+    // Gross collections PLUS credit-bill sales. `gross_collections` (stored as
+    // cashier_shift_logs.total_sales at close) is physical money only — credit
+    // is excluded on purpose — so this is the figure that is comparable with
+    // the Sold Items report, which counts credit-bill orders as sales.
+    total_incl_credit: number;
+
+    // Split of gross collections by origin: POS outlet payments vs. money the
+    // cashier cleared outside POS (reception room/conference payments).
+    pos_collections: number;
+    non_pos_collections: number;
+    non_pos_by_type: Record<string, { count: number; amount: number }>;
+
     unmapped_transactions: any[];
 }
+
+// POS outlet type -> revenue stream. A POS sale must be classed by the outlet
+// it was actually rung on; guessing from the cashier's name/role mislabelled
+// every sale of a "reception" cashier running restaurant POS as Rooms revenue.
+const BAR_OUTLET_TYPES = ['MAIN_BAR', 'EXECUTIVE_BAR', 'SPORTS_BAR', 'BAR', 'BAR_STORE', 'SPIRITS', 'EXEC_BAR', 'POOL_BAR'];
+const RESTAURANT_OUTLET_TYPES = ['RESTAURANT', 'CHOMA_ZONE', 'DINING', 'KITCHEN', 'ROOM_SERVICE'];
+const OTHER_OUTLET_TYPES = ['NON_CONSUMABLES', 'SPA', 'OTHER', 'CASHIER'];
 
 const normalizeKey = (value?: string | null) =>
     String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -59,7 +78,8 @@ export const calculateCashierShiftLedgerTotals = async (
         SELECT 
             id, amount, amount_tendered, change_given, 
             payment_method, revenue_type, transaction_type, status,
-            source_module, source_document_type
+            source_module, source_document_type,
+            NULL::text AS outlet_type
         FROM cashier_transactions
         WHERE cashier_shift_log_id = $1
           AND branch_id = $2
@@ -67,12 +87,26 @@ export const calculateCashierShiftLedgerTotals = async (
         UNION ALL
 
         SELECT 
-            id, amount, amount as amount_tendered, 0 as change_given,
-            payment_method, 'POS_SALE' as revenue_type, 'PAYMENT' as transaction_type,
-            CASE WHEN is_voided = true THEN 'voided' ELSE 'completed' END as status,
-            'POS' as source_module, 'POS_ORDER' as source_document_type
-        FROM cashier_shift_transactions
-        WHERE shift_id = $1
+            cst.id, cst.amount, cst.amount as amount_tendered, 0 as change_given,
+            cst.payment_method, 'POS_SALE' as revenue_type, 'PAYMENT' as transaction_type,
+            CASE WHEN cst.is_voided = true THEN 'voided' ELSE 'completed' END as status,
+            'POS' as source_module, 'POS_ORDER' as source_document_type,
+            po.outlet_type::text AS outlet_type
+        FROM cashier_shift_transactions cst
+        LEFT JOIN pos_shift_payments psp ON psp.id = cst.transaction_id
+        LEFT JOIN pos_outlets po ON po.id = psp.outlet_id
+        WHERE cst.shift_id = $1
+          -- Reception payments are written twice: once to cashier_transactions
+          -- (leg above, linked by cashier_shift_log_id) and once as a mirror row
+          -- here (source_table = 'cashier_transactions'). Counting both inflated
+          -- total_sales and the cash/M-Pesa/card buckets, so skip the mirror
+          -- whenever its original is already in the first leg.
+          AND NOT EXISTS (
+              SELECT 1 FROM cashier_transactions ct
+              WHERE ct.cashier_shift_log_id = $1
+                AND ct.branch_id = $2
+                AND (ct.id = cst.transaction_id OR ct.id = cst.source_id)
+          )
     `;
     const { rows } = await client.query(query, [cashierShiftLogId, branchId]);
 
@@ -96,6 +130,11 @@ export const calculateCashierShiftLedgerTotals = async (
         payouts: 0,
         gross_collections: 0,
         transaction_count: 0,
+
+        total_incl_credit: 0,
+        pos_collections: 0,
+        non_pos_collections: 0,
+        non_pos_by_type: {},
 
         unmapped_transactions: []
     };
@@ -156,9 +195,14 @@ export const calculateCashierShiftLedgerTotals = async (
 
         // Rule 5: Determine actual revenue type even if it's a room charge or generic POS sale
         let activeRevenueType = rType;
+        let explicitOther = false;
         if (activeRevenueType === 'CHARGE_TO_ROOM' || activeRevenueType === 'POS_SALE' || activeRevenueType === 'POS') {
             const src = normalizeKey(tx.source_module);
-            if (['RESTAURANT', 'POS_RESTAURANT'].includes(src)) activeRevenueType = 'RESTAURANT';
+            const outletType = normalizeKey(tx.outlet_type);
+            if (BAR_OUTLET_TYPES.includes(outletType)) activeRevenueType = 'BAR';
+            else if (RESTAURANT_OUTLET_TYPES.includes(outletType)) activeRevenueType = 'RESTAURANT';
+            else if (OTHER_OUTLET_TYPES.includes(outletType)) { activeRevenueType = 'OTHER'; explicitOther = true; }
+            else if (['RESTAURANT', 'POS_RESTAURANT'].includes(src)) activeRevenueType = 'RESTAURANT';
             else if (['BAR', 'POS_BAR'].includes(src)) activeRevenueType = 'BAR';
             else if (isDefaultBarShift) activeRevenueType = 'BAR';
             else if (isDefaultRestaurantShift) activeRevenueType = 'RESTAURANT';
@@ -179,12 +223,30 @@ export const calculateCashierShiftLedgerTotals = async (
             totals.pool_revenue += signedAmount;
         } else if (['PAYOUT', 'EXPENSE'].includes(activeRevenueType) || ['PAYOUT', 'EXPENSE'].includes(tType)) {
             totals.payouts += effectiveAmount;
+        } else if (explicitOther) {
+            totals.other_revenue += signedAmount;
         } else {
             // Unmapped revenue types go into other_revenue
             totals.other_revenue += signedAmount;
             totals.unmapped_transactions.push({ id: tx.id, field: 'revenue_type', value: activeRevenueType, amount: signedAmount });
         }
+
+        // Origin split + credit-inclusive total (see LedgerTotals).
+        const isCreditMethod = ['CREDIT', 'CREDIT_BILL', 'CORPORATE_CREDIT', 'STAFF_CREDIT'].includes(pMethod);
+        if (!isChargeToRoom && !['PAYOUT', 'EXPENSE'].includes(tType)) {
+            const isPos = normalizeKey(tx.source_module) === 'POS';
+            if (isPos) {
+                if (!isCreditMethod) totals.pos_collections += signedAmount;
+            } else {
+                if (!isCreditMethod) totals.non_pos_collections += signedAmount;
+                const bucket = totals.non_pos_by_type[rType || 'OTHER'] ||= { count: 0, amount: 0 };
+                bucket.count += 1;
+                bucket.amount += signedAmount;
+            }
+        }
     }
+
+    totals.total_incl_credit = totals.gross_collections + totals.total_credit_bill;
 
     return totals;
 };

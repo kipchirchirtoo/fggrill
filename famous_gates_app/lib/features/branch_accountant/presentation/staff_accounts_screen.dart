@@ -2223,13 +2223,16 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         _staffField(staffId, (v) => setD(() => staffId = v)),
         _numField(total, 'Total amount (KES) *'),
         _numField(monthly, 'Monthly installment (KES) *'),
-        _dateField('Start date', start, (d) => setD(() => start = d)),
-        _textField(reason, 'Reason'),
+        _dateField('First deduction date', start, (d) => setD(() => start = d)),
+        _textField(reason, 'Reason *'),
       ],
       onValidate: () =>
           staffId.isNotEmpty &&
           (num.tryParse(total.text.trim()) ?? 0) > 0 &&
-          (num.tryParse(monthly.text.trim()) ?? 0) > 0,
+          (num.tryParse(monthly.text.trim()) ?? 0) > 0 &&
+          (num.tryParse(monthly.text.trim()) ?? 0) <=
+              (num.tryParse(total.text.trim()) ?? 0) &&
+          reason.text.trim().isNotEmpty,
     );
     total.dispose();
     monthly.dispose();
@@ -2239,9 +2242,13 @@ class _StaffAccountsScreenState extends ConsumerState<StaffAccountsScreen> {
         () => _repo.createPayrollLoan({
               'staff_id': staffId,
               'total_amount': num.tryParse(total.text.trim()) ?? 0,
-              'monthly_installment': num.tryParse(monthly.text.trim()) ?? 0,
-              'start_date': DateFormat('yyyy-MM-dd').format(start),
+              // Field names the API requires (it used to be sent as
+              // monthly_installment / start_date, which the API rejected).
+              'installment_amount': num.tryParse(monthly.text.trim()) ?? 0,
               'reason': reason.text.trim(),
+              'loan_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+              'start_deduction_month': start.month,
+              'start_deduction_year': start.year,
             }),
         ok: 'Loan created');
   }

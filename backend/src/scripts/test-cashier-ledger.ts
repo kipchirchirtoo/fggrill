@@ -126,6 +126,38 @@ export async function runCashierLedgerTests() {
         assertEqual('Case 7: Unmapped array populated', res.unmapped_transactions.length, 1);
     }
 
+    // Test Case 8: POS sales are classed by the outlet they were rung on, not the cashier's role
+    {
+        const client = createMockClient([
+            { id: 'p-1', amount: 1000, payment_method: 'mpesa', revenue_type: 'POS_SALE', source_module: 'POS', transaction_type: 'PAYMENT', status: 'completed', outlet_type: 'restaurant' },
+            { id: 'p-2', amount: 500, payment_method: 'cash', revenue_type: 'POS_SALE', source_module: 'POS', transaction_type: 'PAYMENT', status: 'completed', outlet_type: 'main_bar' },
+            { id: 'p-3', amount: 200, payment_method: 'cash', revenue_type: 'POS_SALE', source_module: 'POS', transaction_type: 'PAYMENT', status: 'completed', outlet_type: 'non_consumables' },
+        ]);
+        const res = await calculateCashierShiftLedgerTotals('shift-8', 1, client);
+        assertEqual('Case 8: POS sales follow outlet type', {
+            restaurant: res.restaurant_revenue, bar: res.bar_revenue, rooms: res.rooms_revenue, other: res.other_revenue, unmapped: res.unmapped_transactions.length
+        }, { restaurant: 1000, bar: 500, rooms: 0, other: 200, unmapped: 0 });
+        assertEqual('Case 8: all POS money is pos_collections', { pos: res.pos_collections, nonPos: res.non_pos_collections }, { pos: 1700, nonPos: 0 });
+    }
+
+    // Test Case 9: credit stays out of collections but is in total_incl_credit; non-POS money is itemised
+    {
+        const client = createMockClient([
+            { id: 'c-1', amount: 1000, payment_method: 'cash', revenue_type: 'POS_SALE', source_module: 'POS', transaction_type: 'PAYMENT', status: 'completed', outlet_type: 'main_bar' },
+            { id: 'c-2', amount: 300, payment_method: 'credit_bill', revenue_type: 'POS_SALE', source_module: 'POS', transaction_type: 'PAYMENT', status: 'completed', outlet_type: 'main_bar' },
+            { id: 'c-3', amount: 4000, payment_method: 'mpesa', revenue_type: 'ROOM_BOOKING', source_module: 'RECEPTION', transaction_type: 'PAYMENT', status: 'completed' },
+            { id: 'c-4', amount: 700, payment_method: 'card', revenue_type: 'CONFERENCE', source_module: 'RECEPTION', transaction_type: 'PAYMENT', status: 'completed' },
+        ]);
+        const res = await calculateCashierShiftLedgerTotals('shift-9', 1, client);
+        assertEqual('Case 9: collections exclude credit, incl-credit total includes it', {
+            gross: res.gross_collections, credit: res.total_credit_bill, incl: res.total_incl_credit
+        }, { gross: 5700, credit: 300, incl: 6000 });
+        assertEqual('Case 9: POS vs non-POS split', { pos: res.pos_collections, nonPos: res.non_pos_collections }, { pos: 1000, nonPos: 4700 });
+        assertEqual('Case 9: non-POS itemised by revenue type', res.non_pos_by_type, {
+            ROOM_BOOKING: { count: 1, amount: 4000 }, CONFERENCE: { count: 1, amount: 700 }
+        });
+    }
+
     console.log(`\n====================================================`);
     console.log(`  RESULTS: ${passed} PASSED, ${failed} FAILED`);
     console.log(`====================================================\n`);

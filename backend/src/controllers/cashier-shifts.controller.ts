@@ -6,7 +6,8 @@ import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
-import { calculateCashierShiftLedgerTotals } from '../services/cashier-ledger.service';
+import { calculateCashierShiftLedgerTotals, type LedgerTotals } from '../services/cashier-ledger.service';
+import { buildShiftReconciliationExtras } from '../services/shift-reconciliation.service';
 import { autoCloseOpenKitchenShiftsForBranch } from '../services/kitchen-shift-auto-close.service';
 import { allocateStaffCreditPayment } from './credit-bills.controller';
 import {
@@ -1208,6 +1209,18 @@ export const getShiftLog = async (
                 shiftEnd
             });
 
+            // Authoritative, de-duplicated totals computed the same way as at shift
+            // close. `total_sales` stored on the shift is physical collections only
+            // while the live counters/RPC include credit, so the headline changes
+            // meaning between open and closed. Return both explicitly so the UI
+            // can show a figure comparable with Sold Items (which includes credit).
+            let liveLedger: LedgerTotals | null = null;
+            try {
+                liveLedger = await calculateCashierShiftLedgerTotals(shift.id, Number(branchId), db as any);
+            } catch (ledgerErr) {
+                logger.warn(`Live ledger recompute failed for shift ${shift.id}:`, ledgerErr);
+            }
+
             // --- resolve which POS outlet type(s) belong to THIS shift ---
             // Only show orders from the outlet(s) this cashier actually ran
             // during this specific shift. Without this, a restaurant-only cashier
@@ -1288,7 +1301,15 @@ export const getShiftLog = async (
                 { method: 'mpesa', amount: totalMpesa, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'mpesa').length },
                 { method: 'card', amount: totalCard, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'card').length },
                 { method: 'credit_bill', amount: totalCreditBill, count: toNumber(enrichedShift.credit_bills_count) },
-                { method: 'other', amount: Math.max(0, totalSales - totalCash - totalMpesa - totalCard - totalCreditBill), count: 0 },
+                // `other` must come from the ledger: total_sales excludes credit once a
+                // shift is closed, so subtracting credit from it always hid this row.
+                {
+                    method: 'other',
+                    amount: liveLedger
+                        ? Math.max(0, liveLedger.total_other + liveLedger.total_bank_transfer)
+                        : Math.max(0, totalSales - totalCash - totalMpesa - totalCard),
+                    count: 0
+                },
             ].filter((row) => row.amount > 0 || ['cash', 'mpesa', 'card', 'credit_bill'].includes(row.method));
 
             // --- revenue breakdown (from shift revenue fields) ---
@@ -1424,8 +1445,18 @@ export const getShiftLog = async (
                 net_sales: netSales
             };
 
+            const extras = await buildShiftReconciliationExtras(shift, liveLedger, {
+                collected: totalSales,
+                credit: totalCreditBill
+            });
+            const collectedNow = extras.total_collected;
+            const creditNow = extras.staff_credit_total;
+            const corporatePosCredit = extras.corporate_pos_credit_total;
+            const corporateCredit = extras.corporate_credit;
+
             enrichedShift = {
                 ...enrichedShift,
+                ...extras,
                 cash_reconciliation: {
                     opening_float: openingFloat,
                     cash_sales: totalCash,
@@ -1450,7 +1481,11 @@ export const getShiftLog = async (
                 void_summary: voidAudit.summary,
                 void_lines: voidAudit.lines,
                 summary: {
-                    total_sales: netSales,
+                    // Physical collections (credit excluded) for open AND closed shifts.
+                    total_sales: collectedNow,
+                    total_collected: collectedNow,
+                    total_sales_incl_credit: collectedNow + creditNow + corporatePosCredit,
+                    corporate_credit_total: corporateCredit.total,
                     net_sales: netSales,
                     gross_sales: grossSales,
                     total_void_amount: toNumber(voidAudit.summary.total_void_amount),

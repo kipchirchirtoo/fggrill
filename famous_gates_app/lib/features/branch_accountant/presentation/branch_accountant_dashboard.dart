@@ -3428,6 +3428,21 @@ class _SoldItemsSectionState extends ConsumerState<SoldItemsSection> {
                     '${filteredSummary['fast_moving_count'] ?? 0} / ${filteredSummary['slow_moving_count'] ?? 0}',
                     Icons.speed,
                     Colors.purple),
+                _MetricCard(
+                    'Credit Sales Unpaid',
+                    _money(_num(summary['credit_outstanding'])),
+                    Icons.credit_score,
+                    Colors.red),
+                _MetricCard(
+                    'Collected Revenue',
+                    _money(_num(summary['collected_revenue'])),
+                    Icons.price_check,
+                    Colors.green),
+                _MetricCard(
+                    'Corporate Account Sales (Credit)',
+                    _money(_num(_map(summary['corporate_credit'])['total'])),
+                    Icons.business_center,
+                    Colors.deepPurple),
               ]),
               _SectionCard(
                 title: 'Outlet Revenue Breakdown',
@@ -3483,6 +3498,14 @@ class _SoldItemsSectionState extends ConsumerState<SoldItemsSection> {
               _SectionCard(
                 title: 'KDS Order Intelligence',
                 child: _kdsTable(_kdsFromItems(items, kds)),
+              ),
+              _SectionCard(
+                title: 'Corporate Account Credit Bills',
+                child: _corporateCreditTable(_map(summary['corporate_credit'])),
+              ),
+              _SectionCard(
+                title: 'Sold Items vs Cashier Logbooks (by POS shift)',
+                child: _shiftLogbookTable(shiftRevenue),
               ),
               _SectionCard(
                 title: 'Cashier Payment Clearance',
@@ -3894,6 +3917,113 @@ class _SoldItemsSectionState extends ConsumerState<SoldItemsSection> {
           if (includeRecommendation) _slowRecommendation(item),
         ];
       }).toList(),
+    );
+  }
+
+  String _corporateCell(Map<String, dynamic> corporate) {
+    final accounts = _list(corporate['by_account']);
+    if (accounts.isEmpty) return '-';
+    final names = accounts
+        .take(4)
+        .map((a) => '${_text(a, ['name'])} ${_money(_num(a['amount']))}')
+        .join('; ');
+    final more = accounts.length > 4 ? ' +${accounts.length - 4} more' : '';
+    return '${_money(_num(corporate['total']))} — $names$more';
+  }
+
+  Widget _corporateCreditTable(Map<String, dynamic> corporate) {
+    final accounts = _list(corporate['by_account']);
+    if (accounts.isEmpty) {
+      return const Text('No corporate account credit charged in this period.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Sales charged to corporate accounts (POS, room folio and conference). They count as sales, like credit '
+          'bills: the account pays later, so no cashier collected the money. Per shift detail is in the table '
+          'below and in each cashier logbook.',
+          style: TextStyle(color: AppColors.kTextSecondary),
+        ),
+        const SizedBox(height: 12),
+        _SimpleTable(
+          columns: const [
+            'Corporate Account',
+            'Bills',
+            'POS',
+            'Room Folio',
+            'Conference',
+            'Total',
+            'Not Yet Invoiced',
+          ],
+          rows: accounts
+              .map((a) => <Object>[
+                    _text(a, ['name']),
+                    '${_num(a['count']).toInt()}',
+                    _money(_num(a['pos_amount'])),
+                    _money(_num(a['room_folio_amount'])),
+                    _money(_num(a['conference_amount'])),
+                    _money(_num(a['amount'])),
+                    _money(_num(a['uninvoiced_amount'])),
+                  ])
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _shiftLogbookTable(List<Map<String, dynamic>> rows) {
+    final data =
+        rows.where((row) => _text(row, ['shift_id']) != 'no_shift').toList();
+    if (data.isEmpty) {
+      return const Text('No POS shifts found in this period.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Sold Items counts credit-bill orders at full value, but a cashier logbook only holds what was '
+          'actually collected. Money is booked to the logbook of whoever cleared the payment, so one POS '
+          'shift can be split across several logbooks (marked Split).',
+          style: TextStyle(color: AppColors.kTextSecondary),
+        ),
+        const SizedBox(height: 12),
+        _SimpleTable(
+          columns: const [
+            'POS Shift',
+            'Sold Items',
+            'Credit Unpaid',
+            'Corporate Credit',
+            'Collected',
+            'In Logbooks',
+            'Difference',
+            'Logbooks Holding The Money',
+          ],
+          rows: data.map((row) {
+            final collected = _num(row['collected_revenue']);
+            final inLogbooks = _num(row['logbook_total']);
+            final split = _list(row['logbook_split']);
+            final holders = split
+                .map((part) =>
+                    '${_text(part, ['logbook_cashier_name'])} ${_text(part, ['logbook_shift_number'])}: ${_money(_num(part['amount']))}')
+                .join('  |  ');
+            return <Object>[
+              _text(row, ['label']).isEmpty
+                  ? _text(row, ['shift_id'])
+                  : _text(row, ['label']),
+              _money(_num(row['revenue'])),
+              _money(_num(row['credit_outstanding'])),
+              _corporateCell(_map(row['corporate_credit'])),
+              _money(collected),
+              _money(inLogbooks),
+              _money(collected - inLogbooks),
+              row['split_across_logbooks'] == true
+                  ? 'Split — $holders'
+                  : (holders.isEmpty ? 'No logbook payments' : holders),
+            ];
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -5754,10 +5884,18 @@ class _ShiftReconciliationPanel extends StatelessWidget {
           _ResponsiveGrid(
             children: [
               _MetricCard(
-                'Total Sales',
+                'Collected (excl. credit)',
                 _money(totalSales),
                 Icons.point_of_sale,
                 Colors.green,
+              ),
+              _MetricCard(
+                'Total incl. Credit',
+                _money(_firstNumFrom(shift!, ['total_sales_incl_credit']) != 0
+                    ? _firstNumFrom(shift!, ['total_sales_incl_credit'])
+                    : totalSales + creditBillsTotal),
+                Icons.summarize,
+                Colors.teal,
               ),
               _MetricCard(
                 'Orders / POS Bills',
@@ -5777,6 +5915,13 @@ class _ShiftReconciliationPanel extends StatelessWidget {
                 Icons.badge_outlined,
                 Colors.red,
               ),
+              if (_num(_map(shift!['corporate_credit'])['total']) > 0)
+                _MetricCard(
+                  'Corporate Account Sales (Credit)',
+                  _money(_num(_map(shift!['corporate_credit'])['total'])),
+                  Icons.business_center,
+                  Colors.deepPurple,
+                ),
               _MetricCard(
                 'Paid Credit Bills',
                 _money(paidBillsTotal),
@@ -5794,6 +5939,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          _ShiftReconciliationNotes(shift: shift!),
           _ShiftReportSection(
             number: '1.',
             title: 'Cash Drawer & Change Trace',
@@ -6302,6 +6448,143 @@ class _ShiftCollectionsAndExpensesSectionState
         }),
       ),
     ]);
+  }
+}
+
+class _ShiftReconciliationNotes extends StatelessWidget {
+  const _ShiftReconciliationNotes({required this.shift});
+
+  final Map<String, dynamic> shift;
+
+  @override
+  Widget build(BuildContext context) {
+    final check = _map(shift['totals_check']);
+    final nonPos = _map(shift['non_pos_collections']);
+    final nonPosTypes = _list(nonPos['by_type']);
+    final sources = _list(shift['pos_shift_sources']);
+    final collected = _num(shift['total_collected']);
+    final credit = _num(shift['credit_sales_total']);
+    final staffCredit = shift['staff_credit_total'] == null
+        ? credit
+        : _num(shift['staff_credit_total']);
+    final corporatePosCredit = _num(shift['corporate_pos_credit_total']);
+    final inclCredit = _num(shift['total_sales_incl_credit']);
+    final corporate = _map(shift['corporate_credit']);
+    final corporateAccounts = _list(corporate['by_account']);
+    final corporateLines = _list(corporate['lines']);
+    final mismatch = check['mismatch'] == true;
+
+    if (!mismatch &&
+        nonPosTypes.isEmpty &&
+        sources.isEmpty &&
+        corporateAccounts.isEmpty &&
+        inclCredit == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mismatch) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                'Stored total ${_money(_num(check['stored_total_sales']))} does not match the ledger '
+                '${_money(_num(check['recomputed_total_sales']))} '
+                '(difference ${_money(_num(check['difference']))}). '
+                'This shift was closed before duplicated reception payments were fixed; '
+                'the figures below are the corrected ones.',
+                style: const TextStyle(
+                    color: Colors.red, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          _ShiftReportSection(
+            number: '•',
+            title: 'How this total compares with Sold Items',
+            rows: [
+              _ShiftReportRow(
+                  'Collected (cash + M-Pesa + card)', _money(collected)),
+              _ShiftReportRow('+ Staff / other credit-bill sales',
+                  _money(staffCredit)),
+              if (corporatePosCredit > 0)
+                _ShiftReportRow('+ Corporate account sales on credit (POS bills)',
+                    _money(corporatePosCredit)),
+              _ShiftReportRow(
+                '= Total incl. credit (comparable with Sold Items)',
+                _money(inclCredit),
+                emphasized: true,
+              ),
+              for (final type in nonPosTypes)
+                _ShiftReportRow(
+                  '   of which ${_text(type, ['label'])} cleared at the cashier (${_num(type['count']).toInt()}) — not a POS sale',
+                  _money(_num(type['amount'])),
+                ),
+            ],
+          ),
+          if (corporateAccounts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ShiftReportSection(
+              number: '•',
+              title: 'Corporate account sales on credit — charged on this shift',
+              rows: [
+                for (final account in corporateAccounts)
+                  _ShiftReportRow(
+                    '${_text(account, ['name'])} · ${_num(account['count']).toInt()} bill(s)'
+                    '${_num(account['pos_amount']) > 0 ? ' · POS ${_money(_num(account['pos_amount']))}' : ''}'
+                    '${_num(account['room_folio_amount']) > 0 ? ' · Room ${_money(_num(account['room_folio_amount']))}' : ''}'
+                    '${_num(account['conference_amount']) > 0 ? ' · Conference ${_money(_num(account['conference_amount']))}' : ''}',
+                    _money(_num(account['amount'])),
+                  ),
+                _ShiftReportRow(
+                  'Total charged to corporate accounts',
+                  _money(_num(corporate['total'])),
+                  emphasized: true,
+                ),
+                for (final line in corporateLines.take(40))
+                  _ShiftReportRow(
+                    '      ${_text(line, ['account_name'])} · ${_text(line, ['reference_type'])}'
+                    '${_text(line, ['reference']).isEmpty ? '' : ' · ${_text(line, ['reference'])}'}'
+                    ' · ${_text(line, ['status'])}',
+                    _money(_num(line['amount'])),
+                  ),
+              ],
+            ),
+          ],
+          if (sources.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ShiftReportSection(
+              number: '•',
+              title: 'POS shifts whose payments are in this logbook',
+              rows: [
+                for (final source in sources) ...[
+                  _ShiftReportRow(
+                    '${_text(source, ['outlet_name'])} · ${_text(source, ['pos_shift_number'])}'
+                    ' · opened by ${_text(source, ['opened_by_name']).isEmpty ? 'Unknown' : _text(source, ['opened_by_name'])}'
+                    '${source['opened_by_other_cashier'] == true ? '  (different cashier)' : ''}',
+                    _money(_num(source['amount_in_this_logbook'])),
+                    emphasized: source['opened_by_other_cashier'] == true,
+                  ),
+                  for (final other in _list(source['also_in_logbooks']))
+                    _ShiftReportRow(
+                      '      also paid into ${_text(other, ['shift_number'])} (${_text(other, ['cashier_name'])})',
+                      _money(_num(other['amount'])),
+                    ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -8352,6 +8635,9 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 });
               }),
 
+              // How this shift's total relates to Sold Items: credit, corporate
+              // accounts, non-POS money and the POS shifts the payments came from.
+              _ShiftReconciliationNotes(shift: detail),
               _TwoColumn(
                 left: _SectionCard(
                   title: 'Shift Identity',
@@ -28494,11 +28780,19 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
   // 'main_bar' = Sports Bar  |  'executive_bar' = Executive Bar
   String _barOutletType = 'main_bar';
   int? _branchId;
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -28566,9 +28860,9 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
       setState(() {
         _all = items;
         _categories = sortedCats;
-        _filtered = items;
         _loading = false;
       });
+      _applyFilter();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -28578,13 +28872,81 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
     }
   }
 
-  void _applyFilter(String cat) {
+  void _applyFilter({String? cat, String? search}) {
+    if (cat != null) _categoryFilter = cat;
+    if (search != null) _searchQuery = search;
+
+    final q = _searchQuery.trim().toLowerCase();
     setState(() {
-      _categoryFilter = cat;
-      _filtered = cat == 'All'
-          ? _all
-          : _all.where((i) => '${i['category'] ?? ''}' == cat).toList();
+      _filtered = _all.where((it) {
+        final itemCat = '${it['category'] ?? ''}';
+        final matchesCat =
+            _categoryFilter == 'All' || itemCat == _categoryFilter;
+        if (!matchesCat) return false;
+        if (q.isEmpty) return true;
+        final name = (it['name'] ?? '').toString().toLowerCase();
+        final sku = (it['sku'] ?? '').toString().toLowerCase();
+        final cName = itemCat.toLowerCase();
+        return name.contains(q) || sku.contains(q) || cName.contains(q);
+      }).toList();
     });
+  }
+
+  Future<void> _deleteItem(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    if (id.isEmpty) return;
+    final name = '${item['name'] ?? 'this drink'}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hard Delete Bar Item?'),
+        content: Text(
+          'Are you sure you want to permanently delete "$name"? '
+          'This will remove it completely from the bar menu and POS. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Hard Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final dio = ref.read(dioProvider);
+      if (item['_source'] == 'pos') {
+        final outletId = '${item['_outlet_id'] ?? ''}';
+        await dio.delete('/pos/outlets/$outletId/items/$id');
+      } else {
+        await dio.delete('/bar/drinks/$id');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$name" permanently deleted'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(apiErrorMessage(e, fallback: 'Delete failed')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _switchOutlet(String outletType) {
@@ -29473,6 +29835,48 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
             ),
             const SizedBox(height: 12),
           ],
+          // Search bar
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search by drink name, category, or SKU…',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                _applyFilter(search: '');
+                              },
+                            )
+                          : null,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    onChanged: (val) => _applyFilter(search: val),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${_filtered.length} item(s)',
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           // Category filter chips
           if (_categories.length > 1)
             SizedBox(
@@ -29487,7 +29891,7 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                   return FilterChip(
                     label: Text(cat),
                     selected: selected,
-                    onSelected: (_) => _applyFilter(cat),
+                    onSelected: (_) => _applyFilter(cat: cat),
                   );
                 },
               ),
@@ -29555,6 +29959,12 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
                           tooltip: 'Edit',
                           onPressed: () => _showEditDialog(item),
                         ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: Colors.red.shade600),
+                          tooltip: 'Hard Delete',
+                          onPressed: () => _deleteItem(item),
+                        ),
                       ],
                     ),
                   );
@@ -29607,11 +30017,19 @@ class _BranchRestaurantMenuSectionState
   List<String> _categories = ['All'];
   String? _restaurantOutletId;
   String? _branchId;
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -29749,14 +30167,9 @@ class _BranchRestaurantMenuSectionState
         _all = items;
         _categories = cats.toList();
         _categoryFilter = effectiveFilter;
-        _filtered = effectiveFilter == 'All'
-            ? items
-            : items
-                .where(
-                    (i) => _menuCategoryName(i['category']) == effectiveFilter)
-                .toList();
         _loading = false;
       });
+      _applyFilter();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -29766,13 +30179,81 @@ class _BranchRestaurantMenuSectionState
     }
   }
 
-  void _applyFilter(String cat) {
+  void _applyFilter({String? cat, String? search}) {
+    if (cat != null) _categoryFilter = cat;
+    if (search != null) _searchQuery = search;
+
+    final q = _searchQuery.trim().toLowerCase();
     setState(() {
-      _categoryFilter = cat;
-      _filtered = cat == 'All'
-          ? _all
-          : _all.where((i) => _menuCategoryName(i['category']) == cat).toList();
+      _filtered = _all.where((it) {
+        final itemCat = _menuCategoryName(it['category']);
+        final matchesCat =
+            _categoryFilter == 'All' || itemCat == _categoryFilter;
+        if (!matchesCat) return false;
+        if (q.isEmpty) return true;
+        final name = (it['name'] ?? '').toString().toLowerCase();
+        final sku = (it['sku'] ?? '').toString().toLowerCase();
+        final cName = itemCat.toLowerCase();
+        return name.contains(q) || sku.contains(q) || cName.contains(q);
+      }).toList();
     });
+  }
+
+  Future<void> _deleteItem(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    if (id.isEmpty) return;
+    final name = '${item['name'] ?? 'this item'}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hard Delete Menu Item?'),
+        content: Text(
+          'Are you sure you want to permanently delete "$name"? '
+          'This will remove it completely from the POS and database. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Hard Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final dio = ref.read(dioProvider);
+      if (item['_source'] == 'pos') {
+        final outletId = '${item['_outlet_id'] ?? _restaurantOutletId ?? ''}';
+        await dio.delete('/pos/outlets/$outletId/items/$id');
+      } else {
+        await dio.delete('/restaurant/menu/items/$id');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$name" permanently deleted'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(apiErrorMessage(e, fallback: 'Delete failed')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _toggleAvailability(Map<String, dynamic> item) async {
@@ -30282,6 +30763,48 @@ class _BranchRestaurantMenuSectionState
             ],
           ),
           const SizedBox(height: 12),
+          // Search bar
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, category, or SKU…',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                _applyFilter(search: '');
+                              },
+                            )
+                          : null,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                    ),
+                    onChanged: (val) => _applyFilter(search: val),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${_filtered.length} item(s)',
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           // Category filter chips
           if (_categories.length > 1)
             SizedBox(
@@ -30296,7 +30819,7 @@ class _BranchRestaurantMenuSectionState
                   return FilterChip(
                     label: Text(cat),
                     selected: selected,
-                    onSelected: (_) => _applyFilter(cat),
+                    onSelected: (_) => _applyFilter(cat: cat),
                   );
                 },
               ),
@@ -30365,6 +30888,12 @@ class _BranchRestaurantMenuSectionState
                           icon: const Icon(Icons.edit_outlined),
                           tooltip: 'Edit',
                           onPressed: () => _showEditDialog(item),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: Colors.red.shade600),
+                          tooltip: 'Hard Delete',
+                          onPressed: () => _deleteItem(item),
                         ),
                       ],
                     ),
@@ -31858,13 +32387,15 @@ class _BranchOutletItemsSectionState
     final id = _outletId;
     final itemId = '${item['id'] ?? ''}';
     if (id == null || itemId.isEmpty) return;
+    final name = '${item['name'] ?? 'this item'}';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Non-Consumable?'),
+        title: const Text('Hard Delete Non-Consumable?'),
         content: Text(
-            'Are you sure you want to remove "${item['name'] ?? 'this item'}"? '
-            'This cannot be undone.'),
+            'Are you sure you want to permanently delete "$name"? '
+            'This will remove it completely from the POS outlet and database. '
+            'This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -31876,7 +32407,7 @@ class _BranchOutletItemsSectionState
               backgroundColor: Colors.red.shade600,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Delete'),
+            child: const Text('Hard Delete'),
           ),
         ],
       ),
@@ -31887,14 +32418,20 @@ class _BranchOutletItemsSectionState
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        const SnackBar(content: Text('Item deleted successfully')),
+        SnackBar(
+          content: Text('"$name" permanently deleted'),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
       await _loadItems();
     } catch (e) {
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Delete failed'))),
+        SnackBar(
+          content: Text(apiErrorMessage(e, fallback: 'Delete failed')),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -32692,6 +33229,12 @@ class _BranchOutletItemsSectionState
                           tooltip: 'Edit',
                           onPressed: () => _showEditDialog(item),
                         ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              size: 20, color: Colors.red.shade600),
+                          tooltip: 'Hard Delete',
+                          onPressed: () => _deleteItem(item),
+                        ),
                         PopupMenuButton<String>(
                           tooltip: 'Actions',
                           icon: const Icon(Icons.more_vert, size: 20),
@@ -32717,7 +33260,7 @@ class _BranchOutletItemsSectionState
                                   Icon(Icons.delete_outline,
                                       size: 16, color: Colors.red.shade700),
                                   const SizedBox(width: 8),
-                                  Text('Delete',
+                                  Text('Hard Delete',
                                       style: TextStyle(
                                           color: Colors.red.shade700)),
                                 ],

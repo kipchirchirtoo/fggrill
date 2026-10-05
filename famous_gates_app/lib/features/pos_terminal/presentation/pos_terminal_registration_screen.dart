@@ -68,16 +68,15 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
         return;
       }
     } catch (e) {
-      if (e is DioException) {
-        final statusCode = e.response?.statusCode;
-        if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
-          if (!mounted) return;
-          setState(() {
-            _existingIdentity = null;
-            _checkingExisting = false;
-          });
-          return;
-        }
+      // Only a definitive server rejection sends the device back to the enrollment
+      // code step; offline / proxy errors keep the enrolled identity.
+      if (PosTerminalService.isDefinitiveRejection(e)) {
+        if (!mounted) return;
+        setState(() {
+          _existingIdentity = null;
+          _checkingExisting = false;
+        });
+        return;
       }
     }
 

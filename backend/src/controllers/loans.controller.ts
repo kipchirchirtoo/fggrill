@@ -6,10 +6,28 @@ import notificationService from '../services/notification.service';
 
 export const createLoan = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, total_amount, installment_amount, reason, loan_date, start_deduction_month, start_deduction_year } = req.body;
+        const body = req.body || {};
+        const { staff_id, total_amount, reason, loan_date } = body;
+        // Older app builds sent monthly_installment / start_date — accept those too.
+        const installment_amount = body.installment_amount ?? body.monthly_installment;
+        const startDate = body.start_date ? new Date(String(body.start_date)) : null;
+        const hasStartDate = startDate !== null && !Number.isNaN(startDate.getTime());
+        const start_deduction_month = body.start_deduction_month ?? (hasStartDate ? startDate!.getMonth() + 1 : undefined);
+        const start_deduction_year = body.start_deduction_year ?? (hasStartDate ? startDate!.getFullYear() : undefined);
 
-        if (!staff_id || !total_amount || !installment_amount || !reason || !start_deduction_month || !start_deduction_year) {
-            throw new AppError('Missing required fields: staff_id, total_amount, installment_amount, reason, start_deduction_month, start_deduction_year', 400);
+        const missing = [
+            ['staff_id', staff_id],
+            ['total_amount', total_amount],
+            ['installment_amount', installment_amount],
+            ['reason', typeof reason === 'string' ? reason.trim() : reason],
+            ['start_deduction_month', start_deduction_month],
+            ['start_deduction_year', start_deduction_year],
+        ].filter(([, value]) => !value).map(([name]) => name);
+        if (missing.length > 0) {
+            throw new AppError(`Missing required fields: ${missing.join(', ')}`, 400);
+        }
+        if (Number(installment_amount) > Number(total_amount)) {
+            throw new AppError('The monthly installment cannot be more than the total loan amount', 400);
         }
 
         const { data, error } = await supabase
@@ -19,7 +37,7 @@ export const createLoan = async (req: Request, res: Response, next: NextFunction
                 total_amount,
                 installment_amount,
                 remaining_balance: total_amount,
-                reason,
+                reason: String(reason).trim(),
                 loan_date: loan_date || new Date().toISOString().split('T')[0],
                 start_deduction_month: Number(start_deduction_month),
                 start_deduction_year: Number(start_deduction_year),

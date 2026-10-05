@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
 import db from '../db';
 import * as BranchInventoryService from '../services/branch-inventory.service';
+import { loadPosShiftLogbookSplit, loadCorporateCreditByPosShift, loadCorporateCreditForPeriod, emptyCorporateCredit } from '../services/shift-reconciliation.service';
 
 const FG_PRIMARY = '#1a1a1a';
 const FG_SECONDARY = '#555555';
@@ -2853,7 +2854,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     }
 
     let posShiftOrdersQueryText = `
-      SELECT id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at 
+      SELECT id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, payment_method, total_amount, balance_amount, amount_paid, items, created_at, kitchen_status, kitchen_ready_at, updated_at 
       FROM public.pos_shift_orders 
       WHERE created_at >= $1 AND created_at <= $2 
         AND (status IN ('paid', 'credit_bill') OR payment_status IN ('paid', 'credit_bill'))
@@ -3250,6 +3251,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       orderId?: string;
       receiptNumber?: string;
       kdsMinutes?: number | null;
+      isCredit?: boolean;
     }) => {
       const targetGroup = payload.outletGroup || outletGroupFor(payload.source, payload.category);
       const key = `${payload.branchId}_${targetGroup}_${payload.itemId || payload.name}`;
@@ -3263,6 +3265,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           quantity: 0,
           revenue: 0,
           cost_of_goods_sold: 0,
+          credit_revenue: 0,
           category: payload.category,
           source: payload.source,
           outlet_group: targetGroup,
@@ -3278,14 +3281,16 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       soldItemsMap[key].quantity += payload.quantity;
       soldItemsMap[key].revenue += payload.revenue;
       soldItemsMap[key].cost_of_goods_sold += Number(payload.cost || 0);
+      if (payload.isCredit) soldItemsMap[key].credit_revenue += payload.revenue;
 
       const shiftKey = payload.shiftId || 'no_shift';
       if (!soldItemsMap[key].by_shift[shiftKey]) {
-        soldItemsMap[key].by_shift[shiftKey] = { shift_id: shiftKey, quantity: 0, revenue: 0, cost_of_goods_sold: 0 };
+        soldItemsMap[key].by_shift[shiftKey] = { shift_id: shiftKey, quantity: 0, revenue: 0, cost_of_goods_sold: 0, credit_revenue: 0 };
       }
       soldItemsMap[key].by_shift[shiftKey].quantity += payload.quantity;
       soldItemsMap[key].by_shift[shiftKey].revenue += payload.revenue;
       soldItemsMap[key].by_shift[shiftKey].cost_of_goods_sold += Number(payload.cost || 0);
+      if (payload.isCredit) soldItemsMap[key].by_shift[shiftKey].credit_revenue += payload.revenue;
 
       if (payload.soldAt) {
         if (!soldItemsMap[key].last_sold_at || new Date(payload.soldAt).getTime() > new Date(soldItemsMap[key].last_sold_at).getTime()) {
@@ -3422,7 +3427,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           shiftId: order.shift_id ? String(order.shift_id) : undefined,
           orderId: String(order.id),
           receiptNumber: order.order_number ? String(order.order_number) : undefined,
-          kdsMinutes
+          kdsMinutes,
+          isCredit: order.status === 'credit_bill' || order.payment_status === 'credit_bill'
         });
       });
     });
@@ -3557,6 +3563,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         net_revenue: sold.revenue,
         revenue: sold.revenue,
         cost_of_goods_sold: sold.cost_of_goods_sold,
+        credit_revenue: sold.credit_revenue,
         gross_profit: sold.revenue - sold.cost_of_goods_sold,
         profit_margin: sold.revenue > 0 ? ((sold.revenue - sold.cost_of_goods_sold) / sold.revenue) * 100 : 0,
         average_selling_price: sold.quantity > 0 ? sold.revenue / sold.quantity : 0,
@@ -3572,6 +3579,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           quantity: row.quantity,
           revenue: row.revenue,
           cost_of_goods_sold: row.cost_of_goods_sold,
+          credit_revenue: row.credit_revenue || 0,
           gross_profit: row.revenue - row.cost_of_goods_sold
         }))
       };
@@ -3616,16 +3624,62 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
             revenue: 0,
             cost_of_goods_sold: 0,
             gross_profit: 0,
-            quantity: 0
+            quantity: 0,
+            credit_revenue: 0
           };
         }
+        shiftMap[row.shift_id].credit_revenue += Number(row.credit_revenue || 0);
         shiftMap[row.shift_id].revenue += Number(row.revenue || 0);
         shiftMap[row.shift_id].cost_of_goods_sold += Number(row.cost_of_goods_sold || 0);
         shiftMap[row.shift_id].gross_profit += Number(row.revenue || 0) - Number(row.cost_of_goods_sold || 0);
         shiftMap[row.shift_id].quantity += Number(row.quantity || 0);
       });
     });
-    const shiftRevenue = Object.values(shiftMap).sort((a: any, b: any) => {
+    // Credit-bill orders are sold but not (fully) collected: the logbook only holds
+    // what was actually paid. Report credit separately instead of mixing it in, so
+    // Sold Items and the logbook can be compared like for like.
+    const creditByShift: Record<string, { sales: number; outstanding: number; collected: number; orders: number; corporate: number }> = {};
+    const creditTotals = { sales: 0, outstanding: 0, collected: 0, orders: 0, corporate: 0 };
+    outletOrders.forEach((order: any) => {
+      if (order.status !== 'credit_bill' && order.payment_status !== 'credit_bill') return;
+      const total = Number(order.total_amount || 0);
+      const outstanding = Math.max(0, Number(order.balance_amount || 0));
+      const collected = Math.max(0, Number(order.amount_paid || 0));
+      const key = order.shift_id ? String(order.shift_id) : 'no_shift';
+      const bucket = (creditByShift[key] ||= { sales: 0, outstanding: 0, collected: 0, orders: 0, corporate: 0 });
+      // Orders charged to a corporate account are flipped to credit_bill with payment_method CORPORATE_CREDIT.
+      const corporate = String(order.payment_method || '').toUpperCase() === 'CORPORATE_CREDIT' ? total : 0;
+      bucket.sales += total; bucket.outstanding += outstanding; bucket.collected += collected; bucket.orders += 1; bucket.corporate += corporate;
+      creditTotals.sales += total; creditTotals.outstanding += outstanding; creditTotals.collected += collected; creditTotals.orders += 1; creditTotals.corporate += corporate;
+    });
+
+    // Which cashier logbooks hold the payments of each POS shift (a POS shift can be
+    // split across several logbooks when a different cashier clears the money).
+    const posShiftIdsForLookup = Object.keys(shiftMap).filter((id) => id !== 'no_shift');
+    const [logbookSplitByShift, corporateByPosShift, corporatePeriod] = await Promise.all([
+      loadPosShiftLogbookSplit(posShiftIdsForLookup),
+      loadCorporateCreditByPosShift(posShiftIdsForLookup),
+      loadCorporateCreditForPeriod(startIso, endIso, numericBranchId)
+    ]);
+
+    const shiftRevenue = Object.values(shiftMap).map((row: any) => {
+      const credit = creditByShift[row.shift_id] || { sales: 0, outstanding: 0, collected: 0, orders: 0, corporate: 0 };
+      const split = logbookSplitByShift[row.shift_id] || [];
+      return {
+        ...row,
+        credit_orders: credit.orders,
+        credit_sales: credit.sales,
+        credit_outstanding: credit.outstanding,
+        corporate_credit_sales: credit.corporate,
+        staff_credit_sales: credit.sales - credit.corporate,
+        // Corporate-account bills of this POS shift, per account.
+        corporate_credit: corporateByPosShift[row.shift_id] || emptyCorporateCredit(),
+        collected_revenue: Number(row.revenue || 0) - credit.outstanding,
+        logbook_split: split,
+        logbook_total: split.reduce((sum, part) => sum + part.amount, 0),
+        split_across_logbooks: split.length > 1
+      };
+    }).sort((a: any, b: any) => {
       if (a.shift_id === 'no_shift') return 1;
       if (b.shift_id === 'no_shift') return -1;
       return String(a.opened_at || '').localeCompare(String(b.opened_at || ''));
@@ -3647,6 +3701,16 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       total_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0),
       gross_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.gross_revenue || item.revenue || 0), 0),
       net_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.net_revenue || item.revenue || 0), 0),
+      // POS credit-bill orders: sold at full value, but only `credit_collected` has been paid.
+      credit_orders: creditTotals.orders,
+      credit_sales: creditTotals.sales,
+      credit_collected: creditTotals.collected,
+      credit_outstanding: creditTotals.outstanding,
+      corporate_credit_sales: creditTotals.corporate,
+      staff_credit_sales: creditTotals.sales - creditTotals.corporate,
+      // Corporate-account credit of ALL bill types (POS, room folio, conference) charged in the period.
+      corporate_credit: corporatePeriod,
+      collected_revenue: 0,
       total_cogs: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.cost_of_goods_sold || 0), 0),
       gross_profit: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.gross_profit || 0), 0),
       profit_margin: 0,
@@ -3659,6 +3723,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       period: { start_date: startRaw, end_date: endRaw, days }
     };
     summary.profit_margin = summary.total_revenue > 0 ? (summary.gross_profit / summary.total_revenue) * 100 : 0;
+    summary.collected_revenue = summary.total_revenue - summary.credit_outstanding;
 
     // ── Cashier Payment Clearance ──────────────────────────────────────────────
     let cashierClearance: any = { shifts: [], summary: {} };

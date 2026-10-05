@@ -80,16 +80,22 @@ export async function autoCloseOpenKitchenShiftsForBranch(
                 const cp = n(item.cost_price);
                 const varVal = varQty * cp;
 
-                await supabase
+                // system_closing_stock/variance/variance_value are Postgres GENERATED
+                // columns derived from opening_stock/additions/sold_quantity/
+                // spoilage_quantity/physical_count — writing to them directly makes
+                // Postgres reject the whole update (error 428C9), which previously
+                // silently dropped physical_count too since it was bundled in the same
+                // failed call.
+                const { error: itemUpdateError } = await supabase
                     .from('kitchen_shift_items')
                     .update({
                         physical_count: phys,
-                        system_closing_stock: sysClose,
-                        variance: varQty,
-                        variance_value: varVal,
                         updated_at: now
                     })
                     .eq('id', item.id);
+                if (itemUpdateError) {
+                    logger.error(`[autoCloseKitchenShifts] Error updating physical_count for item ${item.id}:`, itemUpdateError);
+                }
 
                 // Insert stock take entry if not already present
                 await supabase

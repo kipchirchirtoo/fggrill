@@ -15,8 +15,18 @@ class AuthInterceptor extends Interceptor {
       RequestOptions options, RequestInterceptorHandler handler) async {
     ensureStableWorkingDirectory();
     final storage = _ref.read(secureStorageProvider);
-    final jwt = await storage.read(key: AuthRepository.jwtKey);
-    final branchId = await storage.read(key: AuthRepository.branchIdKey);
+    // Fail-soft reads: a secure-storage file damaged by a power cut would
+    // otherwise throw here and fail every request.
+    Future<String?> safeRead(String key) async {
+      try {
+        return await storage.read(key: key);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final jwt = await safeRead(AuthRepository.jwtKey);
+    final branchId = await safeRead(AuthRepository.branchIdKey);
 
     final normalizedJwt = jwt?.trim() ?? '';
     if (normalizedJwt.isNotEmpty && normalizedJwt.toLowerCase() != 'null') {
@@ -35,7 +45,9 @@ class AuthInterceptor extends Interceptor {
     // the interceptor only forwards a cached token so the server can bind the
     // request to the terminal's branch. Key kept in sync with
     // PosTerminalService (pos_terminal_device_token).
-    final deviceToken = await storage.read(key: 'pos_terminal_device_token');
+    // Fail-soft: a secure-storage file damaged by a power cut must not fail every
+    // request — the token is simply re-minted by PosTerminalService.
+    final deviceToken = await safeRead('pos_terminal_device_token');
     final normalizedDeviceToken = deviceToken?.trim() ?? '';
     if (normalizedDeviceToken.isNotEmpty &&
         normalizedDeviceToken.toLowerCase() != 'null') {

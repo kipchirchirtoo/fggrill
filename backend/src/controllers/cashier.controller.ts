@@ -25,6 +25,7 @@ import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import PDFDocument from 'pdfkit';
 import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
+import { buildShiftReconciliationExtras } from '../services/shift-reconciliation.service';
 import { settleMasterBillCore, resolveMasterBillByCode } from './outlet-pos.controller';
 import { recordHotelCashierPayment } from '../services/receptionCashierPayment.service';
 import {
@@ -8243,10 +8244,15 @@ function dedupeLogbookLines(lines: any[]): any[] {
         if (!existingLine.outlet_type && duplicateLine.outlet_type) {
             existingLine.outlet_type = duplicateLine.outlet_type;
         }
-        if (!existingLine.customer_name || existingLine.customer_name === 'Walk-in customer') {
-            if (duplicateLine.customer_name && duplicateLine.customer_name !== 'Walk-in customer') {
-                existingLine.customer_name = duplicateLine.customer_name;
-            }
+        const isGenericExisting = !existingLine.customer_name ||
+            existingLine.customer_name === 'Walk-in customer' ||
+            existingLine.customer_name === 'Cashier cleared credit_bill' ||
+            String(existingLine.customer_name).toLowerCase().startsWith('cashier cleared');
+        const isSpecificDuplicate = duplicateLine.customer_name &&
+            duplicateLine.customer_name !== 'Walk-in customer' &&
+            !String(duplicateLine.customer_name).toLowerCase().startsWith('cashier cleared');
+        if (isGenericExisting && isSpecificDuplicate) {
+            existingLine.customer_name = duplicateLine.customer_name;
         }
         if (existingLine.reference === 'Linked record' && duplicateLine.reference && duplicateLine.reference !== 'Linked record') {
             existingLine.reference = duplicateLine.reference;
@@ -8349,6 +8355,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     let outletOrders: any[] = [];
     let outletPayments: any[] = [];
     let creditBillRecords: any[] = [];
+    const shiftCreditRefs = new Set<string>();
     let shiftReconciliationExpenses: any[] = [];
     let generalExpenses: any[] = [];
     let shiftActualCollections: any[] = [];
@@ -8457,10 +8464,30 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                     .order('created_at', { ascending: true })
             );
 
+            const registerCreditRef = (ref: any) => {
+                if (!ref) return;
+                const clean = String(ref).trim();
+                if (clean && clean.toLowerCase() !== 'linked record' && clean !== '—' && clean !== '-') {
+                    shiftCreditRefs.add(clean);
+                    const withoutPrefix = clean.replace(/^(cash|mpesa|card|pos|order|ref)[\s\-_:]*/i, '');
+                    if (withoutPrefix) shiftCreditRefs.add(withoutPrefix);
+                }
+            };
+
+            [...(storedRawLines || []), ...(shiftTransactions || []), ...(cashierTransactions || [])].forEach((line: any) => {
+                const method = String(line.payment_method || '').toLowerCase();
+                if (method.includes('credit')) {
+                    registerCreditRef(line.reference);
+                    registerCreditRef(line.transaction_ref);
+                    registerCreditRef(line.transaction_id);
+                    registerCreditRef(line.order_id);
+                }
+            });
+
             // Staff credit bills issued during this shift — fetched directly
             // from credit_bills so we get the real staff/customer name, amount,
             // department and status (not the generic cleared-line label).
-            creditBillRecords = await safeLogbookQuery(
+            const cbByTime = await safeLogbookQuery(
                 'credit_bills',
                 supabase
                     .from('credit_bills')
@@ -8470,6 +8497,23 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                     .lte('created_at', endedAt)
                     .order('created_at', { ascending: true })
             );
+
+            let cbByRefs: any[] = [];
+            if (shiftCreditRefs.size > 0) {
+                cbByRefs = await safeLogbookQuery(
+                    'credit_bills',
+                    supabase
+                        .from('credit_bills')
+                        .select('*')
+                        .in('bill_number', Array.from(shiftCreditRefs))
+                );
+            }
+
+            const mergedBills = new Map<string, any>();
+            [...cbByTime, ...cbByRefs].forEach((b: any) => {
+                if (b?.id) mergedBills.set(b.id, b);
+            });
+            creditBillRecords = Array.from(mergedBills.values());
 
             generalExpenses = await safeLogbookQuery(
                 'expenses',
@@ -8590,19 +8634,137 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     });
 
     // Filter credit bills by cashier shift:
-    // 1. If it has a source_document_id, resolve its order to see if it belongs to one of the cashier's POS outlet shifts.
-    // 2. Otherwise, fall back to matching created_by = shift.cashier_id.
+    // 1. Matches an explicit credit transaction / logbook reference in this shift -> KEEP
+    // 2. Explicitly linked to this shift / logbook -> KEEP
+    // 3. Linked to an outlet order in this shift -> KEEP
+    // 4. If no explicit shiftCreditRefs exist, keep bills created by this cashier in this shift
     const outletOrderIds = new Set((outletOrders || []).map((o: any) => o.id).filter(Boolean));
     const activeCashierId = shift?.cashier_id;
     creditBillRecords = (creditBillRecords || []).filter((bill: any) => {
-        if (outletShiftIds.length > 0) {
-            return bill.source_document_id ? outletOrderIds.has(bill.source_document_id) : false;
+        const billNum = String(bill.bill_number || '').trim();
+        const credNum = String(bill.credit_number || '').trim();
+        const billRef = String(bill.reference || '').trim();
+        const billId = String(bill.id || '').trim();
+
+        if (
+            (billNum && shiftCreditRefs.has(billNum)) ||
+            (credNum && shiftCreditRefs.has(credNum)) ||
+            (billRef && shiftCreditRefs.has(billRef)) ||
+            (billId && shiftCreditRefs.has(billId))
+        ) {
+            return true;
         }
-        if (bill.source_document_id) {
-            return outletOrderIds.has(bill.source_document_id);
+
+        if (
+            (bill.shift_id && bill.shift_id === shift?.id) ||
+            (bill.cashier_shift_id && bill.cashier_shift_id === shift?.id) ||
+            (bill.source_logbook_id && bill.source_logbook_id === logbook.id) ||
+            (bill.source_pos_shift_id && outletShiftIds.includes(bill.source_pos_shift_id))
+        ) {
+            return true;
         }
-        return activeCashierId ? bill.created_by === activeCashierId : true;
+
+        if (bill.source_document_id && outletOrderIds.has(bill.source_document_id)) {
+            return true;
+        }
+
+        if (shiftCreditRefs.size === 0 && activeCashierId && bill.created_by === activeCashierId) {
+            return true;
+        }
+
+        return false;
     });
+
+    // Fetch staff_credit_bills and staff_profiles to enrich department and accurate staff name
+    const candidateBillNumbers = creditBillRecords.map((b: any) => b.bill_number).filter(Boolean);
+    const staffBillMap = new Map<string, { staff_id?: string; department?: string; staff_name?: string }>();
+    if (candidateBillNumbers.length > 0) {
+        const scbRecords = await safeLogbookQuery(
+            'staff_credit_bills',
+            supabase
+                .from('staff_credit_bills')
+                .select('id, staff_id, bill_number, amount, description, source_cashier_credit_bill_id')
+                .in('bill_number', candidateBillNumbers)
+        );
+
+        const staffIds = Array.from(new Set((scbRecords || []).map((s: any) => s.staff_id).filter(Boolean)));
+        const staffProfileMap = new Map<string, any>();
+        if (staffIds.length > 0) {
+            const profileRecords = await safeLogbookQuery(
+                'staff_profiles',
+                supabase
+                    .from('staff_profiles')
+                    .select('id, first_name, last_name, department, employee_number, position')
+                    .in('id', staffIds)
+            );
+            (profileRecords || []).forEach((sp: any) => staffProfileMap.set(sp.id, sp));
+        }
+
+        (scbRecords || []).forEach((s: any) => {
+            const profile = s.staff_id ? staffProfileMap.get(s.staff_id) : null;
+            const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : null;
+            const payload = {
+                staff_id: s.staff_id,
+                department: profile?.department || null,
+                staff_name: staffName || undefined
+            };
+            if (s.bill_number) staffBillMap.set(s.bill_number, payload);
+            if (s.source_cashier_credit_bill_id) staffBillMap.set(s.source_cashier_credit_bill_id, payload);
+        });
+    }
+
+    // Normalized staff credit bills (who the credit was for, and how much).
+    const creditBills = creditBillRecords.map((bill: any) => {
+        const extra = staffBillMap.get(bill.bill_number) || staffBillMap.get(bill.id);
+        const resolvedName = logbookText(
+            bill.staff_name || extra?.staff_name || bill.customer_name || bill.employee_name,
+            'Staff'
+        );
+        const resolvedDept = bill.department || extra?.department || null;
+        const resolvedAmount = logbookNumber(bill.total_amount || bill.amount);
+        const resolvedBalance = logbookNumber(bill.balance_due ?? bill.balance_amount ?? bill.balance ?? resolvedAmount);
+
+        return {
+            id: bill.id,
+            bill_number: bill.bill_number || null,
+            credit_number: bill.credit_number || bill.bill_number || bill.reference || null,
+            staff_name: resolvedName,
+            customer_name: bill.customer_name || resolvedName,
+            employee_id: bill.employee_id || extra?.staff_id || null,
+            department: resolvedDept,
+            bill_type: bill.bill_type || 'credit_bill',
+            amount: resolvedAmount,
+            balance: resolvedBalance,
+            status: bill.status || bill.approval_status || 'active',
+            created_at: bill.created_at || bill.credit_date || null
+        };
+    });
+    const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
+
+    const creditBillNameByRef = new Map<string, string>();
+    creditBills.forEach((b: any) => {
+        const name = b.staff_name || b.customer_name;
+        if (name && name !== 'Staff') {
+            if (b.bill_number) creditBillNameByRef.set(String(b.bill_number).trim(), name);
+            if (b.credit_number) creditBillNameByRef.set(String(b.credit_number).trim(), name);
+            if (b.id) creditBillNameByRef.set(String(b.id).trim(), name);
+        }
+    });
+
+    const resolveLineCustomerName = (line: any): string => {
+        const currentName = String(line.customer_name || '').trim();
+        const isGeneric = !currentName ||
+            currentName.toLowerCase() === 'walk-in customer' ||
+            currentName.toLowerCase().startsWith('cashier cleared') ||
+            currentName.toLowerCase() === 'credit customer';
+        if (isGeneric) {
+            const ref = String(line.reference || line.transaction_ref || '').trim();
+            if (ref && creditBillNameByRef.has(ref)) {
+                return creditBillNameByRef.get(ref)!;
+            }
+        }
+        return line.customer_name;
+    };
 
     const getShiftOutletType = (shiftId: string) => {
         const oType = outletShiftTypeMap.get(shiftId) || (Array.isArray(outletShift?.outlet) ? outletShift?.outlet[0]?.outlet_type : outletShift?.outlet?.outlet_type);
@@ -8611,15 +8773,25 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
 
     const storedLines = storedRawLines.map((line: any) => {
         const oType = line.outlet_shift_id ? getShiftOutletType(line.outlet_shift_id) : logbook.type;
-        return normalizeLogbookLine({
+        const normalized = normalizeLogbookLine({
             ...line,
             outlet_type: line.outlet_type || oType,
             revenue_type: line.revenue_type || line.outlet_type || oType
         }, 'logbook_line');
+        normalized.customer_name = resolveLineCustomerName(normalized);
+        return normalized;
     });
     const generatedLines = [
-        ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
-        ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction')),
+        ...shiftTransactions.map((line) => {
+            const normalized = normalizeLogbookLine(line, 'cashier_shift_transaction');
+            normalized.customer_name = resolveLineCustomerName(normalized);
+            return normalized;
+        }),
+        ...cashierTransactions.map((line) => {
+            const normalized = normalizeLogbookLine(line, 'cashier_transaction');
+            normalized.customer_name = resolveLineCustomerName(normalized);
+            return normalized;
+        }),
         ...shiftReconciliationExpenses.map((exp) => normalizeLogbookLine({
             ...exp,
             amount: exp.amount,
@@ -8670,13 +8842,17 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                 revenue_type: line.revenue_type || line.outlet_type || oType
             });
         }),
-        ...creditBillRecords.map((line) => normalizeLogbookLine({
-            ...line,
-            amount: line.total_amount ?? line.amount,
-            section: 'credit_bill',
-            payment_method: 'credit_bill',
-            customer_name: line.staff_name || line.customer_name || line.employee_name || 'Credit Customer'
-        })),
+        ...creditBillRecords.map((line) => {
+            const staffExtra = staffBillMap.get(line.bill_number) || staffBillMap.get(line.id);
+            const resolvedCustomer = line.staff_name || staffExtra?.staff_name || line.customer_name || line.employee_name || 'Credit Customer';
+            return normalizeLogbookLine({
+                ...line,
+                amount: line.total_amount || line.amount,
+                section: 'credit_bill',
+                payment_method: 'credit_bill',
+                customer_name: resolvedCustomer
+            });
+        }),
         ...voidAudit.lines.map((line) => normalizeLogbookLine(line, 'voided_transaction'))
     ];
 
@@ -8702,21 +8878,6 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         if (logbookNumber(line.amount) > 0) addAmount(clearedPaymentTotals, line.payment_method, line.amount);
     });
 
-    // Normalized staff credit bills (who the credit was for, and how much).
-    const creditBills = creditBillRecords.map((bill: any) => ({
-        id: bill.id,
-        credit_number: bill.credit_number || bill.reference || null,
-        staff_name: logbookText(bill.staff_name || bill.customer_name || bill.employee_name, 'Staff'),
-        employee_id: bill.employee_id || null,
-        department: bill.department || null,
-        bill_type: bill.bill_type || 'credit_bill',
-        amount: logbookNumber(bill.total_amount ?? bill.amount),
-        balance: logbookNumber(bill.balance_amount ?? bill.balance ?? bill.total_amount ?? bill.amount),
-        status: bill.status || bill.approval_status || 'active',
-        created_at: bill.created_at || bill.credit_date || null
-    }));
-    const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
-
     const allLinePaymentTotals: Record<string, number> = {};
     const saleSections = ['restaurant_sale', 'bar_sale', 'outlet_order', 'petty_cash_expenses'];
     nonVoidLines.forEach((line) => {
@@ -8724,6 +8885,14 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             addAmount(allLinePaymentTotals, line.payment_method, line.amount);
         }
     });
+    // Corporate-account credit is a sale just like a staff credit bill: the account
+    // owes it later. POS corporate bills leave the order credit_bill with no payment
+    // row, so they are added here explicitly (room/conference corporate charges post a
+    // credit_bill payment and are already inside the credit_bill line).
+    const reconciliationExtras: any = shift ? await buildShiftReconciliationExtras(shift) : {};
+    const corporateCreditSummary = reconciliationExtras.corporate_credit || null;
+    const corporatePosTotal = logbookNumber(corporateCreditSummary?.pos_total);
+
     const outletOrderPaymentTotals: Record<string, number> = {};
     const voidedOrderIds = new Set<string>(
         outletOrders
@@ -8736,7 +8905,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     );
     const activeOutletOrders = outletOrders.filter((o: any) => !voidedOrderIds.has(String(o.id)));
     activeOutletOrders.forEach((line: any) => {
-        const method = normalizeLogbookPaymentMethod(line.payment_method ?? line.payment_status);
+        const method = String(line.payment_method || '').toUpperCase().includes('CORPORATE')
+            ? 'corporate_credit'
+            : normalizeLogbookPaymentMethod(line.payment_method ?? line.payment_status);
         const amount = logbookNumber(line.total_amount ?? line.amount_paid ?? line.amount);
         if (amount > 0) addAmount(outletOrderPaymentTotals, method, amount);
     });
@@ -8766,6 +8937,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         return acc;
     }, {});
 
+    payments.corporate_credit = corporatePosTotal;
+
     const totalCash = logbookNumber(payments.cash);
     const totalMpesa = logbookNumber(payments.mpesa);
     const totalCard = logbookNumber(payments.card);
@@ -8777,7 +8950,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const changeGivenFromLines = cashAuditLines.reduce((sum, line) => sum + logbookNumber(line.change_given), 0);
     const totalCashTendered = logbookNumber(breakdown.total_cash_tendered) || cashTenderedFromLines;
     const totalChangeGiven = logbookNumber(breakdown.total_change_given) || changeGivenFromLines;
-    const evidenceTotalSales = totalCash + totalMpesa + totalCard + totalCreditBill + totalBank + totalOther;
+    const evidenceTotalSales = totalCash + totalMpesa + totalCard + totalCreditBill + corporatePosTotal + totalBank + totalOther;
     const netSales = Math.max(
         logbookNumber(breakdown.total_sales ?? shift?.total_sales),
         evidenceTotalSales
@@ -8916,6 +9089,16 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         }
     }
 
+    // Corporate POS credit is revenue of the outlet it was rung on, like any credit bill.
+    let corporateOtherOutletRevenue = 0;
+    Object.entries(corporateCreditSummary?.pos_by_outlet_type || {}).forEach(([outletType, amount]) => {
+        const type = String(outletType).toLowerCase();
+        const value = logbookNumber(amount);
+        if (type.includes('bar')) rawBar += value;
+        else if (['restaurant', 'choma_zone', 'kitchen', 'dining'].includes(type)) rawRestaurant += value;
+        else corporateOtherOutletRevenue += value;
+    });
+
     const barLabel = (shift?.cashier_name || '').toUpperCase().includes('MAIN')
         ? 'Main Bar'
         : (shift?.cashier_name || '').toUpperCase().includes('EXEC')
@@ -8928,6 +9111,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     if (rawRooms > 0) revenueBreakdown.push({ label: 'Rooms', amount: rawRooms });
     if (rawConf > 0) revenueBreakdown.push({ label: 'Conference', amount: rawConf });
     if (rawPool > 0) revenueBreakdown.push({ label: 'Swimming Pool', amount: rawPool });
+    if (corporateOtherOutletRevenue > 0) revenueBreakdown.push({ label: 'Other Outlets (corporate credit)', amount: corporateOtherOutletRevenue });
     if (creditPaymentsReceived > 0) revenueBreakdown.push({ label: 'Credit Bill Settlements', amount: creditPaymentsReceived });
     if (revenueBreakdown.length === 0 && rawOther > 0) {
         revenueBreakdown.push({ label: `${shift?.cashier_name || cashier?.first_name || 'POS'} Sales`, amount: rawOther });
@@ -8938,7 +9122,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         .map(([method, amount]) => ({
             method,
             amount: logbookNumber(amount),
-            count: clearedPaymentLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
+            count: method === 'corporate_credit'
+                ? logbookNumber(corporateCreditSummary?.by_type?.pos?.count)
+                : clearedPaymentLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
                 || nonVoidLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
         }));
     const paymentBreakdownByMethod = new Map(
@@ -9114,6 +9300,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         variance_reason_code: logbookText(shift?.variance_reason_code),
         variance_comment: logbookText(shift?.variance_comment),
         reconciliation_grid: reconciliationGrid,
+        // How this shift's total relates to Sold Items: collected vs credit, non-POS money,
+        // source POS shifts, corporate-account credit and a stored-vs-ledger check.
+        ...reconciliationExtras,
         summary: {
             total_sales: netSales,
             net_sales: netSales,
