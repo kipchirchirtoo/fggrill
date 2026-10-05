@@ -2573,6 +2573,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
       };
     }
 
+    final paymentRef = _paymentBookingRef(_lookupController.text, bill);
+    if (paymentRef.isEmpty) {
+      // Stop BEFORE a credit bill is created or any money is taken for a bill we can't identify.
+      return _snack('This bill has no reference. Reload the bill and try again.');
+    }
+
     setState(() => _loading = true);
     try {
       Map<String, dynamic>? createdCredit;
@@ -2608,7 +2614,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       }
       final paymentResponse =
           await ref.read(cashierRepositoryProvider).processPayment(
-                bookingId: _lookupController.text.trim(),
+                bookingId: paymentRef,
                 amount: amount,
                 method: _backendPaymentMethod(_method),
                 reference: createdCredit == null
@@ -3254,6 +3260,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
     if (totalPaid <= 0) return _snack('Enter a valid payment amount');
 
+    final splitPaymentRef = _paymentBookingRef(_lookupController.text, bill);
+    if (splitPaymentRef.isEmpty) {
+      return _snack('This bill has no reference. Reload the bill and try again.');
+    }
+
     setState(() => _loading = true);
     try {
       final responses = <Map<String, dynamic>>[];
@@ -3299,7 +3310,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
         final response =
             await ref.read(cashierRepositoryProvider).processPayment(
-                  bookingId: _lookupController.text.trim(),
+                  bookingId: splitPaymentRef,
                   amount: amount,
                   method: method,
                   reference: reference,
@@ -9588,6 +9599,19 @@ String _billId(Map<String, dynamic> bill) {
     if (nestedId.isNotEmpty) return nestedId;
   }
   return '';
+}
+
+/// The reference sent to /cashier/pay as `bookingId`. Prefer what the cashier typed/scanned
+/// (the server resolves short codes), but fall back to the loaded bill's own reference: a
+/// bill opened from a list or queue can be loaded while the search box is empty, and the
+/// payment was then sent with an empty ID and rejected ("ID, amount, and method are required").
+String _paymentBookingRef(String typed, Map<String, dynamic>? bill) {
+  final cleaned = typed.trim();
+  if (cleaned.isNotEmpty) return cleaned;
+  if (bill == null) return '';
+  final queueRef = _queueLookupReference(bill);
+  if (queueRef.isNotEmpty) return queueRef;
+  return _billLookupReference(bill);
 }
 
 String _queueLookupReference(Map<String, dynamic> bill) {

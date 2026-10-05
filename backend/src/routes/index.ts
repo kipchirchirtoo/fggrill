@@ -219,6 +219,11 @@ router.use('/cashier-clearance', cashierClearanceRoutes);
 // outlet-pos routes accessible as both /outlet-pos (legacy) and /pos (mobile app expects /pos/outlets)
 router.use('/outlet-pos', outletPosRoutes);
 router.use('/pos', outletPosRoutes);
+// The app calls /finance/pos-profit-loss and /finance/branch-profit-loss (and the router's
+// own header says it lives under /finance). Mounted only at /profit-loss these returned 404,
+// which broke the Branch Accountant Profit & Loss screen. financeRoutes is mounted first, so
+// its /profit-loss and /expense-breakdown handlers still win; keep the old prefix as well.
+router.use('/finance', profitLossRoutes);
 router.use('/profit-loss', profitLossRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen-ledger', kitchenLedgerRoutes);
