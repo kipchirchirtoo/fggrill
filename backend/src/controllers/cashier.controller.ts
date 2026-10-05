@@ -2977,7 +2977,8 @@ export const processCashierPayment = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        let { bookingId } = req.body;
+        const rawId = req.body.bookingId || req.body.orderId || req.body.order_id || req.body.billId || req.body.bill_id || req.body.billNumber || req.body.bill_number || req.body.id;
+        let bookingId = typeof rawId === 'string' ? rawId.trim() : (rawId ? String(rawId).trim() : '');
         const { amount, method, reference } = req.body;
         const paymentPurpose = String(req.body.payment_purpose || req.body.purpose || '').trim();
         // Cash change handed back + cash tendered (recorded on the cleared
