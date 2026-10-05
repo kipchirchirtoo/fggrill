@@ -1081,20 +1081,16 @@ export const recordConsumptionForOrder = async (
 
         const { data: shiftItem } = await supabase
           .from('kitchen_shift_items')
-          .select('id, sold_quantity, opening_stock, additions, spoilage_quantity')
+          .select('id, sold_quantity')
           .eq('shift_id', shiftId)
           .eq('item_sku', input.raw_item_sku)
           .maybeSingle();
         if (shiftItem) {
           const newSold = numberValue(shiftItem.sold_quantity) + rawQtyConsumed;
-          const open = numberValue(shiftItem.opening_stock);
-          const adds = numberValue(shiftItem.additions);
-          const spoil = numberValue(shiftItem.spoilage_quantity);
           await supabase
             .from('kitchen_shift_items')
             .update({
               sold_quantity: newSold,
-              system_closing_stock: open + adds - newSold - spoil,
               updated_at: new Date().toISOString()
             })
             .eq('id', shiftItem.id);
@@ -1112,7 +1108,6 @@ export const recordConsumptionForOrder = async (
               additions: 0,
               sold_quantity: rawQtyConsumed,
               spoilage_quantity: 0,
-              system_closing_stock: -rawQtyConsumed,
               updated_at: new Date().toISOString()
             });
         }
@@ -1179,7 +1174,7 @@ export const recordConsumptionForOrder = async (
 
     const { data: shiftItem, error: shiftItemError } = await supabase
       .from('kitchen_shift_items')
-      .select('id, sold_quantity, opening_stock, additions, spoilage_quantity')
+      .select('id, sold_quantity')
       .eq('shift_id', shiftId)
       .eq('item_sku', inventoryItem.sku)
       .maybeSingle();
@@ -1205,14 +1200,10 @@ export const recordConsumptionForOrder = async (
 
     if (shiftItem) {
       const newSold = numberValue(shiftItem.sold_quantity) + consumedQuantity;
-      const open = numberValue(shiftItem.opening_stock);
-      const adds = numberValue(shiftItem.additions);
-      const spoil = numberValue(shiftItem.spoilage_quantity);
       await supabase
         .from('kitchen_shift_items')
         .update({
           sold_quantity: newSold,
-          system_closing_stock: open + adds - newSold - spoil,
           updated_at: new Date().toISOString()
         })
         .eq('id', shiftItem.id);
@@ -1230,7 +1221,6 @@ export const recordConsumptionForOrder = async (
           additions: 0,
           sold_quantity: consumedQuantity,
           spoilage_quantity: 0,
-          system_closing_stock: -consumedQuantity,
           updated_at: new Date().toISOString()
         });
     }
@@ -2335,53 +2325,15 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
             };
           })
         };
-      }).filter((order: any) => captainOrderActiveStatuses.has(captainOrderNormalizeStatus(order.status)));
-    }
-
-    if (barOrders.length) {
-      for (const order of barOrders) {
-        if (!order.captain_order_already_printed) {
-          const orderItems = order.items;
-          const latestRecalledAt = orderItems
-            .filter((item: any) => item?.is_recalled_item)
-            .map((item: any) => new Date(item?.recalled_at || 0).getTime())
-            .filter((time: number) => Number.isFinite(time))
-            .reduce((max: number, time: number) => Math.max(max, time), 0);
-
-          const latestRecalledAtDate = latestRecalledAt > 0 ? new Date(latestRecalledAt) : null;
-
-          try {
-            const queryText = latestRecalledAtDate
-              ? `UPDATE pos_shift_orders 
-                 SET captain_printed_at = NOW() 
-                 WHERE id = $1 
-                   AND (captain_printed_at IS NULL OR captain_printed_at < $2)
-                 RETURNING id`
-              : `UPDATE pos_shift_orders 
-                 SET captain_printed_at = NOW() 
-                 WHERE id = $1 
-                   AND captain_printed_at IS NULL
-                 RETURNING id`;
-
-            const queryParams = latestRecalledAtDate
-              ? [order.source_id, latestRecalledAtDate.toISOString()]
-              : [order.source_id];
-
-            const updateResult = await db.query(queryText, queryParams);
-
-            if (updateResult.rowCount && updateResult.rowCount > 0) {
-              logger.info(`getBarCaptainOrders - Won print lock for order ${order.order_number} (${order.source_id})`);
-              order.captain_order_already_printed = false;
-            } else {
-              logger.info(`getBarCaptainOrders - Lost print lock for order ${order.order_number} (${order.source_id})`);
-              order.captain_order_already_printed = true;
-            }
-          } catch (updateError) {
-            logger.error(`getBarCaptainOrders - Error securing print lock for order ${order.order_number}:`, updateError);
-            order.captain_order_already_printed = true;
-          }
+      }).filter((order: any) => {
+        const normStatus = captainOrderNormalizeStatus(order.status);
+        if (!captainOrderActiveStatuses.has(normStatus)) return false;
+        // If an order is already paid and already printed, it has been fulfilled and doesn't need to stay on active captain feed
+        if (order.payment_status === 'paid' && order.order_status === 'paid' && order.captain_order_already_printed) {
+          return false;
         }
-      }
+        return true;
+      });
     }
 
     logger.info(`getBarCaptainOrders - Returning ${barOrders.length} orders after filtering`);

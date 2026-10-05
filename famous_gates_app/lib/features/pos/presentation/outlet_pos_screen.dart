@@ -2653,35 +2653,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
   }
 
-  // Drinks in these categories can be served warm or cold - the waiter picks
-  // one when adding to cart, and it rides through to the bar captain order.
-  static const _temperatureCategories = {
-    'soft drinks',
-    'beers',
-    'canned beers',
-  };
-
-  Future<String?> _pickDrinkTemperature(String itemName) {
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(itemName),
-        content: const Text('Serve warm or cold?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel')),
-          OutlinedButton(
-              onPressed: () => Navigator.of(context).pop('Warm'),
-              child: const Text('Warm')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop('Cold'),
-              child: const Text('Cold')),
-        ],
-      ),
-    );
-  }
-
+  // Drinks (beers, sodas, water, soft drinks, ciders, energy drinks) can be served
+  // warm or cold - the waiter picks one when adding to cart, and it rides through
+  // as line item notes to the bar captain order and KDS.
   Future<void> _addToCart(OutletPosItem item) async {
     if (_shift == null) {
       AppNotifier.showSnackBar(
@@ -2694,8 +2668,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
 
     String? notes;
-    if (_temperatureCategories.contains(item.category.trim().toLowerCase())) {
-      notes = await _pickDrinkTemperature(item.name);
+    if (_shouldPromptDrinkTemperature(item)) {
+      notes = await _pickDrinkTemperature(context, item.name);
       if (notes == null) return; // cancelled
     }
 
@@ -3322,7 +3296,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         if (query.isNotEmpty) {
           final orderNum = order.orderNumber.toLowerCase();
           final shortCode = (order.shortCode ?? '').toLowerCase();
-          final customer = (order.customerName ?? '').toLowerCase();
+          final customer = order.customerName.toLowerCase();
           final waiter = (order.waiterName ?? '').toLowerCase();
           final table = (order.tableNumber ?? '').toLowerCase();
           final room = (order.roomNumber ?? '').toLowerCase();
@@ -4152,6 +4126,352 @@ class _ItemTile extends StatelessWidget {
   }
 }
 
+/// Determines whether a POS item is a beer, cider, soda, mineral water,
+/// soft drink, energy drink, or cold beverage that can be served warm or cold.
+/// Accurately excludes hot drinks, food items, services, and straight spirits tots/bottles.
+bool _shouldPromptDrinkTemperature(OutletPosItem item) {
+  final cat = item.category.trim().toLowerCase();
+  final name = item.name.trim().toLowerCase();
+
+  // 1. Definite hot drinks - NEVER prompt warm/cold (they are served hot)
+  if (cat.contains('hot') ||
+      cat.contains('tea') ||
+      cat.contains('coffee') ||
+      cat.contains('chocolate') ||
+      cat.contains('milo') ||
+      cat.contains('dawa') ||
+      cat.contains('porridge') ||
+      name.startsWith('tea') ||
+      name.contains('black tea') ||
+      name.contains('african tea') ||
+      name.contains('masala tea') ||
+      name.contains('herbal tea') ||
+      name.contains('green tea') ||
+      name.contains('coffee') ||
+      name.contains('espresso') ||
+      name.contains('cappuccino') ||
+      name.contains('latte') ||
+      name.contains('americano') ||
+      name.contains('hot chocolate') ||
+      name.contains('milo') ||
+      name.contains('dawa') ||
+      name.contains('porridge') ||
+      name.contains('hot milk') ||
+      name.contains('hot water')) {
+    return false;
+  }
+
+  // 2. Definite food / kitchen / service items - NEVER prompt
+  if (cat.contains('beef') ||
+      cat.contains('chicken') ||
+      cat.contains('fish') ||
+      cat.contains('meat') ||
+      cat.contains('mbuzi') ||
+      cat.contains('goat') ||
+      cat.contains('pork') ||
+      cat.contains('mutton') ||
+      cat.contains('liver') ||
+      cat.contains('matumbo') ||
+      cat.contains('accompaniment') ||
+      cat.contains('bakery') ||
+      cat.contains('pastr') ||
+      cat.contains('bread') ||
+      cat.contains('chapati') ||
+      cat.contains('breakfast') ||
+      cat.contains('buffet') ||
+      cat.contains('choma') ||
+      cat.contains('dessert') ||
+      cat.contains('egg') ||
+      cat.contains('snack') ||
+      cat.contains('soup') ||
+      cat.contains('pasta') ||
+      cat.contains('pizza') ||
+      cat.contains('platter') ||
+      cat.contains('salad') ||
+      cat.contains('vegetable') ||
+      cat.contains('staple') ||
+      cat.contains('traditional') ||
+      cat.contains('car wash') ||
+      cat.contains('carwash') ||
+      cat.contains('facial') ||
+      cat.contains('massage') ||
+      cat.contains('nails') ||
+      cat.contains('sauna') ||
+      cat.contains('pool') ||
+      cat.contains('spa') ||
+      cat.contains('waxing') ||
+      cat.contains('print')) {
+    return false;
+  }
+
+  // 3. Hard spirits bottles & tots - exclude unless mixed with soda / tonic / water
+  const hardSpiritsCategories = {
+    'whisky',
+    'gin',
+    'vodka',
+    'brandy',
+    'cognac',
+    'rum',
+    'liqueur',
+    'liqueurs',
+    'spirits',
+    'tots',
+    'tot',
+    'brandy & cognac',
+    'brandy/cognac',
+    'vodka, rum & other spirits',
+    'rum & liquor',
+  };
+  if (hardSpiritsCategories.contains(cat) &&
+      !name.contains('soda') &&
+      !name.contains('water') &&
+      !name.contains('tonic') &&
+      !name.contains('cider')) {
+    return false;
+  }
+
+  // 4. Non-drink supplies / packaging
+  if (name.contains('container') ||
+      name.contains('empty bottle') ||
+      name.contains('crate')) {
+    return false;
+  }
+
+  // 5. Category matches for beverage types that can be warm or cold
+  if (cat.contains('beer') ||
+      cat.contains('cider') ||
+      cat.contains('soda') ||
+      cat.contains('water') ||
+      cat.contains('soft drink') ||
+      cat.contains('cold beverage') ||
+      cat.contains('energy drink') ||
+      cat.contains('juice') ||
+      cat.contains('rtd')) {
+    return true;
+  }
+
+  // 6. Name-based keyword matches for drinks (handles items under 'Executive Bar', 'Main Bar', 'Beverages', 'Other', etc.)
+  const drinkKeywords = [
+    // Beers & Ciders
+    'beer', 'lager', 'cider', 'ale', 'draught', 'draft',
+    'tusker', 'guinness', 'guiness', 'white cap', 'whitecap',
+    'heineken', 'pilsner', 'balozi', 'b.ice', 'b. ice', 'black ice',
+    'senator', 'ko ', 'ko lager', 'smirnoff ice', 'smirnoff black',
+    'snapp', 'savanna', 'hunters gold', 'hunters dry', 'hunter',
+    'flying fish', 'corona', 'budweiser', 'stella artois', 'tuborg',
+    'carlsberg', 'windhoek',
+    // Sodas
+    'soda', 'coke', 'coca cola', 'coca-cola', 'fanta', 'sprite',
+    'stoney', 'tangawizi', 'krest', 'schweppes', 'ginger ale',
+    'tonic water', 'club soda', 'bitter lemon', 'novida', 'alvaro',
+    // Waters
+    'water', 'dasani', 'keringet', 'aquamist', 'highland',
+    'quench', 'mount kenya', 'mineral water', 'still water',
+    'sparkling water',
+    // Soft drinks & Juices & Energy drinks
+    'energy drink', 'red bull', 'redbull', 'monster', 'predator',
+    'power play', 'sting', 'minute maid', 'del monte', 'pick n peel',
+    'juice', 'smoothie',
+  ];
+
+  for (final kw in drinkKeywords) {
+    if (name.contains(kw)) return true;
+  }
+
+  return false;
+}
+
+/// Shows a tactile touch-friendly popup allowing the waiter or cashier to pick
+/// whether a beverage should be served Warm or Cold.
+Future<String?> _pickDrinkTemperature(BuildContext context, String itemName) {
+  return showDialog<String>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blueGrey.shade50,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.local_drink_rounded,
+              color: Colors.blueGrey.shade700,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  itemName,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Serve Warm or Cold?',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: () => Navigator.of(dialogCtx).pop('Cold'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 20, horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF38BDF8),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFBAE6FD),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.ac_unit_rounded,
+                            size: 32,
+                            color: Color(0xFF0369A1),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'COLD',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: Color(0xFF0369A1),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Chilled',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF0284C7),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Material(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: () => Navigator.of(dialogCtx).pop('Warm'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 20, horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFFFB923C),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFED7AA),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.wb_sunny_rounded,
+                            size: 32,
+                            color: Color(0xFFC2410C),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'WARM',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: Color(0xFFC2410C),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Room Temp',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFEA580C),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(null),
+          child: Text(
+            'Cancel',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _CartPanel extends StatelessWidget {
   const _CartPanel({
     required this.cart,
@@ -4205,37 +4525,87 @@ class _CartPanel extends StatelessWidget {
                 children: [
                   for (final item in cart)
                     ListTile(
-                      title: item.item.hasOffer
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                    child: Text(item.item.name,
-                                        overflow: TextOverflow.ellipsis)),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF15803D),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text('OFFER',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.w900)),
+                      title: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.item.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (item.notes != null &&
+                              item.notes!.trim().isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: item.notes == 'Cold'
+                                    ? const Color(0xFFE0F2FE)
+                                    : const Color(0xFFFFF7ED),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: item.notes == 'Cold'
+                                      ? const Color(0xFF38BDF8)
+                                      : const Color(0xFFFB923C),
+                                  width: 0.8,
                                 ),
-                              ],
-                            )
-                          : Text(item.item.name),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    item.notes == 'Cold'
+                                        ? Icons.ac_unit_rounded
+                                        : Icons.wb_sunny_rounded,
+                                    size: 11,
+                                    color: item.notes == 'Cold'
+                                        ? const Color(0xFF0369A1)
+                                        : const Color(0xFFC2410C),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    item.notes!.toUpperCase(),
+                                    style: TextStyle(
+                                      color: item.notes == 'Cold'
+                                          ? const Color(0xFF0369A1)
+                                          : const Color(0xFFC2410C),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (item.item.hasOffer) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF15803D),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('OFFER',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w900)),
+                            ),
+                          ],
+                        ],
+                      ),
                       subtitle: Text(
                         [
                           formatKes(item.lineTotal),
                           if (item.item.hasOffer)
                             '${item.item.offerLabel ?? 'Offer'} · was ${formatKes(item.item.sellingPrice * item.quantity)}',
                           if (item.notes != null &&
-                              item.notes!.trim().isNotEmpty)
+                              item.notes!.trim().isNotEmpty &&
+                              item.notes != 'Warm' &&
+                              item.notes != 'Cold')
                             item.notes!.trim(),
                         ].join('  •  '),
                       ),
@@ -5064,11 +5434,20 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
 
   double get _difference => _newTotal - _oldTotal;
 
-  void _addToNewCart(OutletPosItem item) {
-    final index = _newCart.indexWhere((entry) => entry.item.id == item.id);
+  Future<void> _addToNewCart(OutletPosItem item) async {
+    String? notes;
+    if (_shouldPromptDrinkTemperature(item)) {
+      notes = await _pickDrinkTemperature(context, item.name);
+      if (notes == null) return; // cancelled
+    }
+    final index = _newCart.indexWhere(
+        (entry) => entry.item.id == item.id && entry.notes == notes);
     setState(() {
       if (index == -1) {
-        _newCart = [..._newCart, OutletCartItem(item: item, quantity: 1)];
+        _newCart = [
+          ..._newCart,
+          OutletCartItem(item: item, quantity: 1, notes: notes)
+        ];
       } else {
         _newCart = [..._newCart]..[index] =
             _newCart[index].copyWith(quantity: _newCart[index].quantity + 1);
@@ -5076,15 +5455,14 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
     });
   }
 
-  void _setNewCartQty(String itemId, int qty) {
+  void _setNewCartQty(OutletCartItem entry, int qty) {
     setState(() {
+      final index = _newCart.indexOf(entry);
+      if (index == -1) return;
       if (qty <= 0) {
-        _newCart = _newCart.where((entry) => entry.item.id != itemId).toList();
+        _newCart = [..._newCart]..removeAt(index);
       } else {
-        _newCart = _newCart
-            .map((entry) =>
-                entry.item.id == itemId ? entry.copyWith(quantity: qty) : entry)
-            .toList();
+        _newCart = [..._newCart]..[index] = entry.copyWith(quantity: qty);
       }
     });
   }
@@ -5263,21 +5641,67 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
               const SizedBox(height: 8),
               ..._newCart.map((entry) => ListTile(
                     dense: true,
-                    title: Text(entry.item.name),
-                    subtitle: Text(formatKes(entry.item.sellingPrice)),
+                    title: Row(
+                      children: [
+                        Flexible(
+                          child: Text(entry.item.name,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        if (entry.notes != null &&
+                            entry.notes!.trim().isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: entry.notes == 'Cold'
+                                  ? const Color(0xFFE0F2FE)
+                                  : const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: entry.notes == 'Cold'
+                                    ? const Color(0xFF38BDF8)
+                                    : const Color(0xFFFB923C),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              entry.notes!.toUpperCase(),
+                              style: TextStyle(
+                                color: entry.notes == 'Cold'
+                                    ? const Color(0xFF0369A1)
+                                    : const Color(0xFFC2410C),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(
+                      [
+                        formatKes(entry.item.sellingPrice),
+                        if (entry.notes != null &&
+                            entry.notes!.trim().isNotEmpty &&
+                            entry.notes != 'Warm' &&
+                            entry.notes != 'Cold')
+                          entry.notes!.trim(),
+                      ].join(' • '),
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           icon: const Icon(Icons.remove),
                           onPressed: () =>
-                              _setNewCartQty(entry.item.id, entry.quantity - 1),
+                              _setNewCartQty(entry, entry.quantity - 1),
                         ),
                         Text('${entry.quantity}'),
                         IconButton(
                           icon: const Icon(Icons.add),
                           onPressed: () =>
-                              _setNewCartQty(entry.item.id, entry.quantity + 1),
+                              _setNewCartQty(entry, entry.quantity + 1),
                         ),
                       ],
                     ),

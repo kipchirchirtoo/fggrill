@@ -49,6 +49,7 @@ export interface InventoryLocationInput {
 export interface InventoryItemInput {
   id?: string;
   sku?: string;
+  branchId?: number | null;
   sourceTable?: string;
   sourceItemKey?: string;
   itemName?: string;

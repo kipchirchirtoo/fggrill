@@ -84,34 +84,84 @@ async function ensureLocation(
     locationType = 'in_transit';
   }
 
-  const result = await client.query(
-    `
-      INSERT INTO inventory_locations (
-        branch_id, location_code, name, location_name, location_type, department_code, outlet_id, metadata
-      )
-      VALUES ($1, $2, $3, $3, $4, $5, $6, $7::jsonb)
-      ON CONFLICT (location_code)
-      DO UPDATE SET
-        name = EXCLUDED.name,
-        location_name = EXCLUDED.location_name,
-        location_type = EXCLUDED.location_type,
-        department_code = COALESCE(EXCLUDED.department_code, inventory_locations.department_code),
-        outlet_id = COALESCE(EXCLUDED.outlet_id, inventory_locations.outlet_id),
-        metadata = inventory_locations.metadata || EXCLUDED.metadata
-      RETURNING *
-    `,
-    [
-      input.branchId ?? null,
-      locationCode,
-      locationName,
-      locationType,
-      input.departmentCode ?? null,
-      input.outletId ?? null,
-      JSON.stringify({ ...(input.metadata || {}), created_by: actorId }),
-    ]
-  );
+  const branchId = input.branchId ?? null;
+  const outletId = input.outletId && UUID_RE.test(input.outletId) ? input.outletId : null;
 
-  return result.rows[0];
+  // 1. Look up existing location
+  const found = await client.query(
+    `
+      SELECT * FROM inventory_locations
+      WHERE (branch_id IS NOT DISTINCT FROM $1 AND location_code = $2)
+         OR (branch_id IS NOT DISTINCT FROM $1 AND location_type = $4 AND location_type IN ('branch_store', 'central_store'))
+         OR (outlet_id IS NOT NULL AND outlet_id = $3)
+         OR location_code = $2
+      ORDER BY CASE 
+        WHEN branch_id IS NOT DISTINCT FROM $1 AND location_code = $2 THEN 0 
+        WHEN branch_id IS NOT DISTINCT FROM $1 AND location_type = $4 AND location_type IN ('branch_store', 'central_store') THEN 1
+        WHEN outlet_id IS NOT NULL AND outlet_id = $3 THEN 2
+        ELSE 3 
+      END
+      LIMIT 1
+    `,
+    [branchId, locationCode, outletId, locationType]
+  );
+  if (found.rows[0]) {
+    return found.rows[0];
+  }
+
+  // 2. If not found, insert.
+  // Note: the unique constraint on inventory_locations is (branch_id, location_code).
+  // If branchId is not null, ON CONFLICT (branch_id, location_code) applies.
+  // If branchId is null, standard INSERT RETURNING * is safe because existence was checked.
+  if (branchId !== null) {
+    const result = await client.query(
+      `
+        INSERT INTO inventory_locations (
+          branch_id, location_code, name, location_name, location_type, department_code, outlet_id, metadata
+        )
+        VALUES ($1, $2, $3, $3, $4, $5, $6, $7::jsonb)
+        ON CONFLICT (branch_id, location_code)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          location_name = EXCLUDED.location_name,
+          location_type = EXCLUDED.location_type,
+          department_code = COALESCE(EXCLUDED.department_code, inventory_locations.department_code),
+          outlet_id = COALESCE(EXCLUDED.outlet_id, inventory_locations.outlet_id),
+          metadata = inventory_locations.metadata || EXCLUDED.metadata
+        RETURNING *
+      `,
+      [
+        branchId,
+        locationCode,
+        locationName,
+        locationType,
+        input.departmentCode ?? null,
+        outletId,
+        JSON.stringify({ ...(input.metadata || {}), created_by: actorId }),
+      ]
+    );
+    return result.rows[0];
+  } else {
+    const result = await client.query(
+      `
+        INSERT INTO inventory_locations (
+          branch_id, location_code, name, location_name, location_type, department_code, outlet_id, metadata
+        )
+        VALUES ($1, $2, $3, $3, $4, $5, $6, $7::jsonb)
+        RETURNING *
+      `,
+      [
+        null,
+        locationCode,
+        locationName,
+        locationType,
+        input.departmentCode ?? null,
+        outletId,
+        JSON.stringify({ ...(input.metadata || {}), created_by: actorId }),
+      ]
+    );
+    return result.rows[0];
+  }
 }
 
 async function ensureItem(
@@ -125,6 +175,21 @@ async function ensureItem(
   }
 
   const sku = requiredText(input.sku || input.sourceItemKey || input.id, 'Item SKU');
+  const branchId = input.branchId ?? null;
+
+  // 1. Look up existing inventory item
+  const existing = await client.query(
+    `
+      SELECT * FROM inventory_items
+      WHERE sku = $1 AND (branch_id IS NOT DISTINCT FROM $2 OR branch_id IS NULL)
+      ORDER BY CASE WHEN branch_id IS NOT DISTINCT FROM $2 THEN 0 ELSE 1 END
+      LIMIT 1
+    `,
+    [sku, branchId]
+  );
+  if (existing.rows[0]) {
+    return existing.rows[0];
+  }
 
   let itemName = input.itemName || '';
   let description = input.description || null;
@@ -159,40 +224,69 @@ async function ensureItem(
   // Re-check tracking_mode with resolved isPerishable
   trackingMode = input.trackingMode || (isPerishable ? 'batch' : 'standard');
 
-  const result = await client.query(
-    `
-      INSERT INTO inventory_items (
-        sku, item_name, description, category, unit,
-        is_perishable, tracking_mode, default_unit_cost, metadata
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-      ON CONFLICT (sku)
-      DO UPDATE SET
-        item_name = EXCLUDED.item_name,
-        description = COALESCE(EXCLUDED.description, inventory_items.description),
-        category = COALESCE(EXCLUDED.category, inventory_items.category),
-        unit = EXCLUDED.unit,
-        is_perishable = EXCLUDED.is_perishable,
-        tracking_mode = EXCLUDED.tracking_mode,
-        default_unit_cost = EXCLUDED.default_unit_cost,
-        metadata = inventory_items.metadata || EXCLUDED.metadata,
-        updated_at = NOW()
-      RETURNING *
-    `,
-    [
-      sku,
-      itemName,
-      description,
-      category,
-      unit,
-      isPerishable,
-      trackingMode,
-      unitCost,
-      JSON.stringify(input.metadata || {})
-    ]
-  );
-
-  return result.rows[0];
+  // The unique constraint on inventory_items is (sku, branch_id).
+  // If branchId is not null, ON CONFLICT (sku, branch_id) applies.
+  // If branchId is null, standard insert returning * is safe because existence was checked.
+  if (branchId !== null) {
+    const result = await client.query(
+      `
+        INSERT INTO inventory_items (
+          sku, branch_id, item_name, description, category, unit,
+          is_perishable, tracking_mode, default_unit_cost, metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        ON CONFLICT (sku, branch_id)
+        DO UPDATE SET
+          item_name = EXCLUDED.item_name,
+          description = COALESCE(EXCLUDED.description, inventory_items.description),
+          category = COALESCE(EXCLUDED.category, inventory_items.category),
+          unit = EXCLUDED.unit,
+          is_perishable = EXCLUDED.is_perishable,
+          tracking_mode = EXCLUDED.tracking_mode,
+          default_unit_cost = EXCLUDED.default_unit_cost,
+          metadata = inventory_items.metadata || EXCLUDED.metadata,
+          updated_at = NOW()
+        RETURNING *
+      `,
+      [
+        sku,
+        branchId,
+        itemName,
+        description,
+        category,
+        unit,
+        isPerishable,
+        trackingMode,
+        unitCost,
+        JSON.stringify(input.metadata || {})
+      ]
+    );
+    return result.rows[0];
+  } else {
+    const result = await client.query(
+      `
+        INSERT INTO inventory_items (
+          sku, branch_id, item_name, description, category, unit,
+          is_perishable, tracking_mode, default_unit_cost, metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        RETURNING *
+      `,
+      [
+        sku,
+        null,
+        itemName,
+        description,
+        category,
+        unit,
+        isPerishable,
+        trackingMode,
+        unitCost,
+        JSON.stringify(input.metadata || {})
+      ]
+    );
+    return result.rows[0];
+  }
 }
 
 async function ensureBatch(
@@ -276,14 +370,13 @@ async function computeBalance(
 
   const reservedResult = await client.query(
     `
-      SELECT COALESCE(SUM(quantity - fulfilled_quantity), 0)::numeric AS reserved_quantity
+      SELECT COALESCE(SUM(quantity - COALESCE(fulfilled_quantity, 0)), 0)::numeric AS reserved_quantity
       FROM inventory_reservations
       WHERE item_id = $1
         AND location_id = $2
-        AND (($3::uuid IS NULL AND batch_id IS NULL) OR batch_id = $3::uuid)
         AND status = 'reserved'
     `,
-    [itemId, locationId, batchId]
+    [itemId, locationId]
   );
 
   const currentQuantity = Math.max(0, numberValue(currentResult.rows[0]?.current_quantity));
@@ -408,13 +501,19 @@ async function insertAudit(
     metadata?: JsonRecord | null;
   }
 ) {
+  const meta = {
+    ...(input.metadata || {}),
+    item_id: input.itemId ?? null,
+    location_id: input.locationId ?? null,
+  };
+
   await client.query(
     `
       INSERT INTO inventory_audit_logs (
-        branch_id, actor_id, action_type, entity_type, entity_id, item_id, location_id,
+        branch_id, actor_id, action_type, entity_type, entity_id,
         before_value, after_value, reason, source_document_type, source_document_reference, metadata
       )
-      VALUES ($1, $2, $3, $4, $5, $6::uuid, $7::uuid, $8::jsonb, $9::jsonb, $10, $11, $12, $13::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11::jsonb)
     `,
     [
       input.branchId ?? null,
@@ -422,14 +521,12 @@ async function insertAudit(
       input.actionType,
       input.entityType,
       input.entityId ?? null,
-      input.itemId ?? null,
-      input.locationId ?? null,
       JSON.stringify(input.beforeValue ?? null),
       JSON.stringify(input.afterValue ?? null),
       input.reason,
       input.documentType ?? null,
       input.documentReference ?? null,
-      JSON.stringify(input.metadata || {})
+      JSON.stringify(meta)
     ]
   );
 }
@@ -449,13 +546,14 @@ async function createAlert(
     metadata?: JsonRecord | null;
   }
 ) {
+  const documentId = input.documentReference && UUID_RE.test(input.documentReference) ? input.documentReference : null;
   await client.query(
     `
       INSERT INTO inventory_alerts (
-        branch_id, item_id, location_id, alert_type, severity, message,
-        source_document_type, source_document_reference, created_by, metadata
+        branch_id, item_id, location_id, alert_type, severity, status, message,
+        source_document_type, source_document_id
       )
-      VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::uuid, $10::jsonb)
+      VALUES ($1, $2::uuid, $3::uuid, $4, $5, 'open', $6, $7, $8::uuid)
     `,
     [
       input.branchId ?? null,
@@ -465,9 +563,7 @@ async function createAlert(
       input.severity,
       input.message,
       input.documentType ?? null,
-      input.documentReference ?? null,
-      input.actorId ?? null,
-      JSON.stringify(input.metadata || {})
+      documentId
     ]
   );
 }
@@ -673,26 +769,24 @@ export async function reserveStock(input: InventoryReservationInput, actorId: st
     const reservation = await client.query(
       `
         INSERT INTO inventory_reservations (
-          reservation_number, item_id, location_id, batch_id, quantity,
-          source_document_type, source_document_reference, source_document_number,
-          reason, reserved_by, expires_at, metadata
+          reservation_number, branch_id, item_id, location_id, quantity,
+          source_document_type, source_document_number,
+          reason, reserved_by, expires_at
         )
-        VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11::timestamptz, $12::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz)
         RETURNING *
       `,
       [
         reservationNumber(),
+        location.branch_id ?? null,
         item.id,
         location.id,
-        batch?.id || null,
         quantity,
         sourceDocumentType,
-        sourceDocumentReference,
         input.sourceDocumentNumber ?? null,
         reason,
         actorId,
-        input.expiresAt ?? null,
-        JSON.stringify(input.metadata || {})
+        input.expiresAt ?? null
       ]
     );
 

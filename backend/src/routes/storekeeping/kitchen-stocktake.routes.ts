@@ -16,19 +16,33 @@ router.use(protect);
 
 const viewRoles = [
     UserRole.SUPER_ADMIN,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
     UserRole.CENTRAL_STOREKEEPER,
     UserRole.BRANCH_STOREKEEPER,
     UserRole.STOREKEEPER,
     UserRole.KITCHEN_OPERATIONS,
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
     UserRole.AUDITOR,
+    UserRole.RESTAURANT_CASHIER,
+    UserRole.CASHIER,
+    UserRole.HEAD_CHEF,
+    UserRole.SOUS_CHEF,
 ];
 
 const recordRoles = [
+    UserRole.SUPER_ADMIN,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
     UserRole.BRANCH_STOREKEEPER,
     UserRole.STOREKEEPER,
-    UserRole.KITCHEN_OPERATIONS
+    UserRole.KITCHEN_OPERATIONS,
+    UserRole.HEAD_CHEF,
+    UserRole.SOUS_CHEF,
+    UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
 ];
 
 const accountantRoles = [UserRole.SUPER_ADMIN, UserRole.BRANCH_ACCOUNTANT];

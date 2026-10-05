@@ -1,3 +1,5 @@
+import '../../../auth/domain/auth_notifier.dart';
+import '../../../../core/utils/api_error_message.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -265,6 +267,10 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         _updateState((current) => current.copyWith(currentShift: shiftInfo));
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
+        final user = _ref.read(authNotifierProvider).valueOrNull;
+        final branchId = user?.branchId;
+        final branchName = user?.branchName ?? '';
+
         loadedItems = records
             .where((r) {
               final category =
@@ -278,6 +284,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 sku: sku,
                 name: name,
                 storeType: storeType,
+                branchId: branchId,
+                branchName: branchName,
               );
             })
             .map((r) {
@@ -375,7 +383,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       if (!mounted) return;
       _updateState((current) => current.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to load stocktake data: $e',
+        errorMessage: 'Failed to load stocktake data: ${apiErrorMessage(e)}',
       ));
     }
   }

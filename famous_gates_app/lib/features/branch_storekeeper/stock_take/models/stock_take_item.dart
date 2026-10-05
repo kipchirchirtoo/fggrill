@@ -120,12 +120,21 @@ bool isAllowedStoreStocktakeItem({
   required String sku,
   required String name,
   String storeType = '',
+  Object? branchId,
+  String branchName = '',
 }) {
+  final normalizedCategory = _normalizedInventoryText(category);
+  if (normalizedCategory.contains('kitchen menu')) return false;
+
   final normalizedStoreType = _normalizedInventoryText(storeType);
-  if (normalizedStoreType == 'bar store') return false;
-  if (normalizedStoreType.isNotEmpty && normalizedStoreType != 'foodstuffs') {
+  if (normalizedStoreType == 'bar store' ||
+      normalizedStoreType == 'bar' ||
+      normalizedStoreType == 'kitchen') {
     return false;
   }
+
+  final normalizedSku = _normalizedInventoryText(sku);
+  if (normalizedSku.startsWith('fgb')) return false;
 
   if (_hasStoreStocktakeBarKeyword(category) ||
       _hasStoreStocktakeBarKeyword(sku) ||

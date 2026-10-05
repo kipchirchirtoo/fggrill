@@ -30,8 +30,19 @@ const isStoreCountableItem = (i: any): boolean => {
     if (!i) return false;
     const storeType = String(i.store_type || '').toLowerCase();
     if (NON_STORE_TYPES.includes(storeType)) return false;
+
     const category = String(i.category || '').trim().toLowerCase();
     if (category === 'kitchen menu') return false;
+
+    const sku = String(i.sku || i.item_sku || '').toUpperCase();
+    if (sku.startsWith('FGB-') || sku.startsWith('FG-')) return false;
+    if (sku.includes('BEER') || sku.includes('WINE') || sku.includes('WHISKY') || sku.includes('SPIRIT') || sku.includes('TOTS') || sku.includes('DRINKS')) return false;
+
+    const name = String(i.item_name || i.name || '').toUpperCase();
+    if (name.includes('BEER') || name.includes('WINE') || name.includes('WHISKY') || name.includes('VODKA') || name.includes('GIN') || name.includes('BRANDY') || name.includes('RUM') || name.includes('TEQUILA') || name.includes('CIDER') || name.includes('TOTS') || name.includes('LIQUEUR')) {
+        return false;
+    }
+
     return true;
 };
 
@@ -300,6 +311,7 @@ const syncStoreStocktakeToStockCounts = async (
 
 export const listStoreStocktakes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+        console.log('>>> [STORE STOCKTAKE REQUEST]', req.url, 'query:', req.query, 'user:', req.user?.email, req.user?.role, req.user?.branch_id);
         const { branch_id, date, stocktake_date, status, history } = req.query;
         if (!branch_id) { res.status(400).json({ success: false, message: 'branch_id is required' }); return; }
         const branchId = Number(branch_id);
@@ -360,10 +372,23 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
-        // Query store-countable items from simple_items, inventory_items, and branch_stock
-        const [{ data: branchStockRows }, { data: simpleItems }, { data: invItems }] = await Promise.all([
+        // Query store-countable items from branch_stock, branch-scoped simple_items, inventory_balances, and inventory_items
+        const { data: branchStoreLoc } = await supabase
+            .from('inventory_locations')
+            .select('id')
+            .eq('branch_id', branchId)
+            .eq('location_type', 'branch_store')
+            .eq('is_active', true)
+            .maybeSingle();
+
+        const branchStoreLocId = branchStoreLoc?.id;
+
+        const [{ data: branchStockRows }, { data: branchSimpleItems }, { data: branchBalances }, { data: invItems }] = await Promise.all([
             supabase.from('branch_stock').select('item_sku, quantity').eq('branch_id', branchId),
-            supabase.from('simple_items').select('id, sku, item_sku, item_name, unit, unit_of_measure, category, store_type, quantity, cost_price').or(`branch_id.eq.${branchId},branch_id.is.null`).eq('is_active', true),
+            supabase.from('simple_items').select('id, sku, item_sku, item_name, unit, unit_of_measure, category, store_type, quantity, cost_price').eq('branch_id', branchId).eq('is_active', true),
+            branchStoreLocId
+                ? supabase.from('inventory_balances').select('item_id, current_quantity').eq('location_id', branchStoreLocId)
+                : Promise.resolve({ data: [] }),
             supabase.from('inventory_items').select('id, sku, item_name, unit, category, store_type, default_unit_cost').eq('is_active', true)
         ]);
 
@@ -373,12 +398,49 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             if (r.item_sku) stockBySkuMap.set(r.item_sku, num(r.quantity));
         }
 
-        const invMap = new Map<string, any>();
-        for (const item of (invItems || []).filter(isStoreCountableItem)) {
-            if (item.sku) invMap.set(item.sku, item);
+        // Set of all SKUs registered / stocked to this specific branch
+        const branchRegisteredSkus = new Set<string>();
+        for (const r of stockRows) {
+            if (r.item_sku) branchRegisteredSkus.add(r.item_sku);
+        }
+        for (const s of (branchSimpleItems || [])) {
+            const sku = s.sku || s.item_sku;
+            if (sku) {
+                branchRegisteredSkus.add(sku);
+                if (!stockBySkuMap.has(sku)) stockBySkuMap.set(sku, num(s.quantity));
+            }
         }
 
-        for (const item of (simpleItems || []).filter(isStoreCountableItem)) {
+        const itemIdToSku = new Map<string, string>();
+        for (const item of (invItems || [])) {
+            if (item.id && item.sku) itemIdToSku.set(String(item.id), String(item.sku));
+        }
+        for (const b of ((branchBalances as any[]) || [])) {
+            const sku = itemIdToSku.get(String(b.item_id));
+            if (sku) {
+                branchRegisteredSkus.add(sku);
+                if (!stockBySkuMap.has(sku)) stockBySkuMap.set(sku, num(b.current_quantity));
+            }
+        }
+
+        const allInvBySku = new Map<string, any>();
+        for (const item of (invItems || [])) {
+            if (item.sku) allInvBySku.set(item.sku, item);
+        }
+        for (const item of (branchSimpleItems || [])) {
+            const sku = item.sku || item.item_sku;
+            if (sku && !allInvBySku.has(sku)) allInvBySku.set(sku, item);
+        }
+
+        const invMap = new Map<string, any>();
+        // Only include store-countable items that are actually registered to this branch
+        for (const item of (invItems || []).filter(isStoreCountableItem)) {
+            if (item.sku && branchRegisteredSkus.has(item.sku)) {
+                invMap.set(item.sku, item);
+            }
+        }
+
+        for (const item of (branchSimpleItems || []).filter(isStoreCountableItem)) {
             const sku = item.sku || item.item_sku;
             if (sku && !invMap.has(sku)) {
                 invMap.set(sku, {
@@ -391,22 +453,26 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
                     quantity: num(item.quantity)
                 });
             }
-            if (sku && item.quantity != null && !stockBySkuMap.has(sku)) {
-                stockBySkuMap.set(sku, num(item.quantity));
-            }
         }
 
         for (const r of stockRows) {
-            if (r.item_sku && !invMap.has(r.item_sku)) {
-                invMap.set(r.item_sku, {
-                    id: r.item_sku,
-                    sku: r.item_sku,
-                    item_name: r.item_sku,
-                    unit: 'units',
-                    category: 'GENERAL',
-                    store_type: 'general_store',
-                    quantity: num(r.quantity)
-                });
+            if (r.item_sku && branchRegisteredSkus.has(r.item_sku) && !invMap.has(r.item_sku)) {
+                const known = allInvBySku.get(r.item_sku);
+                if (known && !isStoreCountableItem(known)) {
+                    continue;
+                }
+                const candidate = { item_sku: r.item_sku, store_type: known?.store_type || 'general_store', category: known?.category };
+                if (isStoreCountableItem(candidate)) {
+                    invMap.set(r.item_sku, {
+                        id: r.item_sku,
+                        sku: r.item_sku,
+                        item_name: known?.item_name || r.item_sku,
+                        unit: known?.unit || 'units',
+                        category: known?.category || 'GENERAL',
+                        store_type: known?.store_type || 'general_store',
+                        quantity: num(r.quantity)
+                    });
+                }
             }
         }
 
@@ -467,9 +533,27 @@ export const recordStoreStocktake = async (req: Request, res: Response, next: Ne
         if (!Number.isInteger(branchId)) { res.status(400).json({ success: false, message: 'branch_id must be an integer' }); return; }
         if (!Array.isArray(items) || !items.length) { res.status(400).json({ success: false, message: 'items must be a non-empty array' }); return; }
 
-        const itemIds = items.map((it: any) => String(it.item_id));
-        const { data: invRows } = await supabase.from('inventory_items').select('id, sku').in('id', itemIds);
-        const skuById = new Map((invRows || []).map((i: any) => [i.id, i.sku]));
+        const rawIds = items.map((it: any) => String(it.item_id));
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validUuids = rawIds.filter((id: string) => uuidRegex.test(id));
+        const nonUuids = rawIds.filter((id: string) => !uuidRegex.test(id));
+
+        let invRows: any[] = [];
+        if (validUuids.length > 0) {
+            const { data } = await supabase.from('inventory_items').select('id, sku').in('id', validUuids);
+            if (data) invRows.push(...data);
+        }
+        if (nonUuids.length > 0) {
+            const { data } = await supabase.from('inventory_items').select('id, sku').in('sku', nonUuids);
+            if (data) invRows.push(...data);
+        }
+
+        const skuById = new Map<string, string>();
+        const idBySku = new Map<string, string>();
+        for (const i of invRows) {
+            skuById.set(i.id, i.sku);
+            idBySku.set(i.sku, i.id);
+        }
 
         const skus = Array.from(skuById.values()).filter(Boolean) as string[];
         let stockBySku: Record<string, number> = {};
@@ -483,9 +567,11 @@ export const recordStoreStocktake = async (req: Request, res: Response, next: Ne
 
         const now = new Date().toISOString();
         const rows = items.map((it: any) => {
-            const itemId = String(it.item_id);
-            const sku = skuById.get(itemId);
-            if (!sku) { logger.warn(`recordStoreStocktake: no inventory_items mapping for ${itemId}`); return null; }
+            const rawId = String(it.item_id);
+            const resolvedId = skuById.has(rawId) ? rawId : idBySku.get(rawId);
+            const sku = skuById.get(resolvedId || rawId) || idBySku.get(rawId) || rawId;
+            if (!resolvedId) { logger.warn(`recordStoreStocktake: no inventory_items mapping for ${rawId}`); return null; }
+            const itemId = resolvedId;
             const sysQty = stockBySku[sku] ?? 0;
             const physQty = num(it.physical_quantity);
             const variance = physQty - sysQty;

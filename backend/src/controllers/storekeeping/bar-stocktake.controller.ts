@@ -22,7 +22,11 @@ const num = (v: any): number => {
 // Normalized drink name used to detect display duplicates (the same physical
 // drink exposed under both an `FGB-` and a `KYO-` SKU in the same outlet).
 const normDrinkName = (name: any): string =>
-    String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    String(name || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+        .replace(/\s+/g, ' ');
 
 // pos_outlet_items.category is sometimes just the outlet NAME ('Main Bar',
 // 'Executive bar', …) rather than a real drink category — that's the junk we
@@ -856,22 +860,29 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        const candidates = drinkRows.map((d: any) => {
+        const candidatesByInvId = new Map<string, any>();
+        for (const d of drinkRows) {
             const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
-            if (!invId) return null;
+            if (!invId) continue;
             const did = String(d.id);
             const currentStock = stockByDrinkId.get(did) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            // Opening = previous stocktake's physical count; reverse-compute
-            // (using shift additions) only for the very first count.
+            const existing = candidatesByInvId.get(invId);
+            if (existing) {
+                existing.quantity = Math.max(num(existing.quantity), currentStock);
+                existing.additions = Math.max(num(existing.additions), Math.max(0, currentStock - num(existing.opening_stock) + sales));
+                if (!/^FGB-/i.test(existing.sku) && /^FGB-/i.test(d.sku)) {
+                    existing.sku = d.sku;
+                    existing.name = d.name;
+                }
+                continue;
+            }
             const opening = prevCountByInvId.has(invId)
                 ? prevCountByInvId.get(invId)!
                 : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
-            // Additions DERIVED from live outlet stock so issues into the bar are
-            // always reflected: additions = current − opening + sales.
             const additions = Math.max(0, currentStock - opening + sales);
             const system = currentStock;
-            return {
+            candidatesByInvId.set(invId, {
                 id: invId,
                 name: d.name,
                 quantity: system,
@@ -882,8 +893,10 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 unit: d.unit || 'bottle',
                 sku: d.sku || `bard-${d.id}`,
                 category: d.category || canonCategoryByInvId.get(invId) || 'OTHERS',
-            };
-        }).filter(Boolean);
+            });
+        }
+
+        const candidates = Array.from(candidatesByInvId.values());
 
         res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
     } catch (error) {

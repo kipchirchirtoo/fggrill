@@ -672,7 +672,9 @@ export default function ReviewsPage() {
                               : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
-                          <span>👍</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017a2 2 0 01-2-2v-7a2 2 0 01.586-1.414l5-5c.414-.414 1.1-.414 1.414 0 .414.414.414 1.1 0 1.414L14 10z" />
+                          </svg>
                           <span>Helpful ({rev.helpfulCount})</span>
                         </button>
                         <button
@@ -681,7 +683,9 @@ export default function ReviewsPage() {
                             rev.isLikedByUser ? 'text-rose-600 scale-110' : 'text-slate-400 hover:text-rose-600'
                           }`}
                         >
-                          <span>❤️</span>
+                          <svg className={`w-4 h-4 ${rev.isLikedByUser ? 'fill-rose-600 text-rose-600' : 'fill-none'}`} stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
                           <span className="text-slate-500 font-bold">({rev.likesCount})</span>
                         </button>
                       </div>
@@ -692,7 +696,12 @@ export default function ReviewsPage() {
                             <span>•</span>
                           </>
                         )}
-                        <span>Report 🚩</span>
+                        <span className="inline-flex items-center space-x-1 hover:text-slate-600 cursor-pointer transition">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                          </svg>
+                          <span>Report</span>
+                        </span>
                         <span>•</span>
                         <span>{rev.date}</span>
                       </div>

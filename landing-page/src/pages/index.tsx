@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import { SEO } from '@/components/SEO';
 import { useState, useEffect, useRef } from 'react';
 import { hotelsService, FALLBACK_BRANCHES } from '@/services/hotels.service';
@@ -231,7 +232,6 @@ export default function Home() {
       setShowModal(false);
       toast.success(`Reservation Successful! Confirmation: ${confirmation.confirmationNumber || confirmation.referenceNumber}`, {
         duration: 6000,
-        icon: '🎉',
       });
     } catch (err: any) {
       console.error('Booking failed:', err);
@@ -522,22 +522,74 @@ export default function Home() {
             </p>
             <div className="lp-dining__features">
               {[
-                { icon: '🔥', title: 'Open-Fire Grill', desc: 'Theatrical live-fire cooking at its finest' },
-                { icon: '🥩', title: 'Premium Cuts', desc: 'Hand-selected wagyu and dry-aged specialities' },
-                { icon: '🍷', title: 'Wine Pairing', desc: 'Sommelier-curated pairings for every dish' },
+                {
+                  index: '01',
+                  category: 'Artisanal Hearth',
+                  title: 'Open-Fire Grill',
+                  desc: 'Theatrical live-fire cooking over cured hardwoods, infusing signature aromatics into every prime cut.',
+                  icon: (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="lp-dining__svg" aria-hidden="true">
+                      <path d="M12 2c-.5 2.5-2 4.5-4 6-2 1.5-3 3.5-3 6a7 7 0 0 0 14 0c0-3-2-5.5-4.5-7.5-.5 2-1.5 3.5-2.5 3.5-1.5 0-1-2.5 0-8z" />
+                      <path d="M12 15c-1 0-2 .8-2 2a2 2 0 0 0 4 0c0-1.2-1-2-2-2z" />
+                    </svg>
+                  ),
+                },
+                {
+                  index: '02',
+                  category: 'Prime Selection',
+                  title: 'Premium Cuts',
+                  desc: 'Hand-selected, grain-fed and dry-aged specialities, seasoned and prepared to exacting perfection.',
+                  icon: (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="lp-dining__svg" aria-hidden="true">
+                      <path d="M12 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" />
+                      <path d="M4 17a8 8 0 0 1 16 0" />
+                      <path d="M3 17h18" />
+                      <path d="M2 20h20" />
+                    </svg>
+                  ),
+                },
+                {
+                  index: '03',
+                  category: 'Cellar Reserve',
+                  title: 'Wine Pairing',
+                  desc: 'Sommelier-curated international vintages meticulously matched to elevate each gastronomic course.',
+                  icon: (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="lp-dining__svg" aria-hidden="true">
+                      <path d="M8 22h8" />
+                      <path d="M12 15v7" />
+                      <path d="M6 3h12l-1 7a5 5 0 0 1-10 0L6 3z" />
+                      <path d="M7 8h10" />
+                    </svg>
+                  ),
+                },
               ].map((f, i) => (
                 <Reveal key={i} delay={i * 120} className="lp-dining__feature">
-                  <div className="lp-dining__feature-icon">{f.icon}</div>
-                  <div>
+                  <div className="lp-dining__feature-icon-badge">
+                    {f.icon}
+                  </div>
+                  <div className="lp-dining__feature-content">
+                    <div className="lp-dining__feature-header">
+                      <span className="lp-dining__feature-index">{f.index}</span>
+                      <span className="lp-dining__feature-bullet">/</span>
+                      <span className="lp-dining__feature-category">{f.category}</span>
+                    </div>
                     <div className="lp-dining__feature-title">{f.title}</div>
                     <div className="lp-dining__feature-desc">{f.desc}</div>
                   </div>
                 </Reveal>
               ))}
             </div>
-            <a href="#reservations" className="lp-btn lp-btn--gold" style={{ marginTop: '2.5rem', display: 'inline-block' }}>
-              View the Menu
-            </a>
+            <div className="lp-dining__cta-group">
+              <Link href="/menu" className="lp-btn lp-btn--gold lp-dining__btn">
+                <span>View the Menu</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="lp-btn-icon" aria-hidden="true">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <a href="#reservations" className="lp-btn lp-btn--ghost lp-dining__btn-secondary">
+                Reserve a Table
+              </a>
+            </div>
           </Reveal>
         </div>
       </section>
@@ -1095,7 +1147,6 @@ export default function Home() {
                   if (email) {
                     toast.success('Thank you for subscribing! We have sent a welcome gift to your inbox.', {
                       duration: 5000,
-                      icon: '📧',
                     });
                     // In a real scenario, we would call emailService.sendNewsletter or a signup API
                     (e.target as any).reset();

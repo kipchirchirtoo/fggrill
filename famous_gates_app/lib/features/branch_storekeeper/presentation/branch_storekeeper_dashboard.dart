@@ -20,6 +20,7 @@ import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/record_detail_screen.dart';
 import '../../../core/widgets/notification_button.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/auth_notifier.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'branch_po_create_screen.dart';
 import 'branch_stock_request_screen.dart';
@@ -16415,8 +16416,11 @@ class _StoreStockSectionState extends ConsumerState<_StoreStockSection> {
     final sku = _normalized(item['item_sku'] ?? item['sku'] ?? '');
     final name = _normalized(_itemName(item));
 
-    if (storeType == 'bar_store') return false;
-    if (storeType.isNotEmpty && storeType != 'foodstuffs') return false;
+    if (storeType == 'bar store' || storeType == 'bar' || storeType == 'kitchen') {
+      return false;
+    }
+    if (category.contains('kitchen menu')) return false;
+    if (sku.startsWith('fgb')) return false;
     if (_hasBarKeyword(category) || _hasBarKeyword(sku) || _hasBarKeyword(name)) {
       return false;
     }

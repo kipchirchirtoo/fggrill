@@ -1,5 +1,10 @@
+import dns from 'dns';
 import { Pool, QueryResult } from 'pg';
 import dotenv from 'dotenv';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (_) {}
 
 dotenv.config();
 
@@ -32,37 +37,13 @@ function getPool(): Pool | null {
     maxUses: 1000, // Recycle connections periodically to prevent stale state
   });
 
-  pool.on('connect', (client) => {
-    client.query(`
-      SET statement_timeout = '30000';
-      SET idle_in_transaction_session_timeout = '20000';
-      SET lock_timeout = '10000';
-    `).catch((err) => {
-      console.warn('Could not set connection timeouts:', err.message);
-    });
-  });
-
   pool.on('error', (err) => {
     console.error('Database pool error:', err.message);
     dbAvailable = false;
   });
 
-  pool.connect()
-    .then(client => {
-      console.log('Database connection established');
-      dbAvailable = true;
-      client.release();
-    })
-    .catch(err => {
-      console.warn('Database connection failed - some features may be unavailable:', err.message);
-      dbAvailable = false;
-    });
-
   return pool;
 }
-
-// Eager initialization if connection string is present
-getPool();
 
 // Export query function for use in routes
 export default {
@@ -82,8 +63,32 @@ export default {
 
       dbAvailable = true;
       return result;
-    } catch (error) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Self-healing: if connection was placed in read-only transaction state, reset and retry once
+      if (
+        errorMessage.includes('read-only transaction') ||
+        errorMessage.includes('cannot execute INSERT in a read-only transaction') ||
+        (error && error.code === '25006')
+      ) {
+        console.warn('⚠️ Detected read-only transaction error. Resetting transaction flags and retrying...');
+        let recoveryClient: any = null;
+        try {
+          recoveryClient = await activePool.connect();
+          await recoveryClient.query('ROLLBACK; SET default_transaction_read_only = off; SET transaction_read_only = off;');
+          const retryResult = await recoveryClient.query(text, params);
+          dbAvailable = true;
+          return retryResult;
+        } catch (retryErr: any) {
+          console.error('Recovery query retry failed:', retryErr?.message || retryErr);
+        } finally {
+          if (recoveryClient) {
+            try { recoveryClient.release(); } catch (_) {}
+          }
+        }
+      }
+
       console.error('Database query failed:', errorMessage);
 
       if (errorMessage.includes('timeout') || errorMessage.includes('connection') || errorMessage.includes('terminated')) {
@@ -106,10 +111,18 @@ export default {
       console.warn('⚠️ [DB LEAK WARNING] A database client has been checked out for > 25s without release. Caller stack:\n', stack);
     }, 25000);
 
+    let released = false;
     const originalRelease = client.release.bind(client);
     client.release = (err?: Error | boolean) => {
+      if (released) return;
+      released = true;
       clearTimeout(leakTimer);
-      return originalRelease(err as any);
+      // Guarantee rollback and reset read-only flag on release so returning client to pool is always clean
+      client.query('ROLLBACK; SET default_transaction_read_only = off; SET transaction_read_only = off;')
+        .catch(() => {})
+        .finally(() => {
+          originalRelease(err as any);
+        });
     };
 
     return client;

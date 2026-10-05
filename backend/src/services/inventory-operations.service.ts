@@ -98,7 +98,7 @@ async function removeCrossBranchOutletStockRows(rows: JsonRecord[]): Promise<Jso
 const branchStoreLocation = (branchId: number) => ({
   branchId,
   locationType: 'branch_store' as const,
-  locationCode: `B${branchId}-BRANCH-STORE`,
+  locationCode: `BRANCH-STORE-${branchId}`,
   locationName: `Branch ${branchId} Store`
 });
 

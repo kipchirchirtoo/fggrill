@@ -325,7 +325,7 @@ class _StockTableState extends State<StockTable> {
         lastCategory = item.category;
         rows.add(
           DataRow2(
-            key: ValueKey('cat_$index'),
+            key: ValueKey('cat_${item.category}_$index'),
             color: WidgetStateProperty.all(
               isDark ? _kCatBgDark : _kCatBg,
             ),
@@ -374,7 +374,7 @@ class _StockTableState extends State<StockTable> {
 
       rows.add(
         DataRow2(
-          key: ValueKey(item.id),
+          key: ValueKey('item_${item.id}_${item.sku}_$index'),
           specificRowHeight: _kRowH,
           color: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.hovered)) {

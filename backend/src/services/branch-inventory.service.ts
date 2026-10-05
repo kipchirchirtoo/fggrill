@@ -527,7 +527,11 @@ export async function getBranchStock(
         simpleItem?.store_type ||
         inventoryItem?.store_type ||
         row.store_type ||
-        'foodstuffs',
+        (String(row.item_sku || '').toUpperCase().startsWith('FGB-') ||
+         ['BAR DRINKS', 'BEERS', 'CANNED BEERS', 'ENERGY DRINKS', 'SOFT DRINKS', 'TOTS', 'SPIRITS', 'LIQUEURS', 'WINES', 'WHISKY', 'GIN', 'COGNAC', 'VODKA']
+           .includes(String(simpleItem?.category || inventoryItem?.category || '').toUpperCase().trim())
+          ? 'bar_store'
+          : 'foodstuffs'),
       source: dispatchedSkus.has(row.item_sku)
         ? 'dispatch'
         : liveRow && quantity > 0

@@ -87,6 +87,8 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
               category: item.category,
               sku: item.sku,
               name: item.productName,
+              branchId: user?.branchId,
+              branchName: branchName,
             );
           }).toList()
         : state.items;
@@ -141,24 +143,30 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
     }
     final int expectedClosing = totalOpening - totalSales - totalSdds;
 
-    // Show error message as a banner or snackbar if it changes
-    if (state.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
+    // Listen for error messages and show single dismissible snackbar
+    ref.listen<StockTakeState>(provider, (previous, next) {
+      final msg = next.errorMessage;
+      if (msg != null && msg.isNotEmpty && msg != previous?.errorMessage) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
           SnackBar(
-            content: Text(state.errorMessage!),
+            content: Text(msg),
             backgroundColor: const Color(0xFFD32F2F),
-            duration: const Duration(seconds: 5),
+            duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'OK',
               textColor: Colors.white,
-              onPressed: () => notifier.clearError(),
+              onPressed: () {
+                messenger.removeCurrentSnackBar();
+                messenger.clearSnackBars();
+                ref.read(provider.notifier).clearError();
+              },
             ),
           ),
         );
-        notifier.clearError();
-      });
-    }
+      }
+    });
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),

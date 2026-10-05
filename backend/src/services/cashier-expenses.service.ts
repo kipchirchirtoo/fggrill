@@ -229,16 +229,58 @@ const recordPayoutTransaction = async (p: {
   }
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Tag the PO paid and stamp WHO paid it and from WHICH shift.
+//
+// This used to run a single `.or('po_number.eq.X,id.eq.X')` update. `id` is a
+// uuid column, and the client always sends the PO NUMBER as the reference
+// (see cashier_dashboard.dart's poRef = po_number/reference/id, in that
+// order) -- a string like "PO-202609-0171", never a UUID. Postgres rejects
+// the *entire* OR'd query with "invalid input syntax for type uuid" as soon
+// as it tries to cast that string for the `id.eq.` clause, so the
+// `po_number.eq.` match never even got a chance to run. And because
+// supabase-js resolves to `{ data, error }` rather than throwing, that error
+// was never even inspected (only a try/catch around the whole call, which
+// nothing here threw into) -- verified live: finance_status was 'not_billed'
+// on all 255 purchase_orders in production, meaning this had never once
+// succeeded. Try po_number first (the real case), and only try `id` when the
+// reference is actually shaped like a UUID, so a text reference is never
+// sent to a uuid-typed column.
+//
+// 'paid' is also not a valid finance_status -- the purchase_orders_finance_status_check
+// constraint only allows not_billed/pending_bill/billed/approved_for_payment/
+// partially_paid/paid_closed (verified live via pg_get_constraintdef). 'paid_closed'
+// is the terminal "fully settled" value used elsewhere (see computeFinanceStatus in
+// purchase-orders.controller.ts, whose "Paid / Closed" label maps to this same state).
 const markPurchaseOrderPaid = async (poReference: string, cashierId: string, shiftId: string): Promise<void> => {
+  const patch = {
+    finance_status: 'paid_closed',
+    paid_by_cashier_id: cashierId,
+    paid_shift_id: shiftId,
+    paid_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
   try {
-    await supabase.from('purchase_orders').update({
-      finance_status: 'paid',
-      paid_by_cashier_id: cashierId,
-      paid_shift_id: shiftId,
-      paid_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).or(`po_number.eq.${poReference},id.eq.${poReference}`);
+    const byNumber = await supabase
+      .from('purchase_orders')
+      .update(patch)
+      .eq('po_number', poReference)
+      .select('id');
+    if (byNumber.error) throw byNumber.error;
+    if (byNumber.data && byNumber.data.length > 0) return;
+
+    if (UUID_RE.test(poReference)) {
+      const byId = await supabase
+        .from('purchase_orders')
+        .update(patch)
+        .eq('id', poReference)
+        .select('id');
+      if (byId.error) throw byId.error;
+      if (byId.data && byId.data.length > 0) return;
+    }
+
+    logger.warn(`cashier-expenses: no purchase_orders row matched reference "${poReference}" to mark paid`);
   } catch (err) {
     logger.warn('cashier-expenses: failed to stamp PO payment', err as any);
   }
@@ -315,6 +357,7 @@ export const listPendingCashPOs = async (req: Request): Promise<any[]> => {
     .from('purchase_orders')
     .select('*')
     .in('status', ['approved', 'APPROVED', 'received', 'RECEIVED', 'fully_received'])
+    .neq('finance_status', 'paid_closed')
     .order('created_at', { ascending: false });
   if (branchId !== null) query = query.eq('branch_id', branchId);
 
@@ -325,6 +368,7 @@ export const listPendingCashPOs = async (req: Request): Promise<any[]> => {
          FROM purchase_orders po
          LEFT JOIN suppliers s ON po.supplier_id = s.id
         WHERE LOWER(po.status) IN ('approved','received','fully_received')
+          AND (po.finance_status IS DISTINCT FROM 'paid_closed')
           ${branchId !== null ? 'AND po.branch_id = $1' : ''}
         ORDER BY po.created_at DESC LIMIT 100`,
       branchId !== null ? [branchId] : []
