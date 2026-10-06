@@ -49,13 +49,108 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
     }
   }
 
+  Widget _buildHeader({
+    required BuildContext context,
+    VoidCallback? onBack,
+    Widget? trailing,
+  }) {
+    final effectiveBack = onBack ??
+        widget.onBack ??
+        (Navigator.canPop(context) ? () => Navigator.of(context).pop() : null);
+
+    return Row(
+      children: [
+        if (effectiveBack != null) ...[
+          OutlinedButton.icon(
+            onPressed: effectiveBack,
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Back'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              backgroundColor: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Daily Controls',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Review one kitchen shift at a time using only configured Food Control Standards. This page is a full-width accountant review sheet.',
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) trailing,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final shiftsAsync = ref.watch(allKitchenShiftsProvider);
 
     return shiftsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Error loading kitchen shifts: $error')),
+      loading: () => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context: context),
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ],
+          ),
+        ),
+      ),
+      error: (error, _) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context: context),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error loading kitchen shifts: $error',
+                        style: const TextStyle(fontSize: 16, color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      OutlinedButton.icon(
+                        onPressed: () => ref.invalidate(allKitchenShiftsProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       data: (shifts) {
         final sorted = [...shifts]
           ..sort((a, b) {
@@ -65,10 +160,88 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
           });
 
         if (sorted.isEmpty) {
-          return const Center(
-            child: Text(
-              'No kitchen shifts found yet.',
-              style: TextStyle(color: Colors.grey),
+          final effectiveBack = widget.onBack ??
+              (Navigator.canPop(context) ? () => Navigator.of(context).pop() : null);
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context: context),
+                  const SizedBox(height: 32),
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        padding: const EdgeInsets.all(36),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.kitchen_outlined,
+                                size: 36,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'No Kitchen Shifts Found',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'No kitchen shifts have been recorded for this branch yet. Please open a kitchen shift first in Kitchen Shift Config to start tracking real-time usage.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            if (effectiveBack != null)
+                              FilledButton.icon(
+                                onPressed: effectiveBack,
+                                icon: const Icon(Icons.arrow_back),
+                                label: const Text('Back to Dashboard'),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 14,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         }
@@ -108,39 +281,17 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        if (widget.onBack != null) ...[
-                          OutlinedButton.icon(
-                            onPressed: widget.onBack,
-                            icon: const Icon(Icons.arrow_back),
-                            label: const Text('Back'),
-                          ),
-                          const SizedBox(width: 16),
-                        ],
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Daily Controls',
-                                style: TextStyle(
-                                    fontSize: 32, fontWeight: FontWeight.w700),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Review one kitchen shift at a time using only configured Food Control Standards. This page is a full-width accountant review sheet.',
-                                style: TextStyle(
-                                    color: Colors.black54, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!loading && data != null) ...[
-                          const SizedBox(width: 16),
-                          _buildExportMenu(selectedShift, data, rows),
-                        ],
-                      ],
+                    _buildHeader(
+                      context: context,
+                      trailing: (!loading && data != null)
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(width: 16),
+                                _buildExportMenu(selectedShift, data, rows),
+                              ],
+                            )
+                          : null,
                     ),
                     const SizedBox(height: 24),
                     Expanded(
