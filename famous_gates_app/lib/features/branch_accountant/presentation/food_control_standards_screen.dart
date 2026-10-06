@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -253,9 +253,23 @@ class _RecipeStandardsTabState extends ConsumerState<_RecipeStandardsTab> {
                 final groupKey = inputsKey;
 
                 if (!grouped.containsKey(groupKey)) {
+                  final List<dynamic> effectiveInputs = inputsList.isNotEmpty
+                      ? inputsList
+                      : (row['raw_item_sku'] != null && row['raw_item_sku'] != 'MULTI'
+                          ? [
+                              {
+                                'raw_item_sku': row['raw_item_sku'],
+                                'raw_item_name': row['raw_item_name'],
+                                'quantity': row['raw_quantity'],
+                                'unit': row['raw_unit'],
+                              }
+                            ]
+                          : []);
+
                   grouped[groupKey] = {
                     'recipe_name': row['recipe_name'],
                     'yield_type_code': row['yield_type_code'],
+                    'raw_item_sku': row['raw_item_sku'],
                     'raw_item_name': row['raw_item_name'],
                     'raw_quantity': row['raw_quantity'],
                     'raw_unit': row['raw_unit'],
@@ -264,7 +278,7 @@ class _RecipeStandardsTabState extends ConsumerState<_RecipeStandardsTab> {
                     'prep_stage_code': row['prep_stage_code'],
                     'prep_stage_group': row['prep_stage_group'],
                     'prep_stage_order': row['prep_stage_order'],
-                    'inputs': inputsList,
+                    'inputs': effectiveInputs,
                     'outputs': [],
                     'all_recipe_ids': <String>[],
                   };
@@ -2495,13 +2509,16 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
     } else {
       // Legacy single-input fields
       final rawSku = (data['raw_item_sku'] ?? '').toString().trim();
-      if (rawSku.isNotEmpty && rawSku != 'MULTI') {
+      final rawName = (data['raw_item_name'] ?? '').toString().trim();
+      if ((rawSku.isNotEmpty && rawSku != 'MULTI') || rawName.isNotEmpty) {
         final row = _RawInputRow();
+        final effectiveSku = rawSku.isNotEmpty ? rawSku : rawName;
+        final effectiveName = rawName.isNotEmpty ? rawName : rawSku;
         row.rawItem = {
-          'sku': rawSku,
-          'id': rawSku,
-          'item_name': data['raw_item_name'] ?? rawSku,
-          'name': data['raw_item_name'] ?? rawSku,
+          'sku': effectiveSku,
+          'id': effectiveSku,
+          'item_name': effectiveName,
+          'name': effectiveName,
         };
         final unit = (data['raw_unit'] ?? '').toString().trim();
         row.selectedUnit = unit.isNotEmpty ? unit : null;

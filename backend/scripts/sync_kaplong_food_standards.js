@@ -588,13 +588,23 @@ async function applyFoodControlStandards() {
       throw upsertErr;
     }
 
-    // Map upserted IDs to MULTI inputs
+    // Map upserted IDs to recipe inputs
     if (upserted) {
       for (const item of chunk) {
-        if (item.inputs && item.inputs.length > 0) {
-          const matched = upserted.find(u => u.raw_item_sku === item.row.raw_item_sku && u.produced_item_name === item.row.produced_item_name);
-          if (matched) {
+        const matched = upserted.find(u => u.raw_item_sku === item.row.raw_item_sku && u.produced_item_name === item.row.produced_item_name);
+        if (matched) {
+          if (item.inputs && item.inputs.length > 0) {
             multiRecipeInputs.push({ recipeId: matched.id, inputs: item.inputs });
+          } else if (item.row.raw_item_sku && item.row.raw_item_sku !== 'MULTI') {
+            multiRecipeInputs.push({
+              recipeId: matched.id,
+              inputs: [{
+                sku: item.row.raw_item_sku,
+                name: item.row.raw_item_name,
+                qty: item.row.raw_quantity,
+                unit: item.row.raw_unit
+              }]
+            });
           }
         }
       }
@@ -603,9 +613,9 @@ async function applyFoodControlStandards() {
 
   console.log('Successfully upserted all kitchen production recipes.');
 
-  // 3. Insert inputs for MULTI recipes
+  // 3. Insert inputs for ALL recipes into kitchen_production_recipe_inputs
   if (multiRecipeInputs.length > 0) {
-    console.log(`Inserting inputs for ${multiRecipeInputs.length} MULTI production batch recipes...`);
+    console.log(`Inserting inputs for ${multiRecipeInputs.length} recipe standards...`);
     const recipeIds = multiRecipeInputs.map(m => m.recipeId);
     await supabase.from('kitchen_production_recipe_inputs').delete().in('recipe_id', recipeIds);
 
@@ -622,12 +632,16 @@ async function applyFoodControlStandards() {
       }
     }
 
-    const { error: inpErr } = await supabase.from('kitchen_production_recipe_inputs').insert(inputRows);
-    if (inpErr) {
-      console.error('Error inserting recipe inputs:', inpErr);
-      throw inpErr;
+    // Insert in batches of 50
+    for (let i = 0; i < inputRows.length; i += 50) {
+      const chunk = inputRows.slice(i, i + 50);
+      const { error: inpErr } = await supabase.from('kitchen_production_recipe_inputs').insert(chunk);
+      if (inpErr) {
+        console.error('Error inserting recipe inputs:', inpErr);
+        throw inpErr;
+      }
     }
-    console.log(`Inserted ${inputRows.length} ingredients for batch recipes.`);
+    console.log(`Inserted ${inputRows.length} total recipe ingredient inputs.`);
   }
 
   // 4. Configure Direct Items (food_control_direct_items)
