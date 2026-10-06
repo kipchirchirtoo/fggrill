@@ -1,0 +1,1226 @@
+[
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Soda 300ML",
+    "targetName": "SODA 300ML",
+    "kaplongName": "SODA 300ML",
+    "kaplongPrice": 70,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Soda 500ML",
+    "targetName": "SODA 500ML",
+    "kaplongName": "SODA 500ML",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Soda 500ML (Takeaway)",
+    "targetName": "SODA 500ML TAKE AWAY",
+    "kaplongName": "SODA 500ML TAKE AWAY",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Predator Can",
+    "targetName": "PREDATOR CAN",
+    "kaplongName": "PREDATOR CAN",
+    "kaplongPrice": 100,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Cokezero",
+    "targetName": "COKE ZERO",
+    "kaplongName": "COKE ZERO",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Novida",
+    "targetName": "NOVIDA",
+    "kaplongName": "NOVIDA",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Dasani 500ML",
+    "targetName": "DASANI 500ML",
+    "kaplongName": "DASANI 500ML",
+    "kaplongPrice": 50,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Dasani 1 LTR",
+    "targetName": "DASANI 1 LTR",
+    "kaplongName": "DASANI 1 LTR",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Keringet Water 500ML",
+    "targetName": "KERINGET 500ML",
+    "kaplongName": "KERINGET 500ML",
+    "kaplongPrice": 70,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Keringet Water 1 LTR",
+    "targetName": "KERINGET 1 LTR",
+    "kaplongName": "KERINGET 1 LTR",
+    "kaplongPrice": 150,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Minutemaid",
+    "targetName": "MINUTE MAID",
+    "kaplongName": "MINUTE MAID",
+    "kaplongPrice": 120,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Monstar",
+    "targetName": "MONSTER",
+    "kaplongName": "MONSTER",
+    "kaplongPrice": 350,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Toniccan Soda",
+    "targetName": "TONIC SODA CAN",
+    "kaplongName": "TONIC SODA CAN",
+    "kaplongPrice": 150,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "Soft Drinks & Water",
+    "userItem": "Lime Lemonade",
+    "targetName": "LIME LEMONADE",
+    "kaplongName": "LIME LEMONADE",
+    "kaplongPrice": 100,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Tuskercider",
+    "targetName": "TUSKER CIDER",
+    "kaplongName": "TUSKER CIDER",
+    "kaplongPrice": 280,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Guinness",
+    "targetName": "GUINNESS",
+    "kaplongName": "GUINNESS",
+    "kaplongPrice": 280,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Manyatta",
+    "targetName": "MANYATTA",
+    "kaplongName": "MANYATTA",
+    "kaplongPrice": 280,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Snapp",
+    "targetName": "SNAPP",
+    "kaplongName": "SNAPP",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Tusker Lager",
+    "targetName": "TUSKER LAGER",
+    "kaplongName": "TUSKER LAGER",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Tuskerlite",
+    "targetName": "TUSKER LITE",
+    "kaplongName": "TUSKER LITE",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Tuskermalt",
+    "targetName": "TUSKER MALT",
+    "kaplongName": "TUSKER MALT",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Plisner Mfalme",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Plisner Lager",
+    "targetName": "PILSNER LAGER",
+    "kaplongName": "PILSNER LAGER",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "W.Cap Lager",
+    "targetName": "WHITE CAP LAGER",
+    "kaplongName": "WHITE CAP LAGER",
+    "kaplongPrice": 270,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "W.Cap Crisp",
+    "targetName": "WHITE CAP CRISP[",
+    "kaplongName": "WHITE CAP CRISP[",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "B.Ice",
+    "targetName": "BLACK ICE",
+    "kaplongName": "BLACK ICE",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "Balozi",
+    "targetName": "BALOZI",
+    "kaplongName": "BALOZI",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BEER (BOTTLED)",
+    "userItem": "S.Punch",
+    "targetName": "PUNCH",
+    "kaplongName": "PUNCH",
+    "kaplongPrice": 250,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Guarana",
+    "targetName": "GUARANA",
+    "kaplongName": "GUARANA",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Guinness",
+    "targetName": "GUINNESS CAN",
+    "kaplongName": "GUINNESS CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Tuskercider",
+    "targetName": "TUSKER CIDER CAN",
+    "kaplongName": "TUSKER CIDER CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Tusker Lager",
+    "targetName": "TUSKER LAGER CAN",
+    "kaplongName": "TUSKER LAGER CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "White Cap",
+    "targetName": "WHITE CAP CAN",
+    "kaplongName": "WHITE CAP CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Tuskermalt",
+    "targetName": "TUSKER MALT CAN",
+    "kaplongName": "TUSKER MALT CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Tuskerlite",
+    "targetName": "TUSKER LITE CAN",
+    "kaplongName": "TUSKER LITE CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Plisner",
+    "targetName": "PILSNER CAN",
+    "kaplongName": "PILSNER CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Balozi",
+    "targetName": "BALOZI CAN",
+    "kaplongName": "BALOZI CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Snapp",
+    "targetName": "SNAPP CAN",
+    "kaplongName": "SNAPP CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Gordons Can",
+    "targetName": "GORDONS CAN",
+    "kaplongName": "GORDONS CAN",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CANNED BEER",
+    "userItem": "Manyatta Can",
+    "targetName": "MANYATTA CAN",
+    "kaplongName": "MANYATTA CAN",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Faxe",
+    "targetName": "FAXE",
+    "kaplongName": "FAXE",
+    "kaplongPrice": 350,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Heineken",
+    "targetName": "HEINEKEN",
+    "kaplongName": "HEINEKEN",
+    "kaplongPrice": 350,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Corona Extra",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Savanna Cider",
+    "targetName": "SAVANA CIDER",
+    "kaplongName": "SAVANA CIDER",
+    "kaplongPrice": 350,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Delmonte",
+    "targetName": "DELMONTE",
+    "kaplongName": "DELMONTE",
+    "kaplongPrice": 350,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Desperado",
+    "targetName": "DESPARADO",
+    "kaplongName": "DESPARADO",
+    "kaplongPrice": 350,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Kingfisher",
+    "targetName": "KINGFISHER",
+    "kaplongName": "KINGFISHER",
+    "kaplongPrice": 300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Windhoek",
+    "targetName": "WINDHOEK",
+    "kaplongName": "WINDHOEK",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Hunters Gold",
+    "targetName": "HUNTERS GOLD",
+    "kaplongName": "HUNTERS GOLD",
+    "kaplongPrice": 250,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Redbull",
+    "targetName": "REDBULL",
+    "kaplongName": "REDBULL",
+    "kaplongPrice": 300,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "MIXTURES",
+    "userItem": "Alvaro",
+    "targetName": "ALVARO",
+    "kaplongName": "ALVARO",
+    "kaplongPrice": 200,
+    "source": "Kaplong Restaurant POS"
+  },
+  {
+    "category": "GIN",
+    "userItem": "Gilbeys Gin 250ML",
+    "targetName": "GILBEYS 1/4",
+    "kaplongName": "GILBEYS 1/4",
+    "kaplongPrice": 650,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "GIN",
+    "userItem": "Gilbeys Gin 350ML",
+    "targetName": "GILBEYS 1/2",
+    "kaplongName": "GILBEYS 1/2",
+    "kaplongPrice": 850,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "GIN",
+    "userItem": "Gilbeys Gin 750ML",
+    "targetName": "GILBEYS 750ML",
+    "kaplongName": "GILBEYS 750ML",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "GIN",
+    "userItem": "Gordon's Dry Gin 350ML",
+    "targetName": "GORDONS GIN 350ML",
+    "kaplongName": "GORDONS GIN 350ML",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "GIN",
+    "userItem": "Gordon's Dry Gin 750ML",
+    "targetName": "GORDONS GIN 750ML",
+    "kaplongName": "GORDONS GIN 750ML",
+    "kaplongPrice": 2500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Nudeburg 750ML",
+    "targetName": "NEDERBUG",
+    "kaplongName": "NEDERBUG",
+    "kaplongPrice": 2800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Viceroy 250ML",
+    "targetName": "VICEROY 1/4",
+    "kaplongName": "VICEROY 1/4",
+    "kaplongPrice": 650,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Viceroy 350ML",
+    "targetName": "VICEROY 1/2",
+    "kaplongName": "VICEROY 1/2",
+    "kaplongPrice": 900,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Viceroy 750ML",
+    "targetName": "VICEROY 750ML",
+    "kaplongName": "VICEROY 750ML",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Viceroy 10 YRS",
+    "targetName": "VICEROY 10 YRS",
+    "kaplongName": "VICEROY 10 YRS",
+    "kaplongPrice": 4500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Richot 250ML",
+    "targetName": "RICHOT 1/4",
+    "kaplongName": "RICHOT 1/4",
+    "kaplongPrice": 650,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Richot 350ML",
+    "targetName": "RICHORT 1/2",
+    "kaplongName": "RICHORT 1/2",
+    "kaplongPrice": 850,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "BRANDY",
+    "userItem": "Richot 750ML",
+    "targetName": "RICHOT 750ML",
+    "kaplongName": "RICHOT 750ML",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "VODKA",
+    "userItem": "Vodka 250ML",
+    "targetName": "VODKA 1/4",
+    "kaplongName": "VODKA 1/4",
+    "kaplongPrice": 650,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "VODKA",
+    "userItem": "Vodka 350ML",
+    "targetName": "VODKA 1/2",
+    "kaplongName": "VODKA 1/2",
+    "kaplongPrice": 850,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "VODKA",
+    "userItem": "Vodka 750ML",
+    "targetName": "VODKA 750ML",
+    "kaplongName": "VODKA 750ML",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "SPIRITS",
+    "userItem": "K.C 250ML",
+    "targetName": "KENYA CANE 1/4",
+    "kaplongName": "KENYA CANE 1/4",
+    "kaplongPrice": 450,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "SPIRITS",
+    "userItem": "K.C 350ML",
+    "targetName": "KENYA CANE 1/2",
+    "kaplongName": "KENYA CANE 1/2",
+    "kaplongPrice": 700,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "SPIRITS",
+    "userItem": "K.C 750ML",
+    "targetName": "KENYA CANE 750ML",
+    "kaplongName": "KENYA CANE 750ML",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "SPIRITS",
+    "userItem": "Southern Comfort",
+    "targetName": "SOUTHERN COMFORT",
+    "kaplongName": "SOUTHERN COMFORT",
+    "kaplongPrice": 3200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jameson 350ML",
+    "targetName": "JAMESON 1/2",
+    "kaplongName": "JAMESON 1/2",
+    "kaplongPrice": 1600,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jameson 750ML",
+    "targetName": "JAMESON 750ML",
+    "kaplongName": "JAMESON 750ML",
+    "kaplongPrice": 3500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jameson 1 LTR",
+    "targetName": "JAMESON 1 LTR",
+    "kaplongName": "JAMESON 1 LTR",
+    "kaplongPrice": 4500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jameson Black Barrel 750ML",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Vat 69 350ML",
+    "targetName": "VAT 69 1/2",
+    "kaplongName": "VAT 69 1/2",
+    "kaplongPrice": 1000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Vat 69 750ML",
+    "targetName": "VAT 69 750ML",
+    "kaplongName": "VAT 69 750ML",
+    "kaplongPrice": 2000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Red 250ML",
+    "targetName": "J.W RED 250ML",
+    "kaplongName": "J.W RED 250ML",
+    "kaplongPrice": 800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Red 375ML",
+    "targetName": "J.W RED 375ML",
+    "kaplongName": "J.W RED 375ML",
+    "kaplongPrice": 1700,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Red 750ML",
+    "targetName": "J.W RED 750ML",
+    "kaplongName": "J.W RED 750ML",
+    "kaplongPrice": 2500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Red 1 LTR",
+    "targetName": "J.W RED 1 LTR",
+    "kaplongName": "J.W RED 1 LTR",
+    "kaplongPrice": 3000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Black 250ML",
+    "targetName": "J.W BLACK 250ML",
+    "kaplongName": "J.W BLACK 250ML",
+    "kaplongPrice": 1300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Black 350ML",
+    "targetName": "J.W BLACK 375ML",
+    "kaplongName": "J.W BLACK 375ML",
+    "kaplongPrice": 2200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Black 750ML",
+    "targetName": "J.W BLACK 750ML",
+    "kaplongName": "J.W BLACK 750ML",
+    "kaplongPrice": 4500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Black 1 LTR",
+    "targetName": "J.W BLACK 1 LTR",
+    "kaplongName": "J.W BLACK 1 LTR",
+    "kaplongPrice": 5500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "J.Walker Blonde 750ML",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Green Label 750ML",
+    "targetName": "GREEN LABEL",
+    "kaplongName": "GREEN LABEL",
+    "kaplongPrice": 12000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Gold Label",
+    "targetName": "GOLD RESERVE",
+    "kaplongName": "GOLD RESERVE",
+    "kaplongPrice": 9500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Bond 7 250ML",
+    "targetName": "BOND 7 1/4",
+    "kaplongName": "BOND 7 1/4",
+    "kaplongPrice": 600,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Bond 7 350ML",
+    "targetName": "BOND 7 1/2",
+    "kaplongName": "BOND 7 1/2",
+    "kaplongPrice": 800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Bond 7 750ML",
+    "targetName": "BOND 7 750ML",
+    "kaplongName": "BOND 7 750ML",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Famous Grouse 750ML",
+    "targetName": "FAMOUS GROUSE",
+    "kaplongName": "FAMOUS GROUSE",
+    "kaplongPrice": 2500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Glenfiddich 12 YRS",
+    "targetName": "GLENFIDICH 12YRS",
+    "kaplongName": "GLENFIDICH 12YRS",
+    "kaplongPrice": 8500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Glenfiddich 15 YRS",
+    "targetName": "GLENFIDICH 15YRS",
+    "kaplongName": "GLENFIDICH 15YRS",
+    "kaplongPrice": 12000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Glenfiddich 18 YRS",
+    "targetName": "GLENFIDICH 18YRS",
+    "kaplongName": "GLENFIDICH 18YRS",
+    "kaplongPrice": 17500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Martel VS 750ML",
+    "targetName": "MARTEL VS 750ML",
+    "kaplongName": "MARTEL VS 750ML",
+    "kaplongPrice": 8500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Martel VSOP 750ML",
+    "targetName": "MARTEL VSOP 750ML",
+    "kaplongName": "MARTEL VSOP 750ML",
+    "kaplongPrice": 12500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hennessy 750ML",
+    "targetName": "HENNESY 750ML",
+    "kaplongName": "HENNESY 750ML",
+    "kaplongPrice": 7500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hennessy 1 LTR",
+    "targetName": "HENNESY 1 LTR",
+    "kaplongName": "HENNESY 1 LTR",
+    "kaplongPrice": 13500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hennessy VSOP",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jack Daniel's 350ML",
+    "targetName": "JACK DANIELS 350ML",
+    "kaplongName": "JACK DANIELS 350ML",
+    "kaplongPrice": 2500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jack Daniel's 750ML",
+    "targetName": "JACK DANIELS 750ML",
+    "kaplongName": "JACK DANIELS 750ML",
+    "kaplongPrice": 4500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Jack Daniel's 1 LTR",
+    "targetName": "JACK DANIELS 1 LTR",
+    "kaplongName": "JACK DANIELS 1 LTR",
+    "kaplongPrice": 6000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Double Black 750ML",
+    "targetName": "DOUBLE BLACK 750ML",
+    "kaplongName": "DOUBLE BLACK 750ML",
+    "kaplongPrice": 5800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Double Black 1 LTR",
+    "targetName": "DOUBLE BLACK 1 LTR",
+    "kaplongName": "DOUBLE BLACK 1 LTR",
+    "kaplongPrice": 7000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Sheridan's 1 LTR",
+    "targetName": "SHERIDANS 1 LTR",
+    "kaplongName": "SHERIDANS 1 LTR",
+    "kaplongPrice": 7000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Ballantine's 750ML",
+    "targetName": "BALANTINES 750ML",
+    "kaplongName": "BALANTINES 750ML",
+    "kaplongPrice": 3000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "All Seasons 750ML",
+    "targetName": "ALL SEASONS 750ML",
+    "kaplongName": "ALL SEASONS 750ML",
+    "kaplongPrice": 1400,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "William Lawson 350ML",
+    "targetName": "WILLIAM LAWSONS 350ML",
+    "kaplongName": "WILLIAM LAWSONS 350ML",
+    "kaplongPrice": 1500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "William Lawson 750ML",
+    "targetName": "WILLIAM LAWSONS 750ML",
+    "kaplongName": "WILLIAM LAWSONS 750ML",
+    "kaplongPrice": 2200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "William Lawson 1 LTR",
+    "targetName": "WILLIAM LAWSONS 1LTR",
+    "kaplongName": "WILLIAM LAWSONS 1LTR",
+    "kaplongPrice": 3000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Grants 350ML",
+    "targetName": "GRANTS1/2",
+    "kaplongName": "GRANTS1/2",
+    "kaplongPrice": 1600,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Grants 750ML",
+    "targetName": "GRANTS 750ML",
+    "kaplongName": "GRANTS 750ML",
+    "kaplongPrice": 2500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Grants 1 LTR",
+    "targetName": "GRANTS 1 LTR",
+    "kaplongName": "GRANTS 1 LTR",
+    "kaplongPrice": 3200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Black & White 350ML",
+    "targetName": "BLACK & WHITE 350ML",
+    "kaplongName": "BLACK & WHITE 350ML",
+    "kaplongPrice": 800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Black & White 750ML",
+    "targetName": "BLACK & WHITE 750ML",
+    "kaplongName": "BLACK & WHITE 750ML",
+    "kaplongPrice": 1500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Black & White 1 LTR",
+    "targetName": "BLACK & WHITE 1 LTR",
+    "kaplongName": "BLACK & WHITE 1 LTR",
+    "kaplongPrice": 2200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hunters 250ML",
+    "targetName": "HUNTERS 1/4",
+    "kaplongName": "HUNTERS 1/4",
+    "kaplongPrice": 500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hunters 350ML",
+    "targetName": "HUNTERS 1/2",
+    "kaplongName": "HUNTERS 1/2",
+    "kaplongPrice": 700,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Hunters 750ML",
+    "targetName": "HUNTERS 750ML",
+    "kaplongName": "HUNTERS 750ML",
+    "kaplongPrice": 1300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Best Whisky 250ML",
+    "targetName": "BEST WHISKY 1/4",
+    "kaplongName": "BEST WHISKY 1/4",
+    "kaplongPrice": 500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WHISKY",
+    "userItem": "Best Whisky 750ML",
+    "targetName": "BEST WHISKY 750ML",
+    "kaplongName": "BEST WHISKY 750ML",
+    "kaplongPrice": 1400,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Best Cream 750ML",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Amarula 350ML",
+    "targetName": "AMARULA 1/2",
+    "kaplongName": "AMARULA 1/2",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Amarula 750ML",
+    "targetName": "AMARULA 750ML",
+    "kaplongName": "AMARULA 750ML",
+    "kaplongPrice": 3000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Amarula 1 LTR",
+    "targetName": "AMARULA 1L",
+    "kaplongName": "AMARULA 1L",
+    "kaplongPrice": 5500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Bailey's 350ML",
+    "targetName": "BAILEYS 1/2",
+    "kaplongName": "BAILEYS 1/2",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "Bailey's 750ML",
+    "targetName": "BAILEYS 750ML",
+    "kaplongName": "BAILEYS 750ML",
+    "kaplongPrice": 3000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "CREAM",
+    "userItem": "V&A 750ML",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "WINE",
+    "userItem": "4th Street",
+    "targetName": "4TH STREET",
+    "kaplongName": "4TH STREET",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Cellar Cask",
+    "targetName": "CELLAR CASK",
+    "kaplongName": "CELLAR CASK",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Drostdy Off",
+    "targetName": "DROSDTY HOF",
+    "kaplongName": "DROSDTY HOF",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Chamdor 750ML",
+    "targetName": "CHAMDOR",
+    "kaplongName": "CHAMDOR",
+    "kaplongPrice": 1400,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Caprice Pkt",
+    "targetName": "CAPRICE",
+    "kaplongName": "CAPRICE",
+    "kaplongPrice": 1300,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Casabuena",
+    "targetName": "CASABUENA",
+    "kaplongName": "CASABUENA",
+    "kaplongPrice": 1200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Four Cousins",
+    "targetName": "FOUR COUSINS",
+    "kaplongName": "FOUR COUSINS",
+    "kaplongPrice": 1400,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Asconi",
+    "targetName": "ASCONI",
+    "kaplongName": "ASCONI",
+    "kaplongPrice": 2000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "WINE",
+    "userItem": "Robertson",
+    "targetName": "ROBERTSON",
+    "kaplongName": "ROBERTSON",
+    "kaplongPrice": 1800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Capt Morgan 250ML",
+    "targetName": "CAPTAIN MORGAN 1/4",
+    "kaplongName": "CAPTAIN MORGAN 1/4",
+    "kaplongPrice": 500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Capt Morgan 750ML",
+    "targetName": "CAPTAIN MORGAN 750ML",
+    "kaplongName": "CAPTAIN MORGAN 750ML",
+    "kaplongPrice": 1400,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Jagertot",
+    "targetName": "JAGERMEISTER TOT",
+    "kaplongName": "JAGERMEISTER TOT",
+    "kaplongPrice": 200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Camino Tot",
+    "targetName": "CAMINO TOT",
+    "kaplongName": "CAMINO TOT",
+    "kaplongPrice": 200,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Jagermasta (1st line)",
+    "targetName": "JAGERMASTER",
+    "kaplongName": "JAGERMASTER",
+    "kaplongPrice": 6600,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Camino (1st line)",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "RUM",
+    "userItem": "Jagermasta (2nd line)",
+    "targetName": "JAGERMASTER",
+    "kaplongName": "JAGERMASTER",
+    "kaplongPrice": 6600,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "RUM",
+    "userItem": "Camino (2nd line)",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Tokens",
+    "targetName": "POOL TOKEN",
+    "kaplongName": "POOL TOKEN",
+    "kaplongPrice": 50,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Trust Studded",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "OTHER",
+    "userItem": "J&B 750ML",
+    "targetName": null,
+    "kaplongName": null,
+    "kaplongPrice": null,
+    "source": null
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Singleton 15 YRS",
+    "targetName": "SINGLETON 15YRS",
+    "kaplongName": "SINGLETON 15YRS",
+    "kaplongPrice": 7800,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Singleton 12 YRS",
+    "targetName": "SINGLETON 12YRS",
+    "kaplongName": "SINGLETON 12YRS",
+    "kaplongPrice": 6500,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Tang 10",
+    "targetName": "TANQUERAY NO 10",
+    "kaplongName": "TANQUERAY NO 10",
+    "kaplongPrice": 6000,
+    "source": "Kaplong Main Bar POS"
+  },
+  {
+    "category": "OTHER",
+    "userItem": "Tang London",
+    "targetName": "TAQUEREY LONDONDRY 750ML",
+    "kaplongName": "TAQUEREY LONDONDRY 750ML",
+    "kaplongPrice": 4500,
+    "source": "Kaplong Main Bar POS"
+  }
+]
