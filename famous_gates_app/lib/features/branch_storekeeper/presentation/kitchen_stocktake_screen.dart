@@ -27,6 +27,7 @@ class _KitchenStocktakeScreenState
   bool _saving = false;
   bool _exportingPdf = false;
 
+  final Map<String, TextEditingController> _openingControllers = {};
   final Map<String, TextEditingController> _physicalControllers = {};
   final List<TextEditingController> _chefControllers =
       List.generate(5, (_) => TextEditingController());
@@ -36,6 +37,7 @@ class _KitchenStocktakeScreenState
   @override
   void dispose() {
     for (final controller in [
+      ..._openingControllers.values,
       ..._physicalControllers.values,
       ..._chefControllers,
       _dispenserController,
@@ -44,6 +46,12 @@ class _KitchenStocktakeScreenState
       controller.dispose();
     }
     super.dispose();
+  }
+
+  bool _isOpeningStocktake(Map<String, dynamic> data) {
+    final type = (data['stocktake_type'] ?? '').toString();
+    return type.startsWith('opening_') ||
+        (_selectedShift == 'A' && data['kitchen_shift_id'] == null);
   }
 
   String get _dateStr => DateFormat('yyyy-MM-dd').format(_date);
@@ -105,6 +113,11 @@ class _KitchenStocktakeScreenState
         .toList();
     for (final item in items) {
       final key = _rowKey(item);
+      final rawOpening = item['opening_qty'];
+      _openingControllers
+          .putIfAbsent(key, () => TextEditingController())
+          .text = rawOpening != null ? _fmt(rawOpening) : '';
+
       final rawClosing = item['closing_qty'];
       _physicalControllers
           .putIfAbsent(key, () => TextEditingController())
@@ -157,11 +170,14 @@ class _KitchenStocktakeScreenState
 
       final enrichedItems = items.map((item) {
         final key = _rowKey(item);
+        final openingVal = _openingControllers[key]?.text.trim();
         final physicalVal = _physicalControllers[key]?.text.trim();
-        final numVal = double.tryParse(physicalVal ?? '');
+        final numOpening = double.tryParse(openingVal ?? '');
+        final numClosing = double.tryParse(physicalVal ?? '');
         return {
           ...item,
-          if (numVal != null) 'closing_qty': numVal,
+          if (numOpening != null) 'opening_qty': numOpening,
+          if (numClosing != null) 'closing_qty': numClosing,
         };
       }).toList();
 
@@ -289,13 +305,19 @@ class _KitchenStocktakeScreenState
 
     final payload = <Map<String, dynamic>>[];
 
+    final isOpening = _isOpeningStocktake(data);
     for (final item in items) {
       final key = _rowKey(item);
       final physicalQty = _toDouble(_physicalControllers[key]?.text.trim());
+      final openingText = _openingControllers[key]?.text.trim() ?? '';
+      final openingQty = openingText.isNotEmpty
+          ? _toDouble(openingText)
+          : (isOpening ? physicalQty : _toDouble(item['opening_qty']));
 
       payload.add({
         'item_id': item['item_id'],
         'item_name': item['item_name'],
+        'opening_qty': openingQty,
         'closing_qty': physicalQty,
       });
     }
@@ -552,10 +574,12 @@ class _KitchenStocktakeScreenState
                     else
                       _LedgerTable(
                         items: items,
+                        openingControllers: _openingControllers,
                         physicalControllers: _physicalControllers,
                         formatNumber: _fmt,
                         rowKeyFor: _rowKey,
                         locked: isLocked,
+                        isOpeningStocktake: _isOpeningStocktake(data),
                       ),
                     const SizedBox(height: 16),
                     _StaffSection(
@@ -744,38 +768,50 @@ class _ContextPill extends StatelessWidget {
 class _LedgerTable extends StatefulWidget {
   const _LedgerTable({
     required this.items,
+    required this.openingControllers,
     required this.physicalControllers,
     required this.formatNumber,
     required this.rowKeyFor,
     required this.locked,
+    required this.isOpeningStocktake,
   });
 
   final List<Map<String, dynamic>> items;
+  final Map<String, TextEditingController> openingControllers;
   final Map<String, TextEditingController> physicalControllers;
   final String Function(dynamic value) formatNumber;
   final String Function(Map<String, dynamic> item) rowKeyFor;
   final bool locked;
+  final bool isOpeningStocktake;
 
   @override
   State<_LedgerTable> createState() => _LedgerTableState();
 }
 
 class _LedgerTableState extends State<_LedgerTable> {
-  List<FocusNode> _focusNodes = [];
+  List<FocusNode> _openingFocusNodes = [];
+  List<FocusNode> _physicalFocusNodes = [];
   int _lastItemCount = 0;
 
   void _ensureFocusNodes(int count) {
     if (count == _lastItemCount) return;
-    for (final node in _focusNodes) {
+    for (final node in _openingFocusNodes) {
       node.dispose();
     }
-    _focusNodes = List.generate(count, (_) => FocusNode());
+    for (final node in _physicalFocusNodes) {
+      node.dispose();
+    }
+    _openingFocusNodes = List.generate(count, (_) => FocusNode());
+    _physicalFocusNodes = List.generate(count, (_) => FocusNode());
     _lastItemCount = count;
   }
 
   @override
   void dispose() {
-    for (final node in _focusNodes) {
+    for (final node in _openingFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _physicalFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -784,22 +820,43 @@ class _LedgerTableState extends State<_LedgerTable> {
   double _toDouble(dynamic value) =>
       value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
 
-  double _varianceFor(Map<String, dynamic> item, TextEditingController controller) {
-    final physical = _toDouble(controller.text.trim());
-    final systemQty = _toDouble(item['system_qty']);
+  double _varianceFor(
+    Map<String, dynamic> item,
+    TextEditingController physicalController,
+    TextEditingController openingController,
+  ) {
+    final physical = _toDouble(physicalController.text.trim());
+    final opening = openingController.text.trim().isNotEmpty
+        ? _toDouble(openingController.text.trim())
+        : _toDouble(item['opening_qty']);
+    final added = _toDouble(item['added_qty']);
+    final sold = _toDouble(item['sold_qty']);
+    final spoilage = _toDouble(item['spoilage_qty']);
+    final systemQty = opening + added - sold - spoilage;
     return physical - systemQty;
   }
 
-  void _focusNextField(int index) {
-    if (index >= _focusNodes.length - 1) {
-      _focusNodes[index].unfocus();
+  void _focusNextFromOpening(int index) {
+    if (index < _physicalFocusNodes.length) {
+      final nextNode = _physicalFocusNodes[index];
+      FocusScope.of(context).requestFocus(nextNode);
+      _scrollToNode(nextNode);
+    }
+  }
+
+  void _focusNextFromPhysical(int index) {
+    if (index >= widget.items.length - 1) {
+      _physicalFocusNodes[index].unfocus();
       return;
     }
-
-    final nextNode = _focusNodes[index + 1];
+    final nextNode = _openingFocusNodes[index + 1];
     FocusScope.of(context).requestFocus(nextNode);
+    _scrollToNode(nextNode);
+  }
+
+  void _scrollToNode(FocusNode node) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final targetContext = nextNode.context;
+      final targetContext = node.context;
       if (targetContext != null) {
         Scrollable.ensureVisible(
           targetContext,
@@ -831,7 +888,7 @@ class _LedgerTableState extends State<_LedgerTable> {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: StickyHorizontalScrollbar(
-          contentWidth: widget.locked ? 780 : 670,
+          contentWidth: widget.locked ? 850 : 730,
           child: Column(
             children: [
               Container(
@@ -849,9 +906,11 @@ class _LedgerTableState extends State<_LedgerTable> {
                 child: Row(
                   children: [
                     const _HeaderCell('#', 50),
-                    const _HeaderCell('Item', 308),
-                    const _HeaderCell('Physical Count', 168, alignEnd: true),
-                    const _HeaderCell('Unit', 94),
+                    const _HeaderCell('Item', 270),
+                    const _HeaderCell('Opening Value', 150, alignEnd: true),
+                    const SizedBox(width: 8),
+                    const _HeaderCell('Physical Count', 150, alignEnd: true),
+                    const _HeaderCell('Unit', 80),
                     if (widget.locked)
                       const _HeaderCell('Variance', 120, alignEnd: true),
                   ],
@@ -860,13 +919,29 @@ class _LedgerTableState extends State<_LedgerTable> {
               ...List.generate(widget.items.length, (index) {
                 final item = widget.items[index];
                 final key = widget.rowKeyFor(item);
+                final openingController = widget.openingControllers.putIfAbsent(
+                  key,
+                  () {
+                    final openVal = item['opening_qty'];
+                    final text = openVal != null && openVal != 0
+                        ? widget.formatNumber(openVal)
+                        : '';
+                    return TextEditingController(text: text);
+                  },
+                );
                 final physicalController = widget.physicalControllers.putIfAbsent(
                   key,
-                  () => TextEditingController(),
+                  () {
+                    final closeVal = item['closing_qty'];
+                    final text = closeVal != null
+                        ? widget.formatNumber(closeVal)
+                        : '';
+                    return TextEditingController(text: text);
+                  },
                 );
                 final rowColor =
                     index.isEven ? Colors.white : const Color(0xFFF8FAFC);
-                final variance = _varianceFor(item, physicalController);
+                final variance = _varianceFor(item, physicalController, openingController);
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -882,14 +957,77 @@ class _LedgerTableState extends State<_LedgerTable> {
                       _BodyCell('${index + 1}', 50),
                       _BodyCell(
                         item['item_name']?.toString() ?? '-',
-                        308,
+                        270,
                         bold: true,
                       ),
                       SizedBox(
-                        width: 168,
+                        width: 150,
+                        child: TextField(
+                          controller: openingController,
+                          focusNode: _openingFocusNodes[index],
+                          readOnly: widget.locked,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          textInputAction: TextInputAction.next,
+                          onTap: () {
+                            openingController.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: openingController.text.length,
+                            );
+                          },
+                          onChanged: (val) {
+                            if (widget.isOpeningStocktake && physicalController.text.trim().isEmpty) {
+                              physicalController.text = val;
+                            }
+                            setState(() {});
+                          },
+                          onSubmitted: (_) {
+                            _focusNextFromOpening(index);
+                          },
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: true,
+                            fillColor: widget.locked ? const Color(0xFFF8FAFC) : Colors.white,
+                            hintText: '0.00',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade400,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFD0D7E2)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.5,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 14,
+                            ),
+                          ),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F172A),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 150,
                         child: TextField(
                           controller: physicalController,
-                          focusNode: _focusNodes[index],
+                          focusNode: _physicalFocusNodes[index],
                           readOnly: widget.locked,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
@@ -903,13 +1041,19 @@ class _LedgerTableState extends State<_LedgerTable> {
                               extentOffset: physicalController.text.length,
                             );
                           },
+                          onChanged: (val) {
+                            if (widget.isOpeningStocktake && openingController.text.trim().isEmpty) {
+                              openingController.text = val;
+                            }
+                            setState(() {});
+                          },
                           onSubmitted: (_) {
-                            _focusNextField(index);
+                            _focusNextFromPhysical(index);
                           },
                           decoration: InputDecoration(
                             isDense: true,
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: widget.locked ? const Color(0xFFF8FAFC) : Colors.white,
                             hintText: '0.00',
                             hintStyle: TextStyle(
                               fontSize: 13,
@@ -944,7 +1088,7 @@ class _LedgerTableState extends State<_LedgerTable> {
                         ),
                       ),
                       SizedBox(
-                        width: 94,
+                        width: 80,
                         child: Padding(
                           padding: const EdgeInsets.only(left: 14, top: 10),
                           child: Text(
@@ -1071,8 +1215,8 @@ class _BlindCountInfoCard extends StatelessWidget {
           Expanded(
             child: Text(
               locked
-                  ? 'This stocktake is locked. Physical counts remain visible and variance is now available for review.'
-                  : 'Blind count mode is active. Enter physical count only, then press Enter to move straight to the next line.',
+                  ? 'This stocktake is locked. Opening and physical counts remain visible and variance is now available for review.'
+                  : 'Enter the actual Opening and Physical counts. For morning opening stocktakes, the entered count records the official opening stock for the shift.',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

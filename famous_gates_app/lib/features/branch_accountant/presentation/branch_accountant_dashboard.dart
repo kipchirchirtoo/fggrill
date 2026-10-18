@@ -38,6 +38,7 @@ import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
 import 'invoice_generator_section.dart';
+import 'branch_print_settings_section.dart';
 import 'staff_accounts_screen.dart';
 import 'waiter_audit_screen.dart';
 import 'daily_controls_screen.dart';
@@ -77,6 +78,7 @@ enum BranchAccountantSection {
   banking,
   payments,
   invoiceGenerator,
+  printSettings,
   outboundPayments,
   creditBills,
   staffAccounts,
@@ -284,6 +286,8 @@ class _BranchAccountantDashboardState
         return const _PaymentsInvoicesSection();
       case BranchAccountantSection.invoiceGenerator:
         return const InvoiceGeneratorSection();
+      case BranchAccountantSection.printSettings:
+        return const BranchPrintSettingsSection();
       case BranchAccountantSection.outboundPayments:
         return _OutboundPaymentsSection(
           preload: _outboundPreload,
@@ -422,6 +426,8 @@ final _navGroups = [
           Icons.receipt_long),
       _NavItem(BranchAccountantSection.invoiceGenerator, 'Invoice Generator',
           Icons.description),
+      _NavItem(BranchAccountantSection.printSettings, 'Bills & Receipts',
+          Icons.receipt),
       _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
           Icons.request_quote),
       _NavItem(BranchAccountantSection.eventOrders, 'Event Orders',
@@ -8668,8 +8674,18 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                   child: _KeyValueList({
                     'opening_float': _num(reconciliation['opening_float']),
                     'cash_sales': _num(reconciliation['cash_sales']),
-                    'credit_payments_received':
+                    'paid_bills':
                         _num(reconciliation['credit_payments_received']),
+                    // How the paid bills were cleared; only the cash part is in the drawer.
+                    if (_num(reconciliation['paid_bills_cash']) > 0)
+                      'paid_via_cash_in_drawer':
+                          _num(reconciliation['paid_bills_cash']),
+                    if (_num(reconciliation['paid_bills_mpesa']) > 0)
+                      'paid_via_m-pesa':
+                          _num(reconciliation['paid_bills_mpesa']),
+                    if (_num(reconciliation['paid_bills_card']) > 0)
+                      'paid_via_card':
+                          _num(reconciliation['paid_bills_card']),
                     'cash_drops': _num(reconciliation['cash_drops']),
                     // Expenses (petty-cash payouts) are always shown — they are
                     // subtracted from expected cash (opening float + cash sales

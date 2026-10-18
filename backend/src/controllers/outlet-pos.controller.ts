@@ -25,6 +25,7 @@ import {
 } from '../utils/posStationAccess';
 import { createBillVerificationCode } from '../services/bill-verification-code.service';
 import { isGlobalRole } from '../utils/branchIsolation';
+import { isBarOrDrinkOrNonFoodItem } from '../utils/foodControlFilters';
 import { allocateStaffCreditPayment } from './credit-bills.controller';
 
 // Roles permitted to open/close a POS shift on behalf of a station.
@@ -437,6 +438,11 @@ const ensureCashierOutletAccess = async (req: Request, outlet: Record<string, an
   const role = roleFor(req);
   const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
   if (!canAccessPosOutlet(role, outlet, assignedOutlets)) {
+    // For POS ordering within the user's active branch, permit cross-station ordering:
+    const userBranch = branchIdFor(req);
+    if (outlet.branch_id && userBranch !== null && Number(outlet.branch_id) === Number(userBranch)) {
+      return;
+    }
     throw new AppError('Forbidden: this cashier is not assigned to this POS station', 403);
   }
 };
@@ -972,6 +978,7 @@ export const recordConsumptionForOrder = async (
 ): Promise<void> => {
   const insertUnmatchedConsumption = async (oi: any, portions: number, idx: number) => {
     if (portions <= 0) return;
+    if (isBarOrDrinkOrNonFoodItem(oi)) return;
     try {
       await supabase.from('kitchen_shift_pos_consumption').insert({
         shift_id: shiftId,
@@ -1004,7 +1011,7 @@ export const recordConsumptionForOrder = async (
 
     const { data: outletItem, error: outletItemError } = await supabase
       .from('pos_outlet_items')
-      .select('id, name, sku, stock_pool_item_id, pool_fraction, source_table, source_item_id')
+      .select('id, name, sku, stock_pool_item_id, pool_fraction, source_table, source_item_id, category, item_group')
       .eq('id', outletItemId)
       .maybeSingle();
     if (outletItemError) throw outletItemError;
@@ -1012,28 +1019,52 @@ export const recordConsumptionForOrder = async (
       await insertUnmatchedConsumption({ id: outletItemId }, portionsSold, itemIndex);
       continue;
     }
+    if (isBarOrDrinkOrNonFoodItem(outletItem)) {
+      continue;
+    }
 
-    let recipe = null;
-    const { data: recipeById } = await supabase
+    // A dish with several ingredients is stored as SEVERAL active recipe rows (one per
+    // ingredient). The old lookup used .maybeSingle(), which returns nothing when more than one
+    // row matches, so those dishes were recorded as "unmatched" and no ingredient was deducted
+    // (98% of their sales over 30 days). Load every row and consume each ingredient.
+    let recipeRows: any[] = [];
+    const { data: recipesById, error: recipesByIdError } = await supabase
       .from('kitchen_production_recipes')
       .select('*')
       .eq('pos_outlet_item_id', outletItemId)
-      .eq('is_active', true)
-      .maybeSingle();
-    recipe = recipeById;
+      .eq('is_active', true);
+    if (recipesByIdError) {
+      logger.warn('recordConsumptionForOrder: recipe lookup by POS item failed', recipesByIdError as any);
+    }
+    recipeRows = recipesById || [];
 
-    if (!recipe && outletItem?.sku) {
-      const { data: recipeBySku } = await supabase
+    if (!recipeRows.length && outletItem?.sku) {
+      const { data: recipesBySku, error: recipesBySkuError } = await supabase
         .from('kitchen_production_recipes')
         .select('*')
         .eq('branch_id', branchId)
         .eq('produced_item_sku', outletItem.sku)
-        .eq('is_active', true)
-        .maybeSingle();
-      recipe = recipeBySku;
+        .eq('is_active', true);
+      if (recipesBySkuError) {
+        logger.warn('recordConsumptionForOrder: recipe lookup by SKU failed', recipesBySkuError as any);
+      }
+      recipeRows = recipesBySku || [];
     }
 
-    if (recipe && numberValue(recipe.produced_quantity) > 0) {
+    // Same ingredient entered twice with identical quantities would be double counted.
+    const seenRecipeRows = new Set<string>();
+    const usableRecipes = recipeRows.filter((row: any) => {
+      if (numberValue(row.produced_quantity) <= 0) return false;
+      const key = row.raw_item_sku && row.raw_item_sku !== 'MULTI'
+        ? `${row.raw_item_sku}|${row.raw_quantity}|${row.produced_quantity}`
+        : `multi|${row.id}`;
+      if (seenRecipeRows.has(key)) return false;
+      seenRecipeRows.add(key);
+      return true;
+    });
+
+    if (usableRecipes.length > 0) {
+      for (const recipe of usableRecipes) {
       const producedQty = numberValue(recipe.produced_quantity);
 
       // Resolve ingredient list — single-input recipes store the SKU directly on the
@@ -1112,6 +1143,7 @@ export const recordConsumptionForOrder = async (
             });
         }
       }
+      } // end: every recipe row of this dish
 
       continue;
     }
@@ -2228,11 +2260,16 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
     const cashierRole = roleFor(req);
     const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
 
+    const requestedOutletId = String(req.query.outlet_id || '').trim();
+    const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
+
     const barShiftIds = (outletShifts || [])
       .filter((shift: any) => {
         const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
         const isBarOutlet = BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
         if (!isBarOutlet) return false;
+        if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
+        if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
         if (!isGlobal) {
           const outletObj = {
             id: shift.outlet_id,
@@ -2626,7 +2663,8 @@ const loadShiftOrdersForPos = async (
 const queryAccessibleOutlets = async (
   req: Request,
   outletType?: unknown,
-  branchIdOverride?: unknown
+  branchIdOverride?: unknown,
+  allowAllStations = false
 ): Promise<Array<Record<string, any>>> => {
   let query = supabase
     .from('pos_outlets')
@@ -2655,10 +2693,16 @@ const queryAccessibleOutlets = async (
       role,
       branchIdOverride ?? branchIdFor(req),
     );
-    rows = rows.filter((outlet) =>
-      ids.includes(String(outlet.id)) ||
-      roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
-    );
+    if (roleOutletTypes.length > 0) {
+      // Station-specific cashier roles (main bar, executive bar, restaurant, etc.)
+      // are strictly confined to their allowed station types.
+      rows = rows.filter((outlet) =>
+        roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase()) &&
+        (allowAllStations || ids.length === 0 || ids.includes(String(outlet.id)))
+      );
+    } else if (!allowAllStations && ids.length > 0) {
+      rows = rows.filter((outlet) => ids.includes(String(outlet.id)));
+    }
   }
   return removeCrossBranchOutletLeaks(rows);
 };
@@ -2666,10 +2710,12 @@ const queryAccessibleOutlets = async (
 export const getPosBootstrap = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
+    const allowAll = req.query.all_outlets === 'true';
     const outlets = await queryAccessibleOutlets(
       req,
-      req.query.all_outlets === 'true' ? undefined : req.query.outlet_type,
-      req.query.branch_id
+      allowAll ? undefined : req.query.outlet_type,
+      req.query.branch_id,
+      allowAll
     );
     const requestedOutletId = String(req.query.outlet_id || req.query.outletId || '').trim();
     const requestedOutletType = String(req.query.selected_outlet_type || req.query.outlet_type || '').trim().toLowerCase();

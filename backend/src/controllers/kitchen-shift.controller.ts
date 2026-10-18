@@ -8,6 +8,7 @@ import { getActiveShiftMode } from '../services/shiftConfigService';
 import db from '../db';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import { buildBreakfastPaxSnapshot, todayInNairobi } from '../services/receptionStayState.service';
+import { isBarOrDrinkOrNonFoodItem } from '../utils/foodControlFilters';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -682,7 +683,7 @@ async function getSubmittedKitchenOpeningStocktake(
 ): Promise<OpeningStocktakeReadiness> {
     const { data: shiftRow, error: shiftErr } = await supabase
         .from('kitchen_stocktake_shifts')
-        .select('id,status,shift,stocktake_date,items:kitchen_stocktake_items(item_name,inventory_item_id,closing_qty)')
+        .select('id,status,shift,stocktake_date,items:kitchen_stocktake_items(item_name,inventory_item_id,opening_qty,closing_qty)')
         .eq('branch_id', branchId)
         .eq('stocktake_date', businessDate)
         .eq('shift', shift)
@@ -737,7 +738,7 @@ async function getSubmittedKitchenOpeningStocktake(
                 name: inv?.item_name || item.item_name,
                 unit: inv?.unit || 'portion',
                 cost_price: Number(inv?.default_unit_cost || 0),
-                quantity: Number(item.closing_qty || 0),
+                quantity: Number(item.opening_qty != null && item.opening_qty !== '' ? item.opening_qty : (item.closing_qty || 0)),
             };
         });
 
@@ -3196,7 +3197,8 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
     q = applyBranchFilter(q, req);
     const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
-    res.json({ success: true, data: data || [] });
+    const linkableFoodItems = (data || []).filter((item: any) => !isBarOrDrinkOrNonFoodItem(item));
+    res.json({ success: true, data: linkableFoodItems });
 });
 
 // ── FOOD CONTROL TYPE CONFIG (Phase 1) ───────────────────────
@@ -3208,28 +3210,7 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
 // food_control_direct_items / food_control_exempt_items
 // (migration 20260629_food_control_type_config.sql).
 
-function isBarItem(item: { item_group?: string | null; source_table?: string | null; category?: string | null; name?: string | null; sku?: string | null }): boolean {
-    if (item.item_group === 'bar') return true;
-    if (item.source_table === 'bar_drinks') return true;
-
-    const category = (item.category || '').toLowerCase();
-    const name = (item.name || '').toLowerCase();
-    const sku = (item.sku || '').toLowerCase();
-
-    // Check if the item belongs to alcohol categories
-    const BAR_EXPLICIT_CATEGORIES = ['whisky', 'whiskey', 'beer', 'wine', 'spirit', 'liqueur', 'brandy', 'vodka', 'gin', 'rum', 'tequila', 'cider', 'alcohol'];
-    if (BAR_EXPLICIT_CATEGORIES.some(cat => category.includes(cat))) {
-        return true;
-    }
-
-    // Match exact bar terms using word boundaries
-    const barWordRegex = /\b(beer|wine|whisky|whiskey|vodka|gin|rum|brandy|liqueur|alcohol)\b/i;
-    if (barWordRegex.test(name) || barWordRegex.test(sku)) {
-        return true;
-    }
-
-    return false;
-}
+const isBarItem = isBarOrDrinkOrNonFoodItem;
 
 export const getStockItemFoodControlType = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id, item_sku } = req.query;
@@ -4825,23 +4806,24 @@ export async function buildShiftDailyControlsData(shiftId: string) {
 
     // Controlled SKUs: All raw materials configured across channel standards,
     // production recipes (both single-input and multi-input ingredients), and direct items.
+    // Strictly exclude any bar, drink, beverage or non-food items.
     const controlledSkuSet = new Set<string>();
     for (const row of standardsList) {
         const sku = String(row.raw_item_sku || '').trim();
-        if (sku) controlledSkuSet.add(sku);
+        if (sku && !isBarOrDrinkOrNonFoodItem({ sku, name: row.raw_item_name })) controlledSkuSet.add(sku);
     }
     for (const row of activeRecipes) {
         const sku = String(row.raw_item_sku || '').trim();
         // 'MULTI' is a COMPLEX-recipe marker, not a real ingredient SKU — skip it
-        if (sku && sku.toUpperCase() !== 'MULTI') controlledSkuSet.add(sku);
+        if (sku && sku.toUpperCase() !== 'MULTI' && !isBarOrDrinkOrNonFoodItem({ sku, name: row.raw_item_name })) controlledSkuSet.add(sku);
     }
     for (const row of ((recipeInputs || []) as any[])) {
         const sku = String(row.raw_item_sku || '').trim();
-        if (sku) controlledSkuSet.add(sku);
+        if (sku && !isBarOrDrinkOrNonFoodItem({ sku, name: row.raw_item_name })) controlledSkuSet.add(sku);
     }
     for (const row of directFoodControlList) {
         const sku = String(row.stock_item_sku || '').trim();
-        if (sku) controlledSkuSet.add(sku);
+        if (sku && !isBarOrDrinkOrNonFoodItem({ sku, name: row.stock_item_name })) controlledSkuSet.add(sku);
     }
     const controlledSkus = [...controlledSkuSet];
 
@@ -4944,16 +4926,41 @@ export async function buildShiftDailyControlsData(shiftId: string) {
 
     const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    const recipeByPosId = new Map<string, any>();
-    const recipeByName = new Map<string, any>();
+    // A dish with several ingredients has SEVERAL active recipe rows (one per ingredient), so these
+    // are lists. A single-valued map kept only the last row and counted that one ingredient for
+    // every ingredient row of the dish.
+    const recipesByPosId = new Map<string, any[]>();
+    const recipesByName = new Map<string, any[]>();
+    const pushRecipe = (map: Map<string, any[]>, key: string, recipe: any) => {
+        if (!key) return;
+        const list = map.get(key) || [];
+        list.push(recipe);
+        map.set(key, list);
+    };
     for (const r of activeRecipes) {
-        const pid = String(r.pos_outlet_item_id || '').trim();
-        if (pid) recipeByPosId.set(pid, r);
-        const pn = norm(r.produced_item_name);
-        if (pn) recipeByName.set(pn, r);
-        const rn = norm(r.recipe_name);
-        if (rn) recipeByName.set(rn, r);
+        pushRecipe(recipesByPosId, String(r.pos_outlet_item_id || '').trim(), r);
+        pushRecipe(recipesByName, norm(r.produced_item_name), r);
+        pushRecipe(recipesByName, norm(r.recipe_name), r);
     }
+    const dishInputsByRecipeId = new Map<string, any[]>();
+    for (const input of ((recipeInputs || []) as any[])) {
+        const key = String(input.recipe_id || '');
+        if (!key) continue;
+        const list = dishInputsByRecipeId.get(key) || [];
+        list.push(input);
+        dishInputsByRecipeId.set(key, list);
+    }
+    // One recipe row -> the raw ingredients it consumes per `produced_quantity` portions.
+    const expandRecipe = (recipe: any): Array<{ sku: string; rawQty: number; prodQty: number }> => {
+        const prodQty = n(recipe.produced_quantity) || n(recipe.conversion_ratio) || 1;
+        const sku = String(recipe.raw_item_sku || '').trim();
+        if (sku && sku.toUpperCase() !== 'MULTI') {
+            return [{ sku, rawQty: n(recipe.raw_quantity) || 1, prodQty }];
+        }
+        return (dishInputsByRecipeId.get(String(recipe.id)) || [])
+            .filter((input: any) => input.raw_item_sku && n(input.quantity) > 0)
+            .map((input: any) => ({ sku: String(input.raw_item_sku).trim(), rawQty: n(input.quantity), prodQty }));
+    };
 
     const directByPosId = new Map<string, any>();
     const directByName = new Map<string, any>();
@@ -4972,80 +4979,76 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         const itemName = String(sale.raw_item_name || sale.produced_item_name || '').trim();
         const normName = norm(itemName);
         const portions = n(sale.portions_sold) || 1;
+        const isUnmatchedRow = String((sale as any).match_status || 'matched') === 'unmatched';
 
-        let matchedRecipe = (posId ? recipeByPosId.get(posId) : null) || (normName ? recipeByName.get(normName) : null);
-        let matchedDirect = (posId ? directByPosId.get(posId) : null) || (normName ? directByName.get(normName) : null);
+        const targets: Array<{ sku: string; qty: number; dish: string }> = [];
 
-        let targetSku = '';
-        let rawQtyConsumed = 0;
-        let dishDisplayName = itemName;
-
-        if (matchedRecipe) {
-            targetSku = String(matchedRecipe.raw_item_sku || '').trim();
-            const rawQty = n(matchedRecipe.raw_quantity) || 1;
-            const prodQty = n(matchedRecipe.produced_quantity) || n(matchedRecipe.conversion_ratio) || 1;
-            rawQtyConsumed = portions * (rawQty / prodQty);
-            dishDisplayName = matchedRecipe.produced_item_name || itemName;
-            dynamicallyMatchedSaleIds.add(saleId);
-        } else if (matchedDirect) {
-            targetSku = String(matchedDirect.stock_item_sku || '').trim();
-            rawQtyConsumed = portions;
-            dishDisplayName = matchedDirect.stock_item_name || itemName;
-            dynamicallyMatchedSaleIds.add(saleId);
-        } else if (sale.raw_item_sku && n(sale.raw_quantity_consumed) > 0 && String((sale as any).match_status || 'matched') !== 'unmatched') {
-            targetSku = String(sale.raw_item_sku).trim();
-            rawQtyConsumed = n(sale.raw_quantity_consumed);
-            dishDisplayName = String(sale.produced_item_name || sale.raw_item_name || '').trim();
-            dynamicallyMatchedSaleIds.add(saleId);
+        if (!isUnmatchedRow && sale.raw_item_sku && n(sale.raw_quantity_consumed) > 0) {
+            // Recorded at sale time against the exact ingredient: use it as is. (Re-deriving it
+            // from "the" recipe of the POS item mixed up the ingredients of multi-ingredient dishes.)
+            targets.push({
+                sku: String(sale.raw_item_sku).trim(),
+                qty: n(sale.raw_quantity_consumed),
+                dish: String(sale.produced_item_name || sale.raw_item_name || '').trim(),
+            });
         } else {
-            // Chicken & dairy portion patterns for items unlinked at checkout
-            if (normName.includes('broiler') && (normName.includes('panfry') || normName.includes('panfried'))) {
-                targetSku = 'FGH-DRY-GOODS-026';
-                rawQtyConsumed = normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25);
-                dynamicallyMatchedSaleIds.add(saleId);
-            } else if (normName.includes('kienyeji') && (normName.includes('panfry') || normName.includes('panfried') || normName.includes('stew'))) {
-                targetSku = 'FGH-DRY-GOODS-101';
-                rawQtyConsumed = normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25);
-                dynamicallyMatchedSaleIds.add(saleId);
-            } else if (normName.includes('mursik') || normName.includes('mala')) {
-                targetSku = 'FGH-DRY-GOODS-074';
-                rawQtyConsumed = portions * 0.5;
-                dynamicallyMatchedSaleIds.add(saleId);
-            } else if (normName.includes('water1l') || normName.includes('water1litre') || normName.includes('mineralwater1l')) {
-                targetSku = 'FGH-SOFT-DRINKS-024';
-                rawQtyConsumed = portions;
-                dynamicallyMatchedSaleIds.add(saleId);
-            } else if (normName.includes('keringetwater1l')) {
-                targetSku = 'FGH-SOFT-DRINKS-011';
-                rawQtyConsumed = portions;
-                dynamicallyMatchedSaleIds.add(saleId);
-            } else if (normName.includes('delmonte')) {
-                targetSku = 'FGH-SOFT-DRINKS-004';
-                rawQtyConsumed = portions;
-                dynamicallyMatchedSaleIds.add(saleId);
+            // Unmatched sale: try to match it now against the current recipes / direct items.
+            const matchedRecipes = (posId ? recipesByPosId.get(posId) : null) || (normName ? recipesByName.get(normName) : null) || [];
+            const matchedDirect = (posId ? directByPosId.get(posId) : null) || (normName ? directByName.get(normName) : null);
+            if (matchedRecipes.length > 0) {
+                for (const recipe of matchedRecipes) {
+                    for (const ing of expandRecipe(recipe)) {
+                        targets.push({
+                            sku: ing.sku,
+                            qty: portions * (ing.rawQty / ing.prodQty),
+                            dish: recipe.produced_item_name || itemName,
+                        });
+                    }
+                }
+            } else if (matchedDirect) {
+                targets.push({
+                    sku: String(matchedDirect.stock_item_sku || '').trim(),
+                    qty: portions,
+                    dish: matchedDirect.stock_item_name || itemName,
+                });
+            } else {
+                // Chicken & dairy portion patterns for items unlinked at checkout
+                if (normName.includes('broiler') && (normName.includes('panfry') || normName.includes('panfried'))) {
+                    targets.push({ sku: 'FGH-DRY-GOODS-026', qty: normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25), dish: itemName });
+                } else if (normName.includes('kienyeji') && (normName.includes('panfry') || normName.includes('panfried') || normName.includes('stew'))) {
+                    targets.push({ sku: 'FGH-DRY-GOODS-101', qty: normName.includes('12') ? portions * 0.5 : (normName.includes('full') ? portions * 1.0 : portions * 0.25), dish: itemName });
+                } else if (normName.includes('mursik') || normName.includes('mala')) {
+                    targets.push({ sku: 'FGH-DRY-GOODS-074', qty: portions * 0.5, dish: itemName });
+                }
             }
         }
 
-        if (!targetSku || !controlledSkuSet.has(targetSku) || rawQtyConsumed <= 0) {
-            continue;
-        }
+        for (const target of targets) {
+            const targetSku = target.sku;
+            const rawQtyConsumed = target.qty;
+            const dishDisplayName = target.dish;
+            if (!targetSku || !controlledSkuSet.has(targetSku) || rawQtyConsumed <= 0) {
+                continue;
+            }
+            dynamicallyMatchedSaleIds.add(saleId);
 
-        addExpectedQty(targetSku, rawQtyConsumed);
-        posSalesQtyBySku.set(
-            targetSku,
-            (posSalesQtyBySku.get(targetSku) || 0) + rawQtyConsumed
-        );
-        portionsSoldByRawSku.set(
-            targetSku,
-            (portionsSoldByRawSku.get(targetSku) || 0) + portions
-        );
-        if (dishDisplayName) {
-            const dishesMap = dishesProducedByRawSku.get(targetSku) || new Map<string, { portions: number; raw_consumed: number }>();
-            const stat = dishesMap.get(dishDisplayName) || { portions: 0, raw_consumed: 0 };
-            stat.portions += portions;
-            stat.raw_consumed += rawQtyConsumed;
-            dishesMap.set(dishDisplayName, stat);
-            dishesProducedByRawSku.set(targetSku, dishesMap);
+            addExpectedQty(targetSku, rawQtyConsumed);
+            posSalesQtyBySku.set(
+                targetSku,
+                (posSalesQtyBySku.get(targetSku) || 0) + rawQtyConsumed
+            );
+            portionsSoldByRawSku.set(
+                targetSku,
+                (portionsSoldByRawSku.get(targetSku) || 0) + portions
+            );
+            if (dishDisplayName) {
+                const dishesMap = dishesProducedByRawSku.get(targetSku) || new Map<string, { portions: number; raw_consumed: number }>();
+                const stat = dishesMap.get(dishDisplayName) || { portions: 0, raw_consumed: 0 };
+                stat.portions += portions;
+                stat.raw_consumed += rawQtyConsumed;
+                dishesMap.set(dishDisplayName, stat);
+                dishesProducedByRawSku.set(targetSku, dishesMap);
+            }
         }
     }
 
@@ -5184,7 +5187,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     const { data: inventoryItems } = rowSkus.length
         ? await supabase
             .from('inventory_items')
-            .select('id, sku, item_name, unit, cost_price, default_unit_cost')
+            .select('id, sku, item_name, unit, cost_price, default_unit_cost, category, store_type')
             .in('sku', rowSkus)
         : { data: [] } as any;
     const inventoryBySku = new Map<string, any>(
@@ -5251,11 +5254,19 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         }
     }
 
-    const allSkus = [...new Set([
-        ...controlledSkus,
-        ...additionsBySku.keys(),
-        ...expectedQtyBySku.keys(),
-    ])];
+    // Daily Controls STRICTLY only includes items with Food Control Standards set.
+    // Must exclude additions or expected items that have no Food Control Standard,
+    // and exclude any bar or non-food items.
+    const allSkus = controlledSkus.filter((sku) => {
+        const inv = inventoryBySku.get(sku) || {};
+        const std = standardBySku.get(sku) || {};
+        return !isBarOrDrinkOrNonFoodItem({
+            sku,
+            name: inv.item_name || std.raw_item_name || sku,
+            category: inv.category,
+            store_type: inv.store_type,
+        });
+    });
 
     const controlRows: DailyControlRow[] = [];
     for (const sku of allSkus) {
@@ -5414,39 +5425,10 @@ export async function buildShiftDailyControlsData(shiftId: string) {
 
     // Sold POS items with no recipe / inventory / food-control link — grouped
     // for the accountant to register (recipe / direct / exempt). Exclude bar & non-consumables.
-    const isBarOrNonConsumableItem = (name: string, outletType?: string): boolean => {
-        const normName = String(name || '').toLowerCase().trim();
-        const normOutlet = String(outletType || '').toLowerCase().trim();
-
-        if (['main_bar', 'executive_bar', 'sports_bar', 'bar', 'cellar'].includes(normOutlet)) {
-            return true;
-        }
-
-        const nonConsumables = [
-            'pool token', 'token', 'pool', 'trust classic', 'trust', 'condom', 't-shirt',
-            'merchandise', 'cap', 'hat', 'towel', 'ticket', 'corkage', 'service charge',
-            'damage fee', 'penalty', 'entry fee', 'parking', 'car wash', 'engine wash',
-            'playground', 'swimming', 'dog food', 'takeaway tin', 'take away tin', 'tin', 'packaging', 'wash'
-        ];
-        if (nonConsumables.some(nc => normName.includes(nc))) {
-            return true;
-        }
-
-        const barKeywords = [
-            'white cap', 'tusker', 'guinness', 'guarana', 'manyatta', 'savanna', 'faxe',
-            'viceroy', 'richot', 'vodka', 'captain morgan', 'black & white', 'kc ', 'kc 750', 'kc 350',
-            'kenya cane', 'gilbeys', 'gordons', 'bond 7', 'chrome', 'tripple ace', 'konyagi',
-            'jameson', 'jack daniel', 'red label', 'black label', 'johnnie walker', 'chivas',
-            'hennessy', 'martell', 'tequila', 'bacardi', 'campari', 'jagermeister', 'baileys',
-            'amarula', 'heineken', 'snapp', 'smirnoff', 'pilsner', 'bavaria', 'cider', 'lager',
-            '750ml', '350ml', '250ml', 'soda 500ml', 'soda 300ml', 'red bull', 'black ice',
-            'drostdy', 'caprice', 'camino', 'alvaro', 'balozi', 'tot', 'can', 'wine', 'beer'
-        ];
-        if (barKeywords.some(bk => normName.includes(bk))) {
-            return true;
-        }
-
-        return false;
+    // Sold POS items with no recipe / inventory / food-control link — grouped
+    // for the accountant to register (recipe / direct / exempt). Exclude bar & non-consumables.
+    const isBarOrNonConsumableItem = (name: string, outletType?: string, sku?: string): boolean => {
+        return isBarOrDrinkOrNonFoodItem({ name, outlet_type: outletType, sku });
     };
 
     // Re-evaluate the "needs config" list against the CURRENT food-control config.
@@ -5483,7 +5465,15 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         const itemName = String(sale.raw_item_name || sale.produced_item_name || 'Unmapped POS item');
         if (configuredPosNames.has(norm(itemName))) continue;
         const outletType = String((sale as any).outlet_type || (sale as any).outlet_name || '');
-        if (isBarOrNonConsumableItem(itemName, outletType)) continue;
+        const itemSku = String(sale.raw_item_sku || sale.produced_item_sku || '');
+        if (isBarOrDrinkOrNonFoodItem({
+            sku: itemSku,
+            name: itemName,
+            outlet_type: (sale as any).outlet_type,
+            outlet_name: (sale as any).outlet_name,
+        })) {
+            continue;
+        }
 
         const posId = posOutletId || norm(itemName);
         const existing = unmatchedByPosId.get(posId) || {

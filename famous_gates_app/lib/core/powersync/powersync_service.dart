@@ -185,6 +185,7 @@ class PowerSyncService {
     String? search,
     String? date,
     String? outletId,
+    List<String>? allowedStationTypes,
   }) async* {
     final branchId = await _currentBranchId();
     if (branchId == null || !hotReadsEnabled) {
@@ -198,6 +199,12 @@ class PowerSyncService {
     if (outletId != null && outletId.isNotEmpty) {
       conditions.add('o.outlet_id = ?');
       params.add(outletId);
+    }
+
+    if (allowedStationTypes != null && allowedStationTypes.isNotEmpty) {
+      final placeholders = List.filled(allowedStationTypes.length, '?').join(',');
+      conditions.add('LOWER(COALESCE(p.outlet_type, \'\')) IN ($placeholders)');
+      params.addAll(allowedStationTypes.map((t) => t.trim().toLowerCase()));
     }
 
     if (date != null && date.isNotEmpty) {

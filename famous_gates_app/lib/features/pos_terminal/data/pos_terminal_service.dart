@@ -70,10 +70,25 @@ class PosTerminalService {
   /// Header the API expects for terminal (branch) context.
   static const deviceTokenHeader = 'X-POS-Terminal-Token';
 
+  /// Static support directory path initialized at app launch on non-Windows/mobile.
+  static String? _supportDirectoryPath;
+  static void initSupportDirectory(String path) {
+    _supportDirectoryPath = path;
+  }
+
+  static List<String>? _testBackupBases;
+
+  /// Tests only: replaces every backup location with these base folders.
+  @visibleForTesting
+  static void debugSetBackupBases(List<String>? bases) {
+    _testBackupBases = bases;
+  }
+
   // In-memory copies. When the PC loses power the secure-storage file (one file
   // that is rewritten on every write) can be left corrupt and every read/write
   // then throws. The seed/token/fingerprint must keep working from memory and
   // from the on-disk backup instead of the terminal "forgetting" it is enrolled.
+  PosTerminalIdentity? _memIdentity;
   String? _memSeed;
   String? _memFingerprint;
   String? _memToken;
@@ -115,21 +130,44 @@ class PosTerminalService {
     final data = e.response?.data;
     final msg = (data is Map ? '${data['message'] ?? ''}' : '').toLowerCase();
     if (code == 404) return msg.contains('not registered');
-    if (code == 403) return msg.contains('terminal is');
-    if (code == 401) return msg.contains('signature');
+    // Only a REVOKED terminal is gone for good. A suspended one is temporarily blocked and
+    // must come back by itself when an admin re-activates it — wiping the key here is what
+    // forced a brand-new enrollment code after every suspend/activate.
+    if (code == 403) return msg.contains('revoked');
     return false;
   }
 
+  /// Asks the server's status endpoint (which reports DB errors as errors, not as "missing")
+  /// whether this terminal is really gone. Used before any wipe: one odd answer is not enough.
+  Future<bool> _serverConfirmsGone(PosTerminalIdentity identity) async {
+    try {
+      final res = await _dio.get('/pos-terminals/device/status',
+          queryParameters: {'terminal_id': identity.terminalId});
+      final data = Map<String, dynamic>.from((res.data as Map)['data'] as Map);
+      final status = '${data['status'] ?? ''}';
+      return data['registered'] != true && status != 'suspended';
+    } catch (_) {
+      return false; // can't confirm (offline / 5xx) -> keep the registration
+    }
+  }
+
   Future<PosTerminalIdentity?> loadIdentity() async {
+    // 0. In-memory cached copy
+    if (_memIdentity != null && _memIdentity!.status != 'revoked') {
+      return _memIdentity;
+    }
+
     // 1. Secure storage (may be unreadable after a power cut).
     final raw = await _safeRead(_kIdentity);
     if (raw != null && raw.trim().isNotEmpty) {
       try {
         final id = PosTerminalIdentity.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-        if (id.status.isNotEmpty && id.status != 'active') {
-          await clear();
+        if (id.status == 'revoked') {
+          await clear(reason: 'stored identity is marked revoked');
           return null;
         }
+        _memIdentity = id;
+        await _refreshReplicas(id, 'secure storage');
         return id;
       } catch (_) {
         // corrupt value — fall through to the file backup
@@ -144,17 +182,19 @@ class PosTerminalService {
     try {
       final identity = PosTerminalIdentity.fromJson(
           Map<String, dynamic>.from(backup['identity'] as Map));
-      if (identity.status.isNotEmpty && identity.status != 'active') {
-        await clear();
+      if (identity.status == 'revoked') {
+        await clear(reason: 'backup identity is marked revoked');
         return null;
       }
       final seed = '${backup['seed'] ?? ''}';
       final fingerprint = '${backup['fingerprint'] ?? ''}';
       if (seed.isNotEmpty) _memSeed = seed;
       if (fingerprint.isNotEmpty) _memFingerprint = fingerprint;
+      _memIdentity = identity;
       await _safeWrite(_kIdentity, jsonEncode(identity.toJson()));
       if (seed.isNotEmpty) await _safeWrite(_kSeed, seed);
       if (fingerprint.isNotEmpty) await _safeWrite(_kFingerprint, fingerprint);
+      await _refreshReplicas(identity, 'file backup (secure storage was empty or unreadable)');
       return identity;
     } catch (_) {
       return null;
@@ -170,24 +210,46 @@ class PosTerminalService {
   // Power-loss safety: every write is flushed to disk and written to a temp
   // file that is then renamed over the target, and a second full copy (.bak) is
   // kept. A cut in the middle of a write can therefore never destroy both.
-  static File? backupFileSync() {
-    try {
-      if (kIsWeb) return null;
-      final sep = Platform.pathSeparator;
-      String? base;
-      if (Platform.isWindows) {
-        base = Platform.environment['LOCALAPPDATA'] ??
-            Platform.environment['PROGRAMDATA'] ??
-            Platform.environment['APPDATA'];
-      } else {
-        base = Platform.environment['HOME'];
-      }
-      if (base == null || base.trim().isEmpty) return null;
-      final dir = Directory('$base${sep}FamousGateTerminal');
-      return File('${dir.path}${sep}pos_terminal_identity.json');
-    } catch (_) {
-      return null;
+  /// Every directory a copy of the registration is kept in. They fail independently: a
+  /// restore/cleanup tool, a different Windows account, or a damaged user profile rarely takes
+  /// out all of them. ProgramData is machine-wide, so a copy there survives a switch of Windows
+  /// account (other accounts can read it; they simply cannot overwrite it).
+  static List<Directory> _backupDirectories() {
+    final paths = <String>[];
+    void add(String? base) {
+      if (base == null || base.trim().isEmpty) return;
+      final path = '${base.trim()}${Platform.pathSeparator}FamousGateTerminal';
+      if (!paths.contains(path)) paths.add(path);
     }
+
+    try {
+      if (kIsWeb) return const [];
+      if (_testBackupBases != null) {
+        // Tests only: never touch the real user folders.
+        for (final base in _testBackupBases!) {
+          add(base);
+        }
+        return paths.map((path) => Directory(path)).toList();
+      }
+      add(_supportDirectoryPath);
+      if (Platform.isWindows) {
+        add(Platform.environment['LOCALAPPDATA']);
+        add(Platform.environment['APPDATA']);
+        add(Platform.environment['PROGRAMDATA']);
+      } else {
+        add(Platform.environment['HOME']);
+      }
+    } catch (_) {}
+    return paths.map((path) => Directory(path)).toList();
+  }
+
+  static const _fileName = 'pos_terminal_identity.json';
+
+  /// First backup location (kept for callers that want a single file).
+  static File? backupFileSync() {
+    final dirs = _backupDirectories();
+    if (dirs.isEmpty) return null;
+    return File('${dirs.first.path}${Platform.pathSeparator}$_fileName');
   }
 
   static File _bakOf(File primary) => File('${primary.path}.bak');
@@ -206,40 +268,31 @@ class PosTerminalService {
     }
   }
 
-  /// Synchronous read used at startup (primary copy, then the .bak copy).
+  /// The newest valid copy wins (copies can differ if one location was unwritable).
+  static Map<String, dynamic>? _newest(Iterable<Map<String, dynamic>> copies) {
+    Map<String, dynamic>? best;
+    for (final copy in copies) {
+      if (best == null || '${copy['saved_at'] ?? ''}'.compareTo('${best['saved_at'] ?? ''}') > 0) {
+        best = copy;
+      }
+    }
+    return best;
+  }
+
+  /// Synchronous read used at startup: every location, primary then .bak.
   static Map<String, dynamic>? readBackupSync() {
-    try {
-      final primary = backupFileSync();
-      if (primary == null) return null;
+    final found = <Map<String, dynamic>>[];
+    for (final dir in _backupDirectories()) {
+      final primary = File('${dir.path}${Platform.pathSeparator}$_fileName');
       for (final file in [primary, _bakOf(primary)]) {
         try {
           if (!file.existsSync()) continue;
           final parsed = _parseBackup(file.readAsStringSync());
-          if (parsed != null) return parsed;
+          if (parsed != null) found.add(parsed);
         } catch (_) {}
       }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<File?> _backupFile() async {
-    try {
-      final file = backupFileSync();
-      if (file != null) {
-        if (!await file.parent.exists()) {
-          await file.parent.create(recursive: true);
-        }
-        return file;
-      }
-      final base = (await getApplicationSupportDirectory()).path;
-      if (base.trim().isEmpty) return null;
-      final sep = Platform.pathSeparator;
-      final dir = Directory('$base${sep}FamousGateTerminal');
-      if (!await dir.exists()) await dir.create(recursive: true);
-      return File('${dir.path}${sep}pos_terminal_identity.json');
-    } catch (_) {
-      return null;
     }
+    return _newest(found);
   }
 
   /// Flushed write via temp file + rename, so a power cut leaves either the old
@@ -255,42 +308,99 @@ class PosTerminalService {
     }
   }
 
+  /// Writes the registration to EVERY location (two atomic copies each). One location failing
+  /// (read-only, owned by another account, disk error) never stops the others.
   Future<void> _writeBackup(
       PosTerminalIdentity identity, String seedB64, String fingerprint) async {
-    try {
-      final file = await _backupFile();
-      if (file == null) return;
-      final content = jsonEncode({
-        'identity': identity.toJson(),
-        'seed': seedB64,
-        'fingerprint': fingerprint,
-      });
-      // Two independent full copies, written one after the other.
-      await _atomicWrite(file, content);
-      await _atomicWrite(_bakOf(file), content);
-    } catch (e) {
-      debugPrint('[PosTerminal] writing identity backup failed — $e');
+    final content = jsonEncode({
+      'identity': identity.toJson(),
+      'seed': seedB64,
+      'fingerprint': fingerprint,
+      'saved_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    var written = 0;
+    for (final dir in _backupDirectories()) {
+      try {
+        if (!await dir.exists()) await dir.create(recursive: true);
+        final primary = File('${dir.path}${Platform.pathSeparator}$_fileName');
+        await _atomicWrite(primary, content);
+        await _atomicWrite(_bakOf(primary), content);
+        written += 1;
+      } catch (e) {
+        debugPrint('[PosTerminal] identity backup to ${dir.path} failed — $e');
+      }
+    }
+    if (written == 0) {
+      await _logEvent('WARNING: could not write the registration to any backup location');
     }
   }
 
   Future<Map<String, dynamic>?> _readBackup() async {
-    try {
-      final primary = await _backupFile();
-      if (primary == null) return null;
+    final found = <Map<String, dynamic>>[];
+    for (final dir in _backupDirectories()) {
+      final primary = File('${dir.path}${Platform.pathSeparator}$_fileName');
       for (final file in [primary, _bakOf(primary)]) {
         try {
           if (!await file.exists()) continue;
           final parsed = _parseBackup(await file.readAsString());
-          if (parsed != null) return parsed;
+          if (parsed != null) found.add(parsed);
+        } catch (_) {}
+      }
+    }
+    return _newest(found);
+  }
+
+  // ---- Event log -----------------------------------------------------
+  // A small text file next to the backups recording WHY a registration was loaded, repaired or
+  // cleared, so a lost registration can be diagnosed afterwards instead of guessed at.
+  static const _eventLogName = 'pos_terminal_events.log';
+  static const _eventLogMaxBytes = 64 * 1024;
+
+  Future<void> _logEvent(String message) async {
+    debugPrint('[PosTerminal] $message');
+    try {
+      for (final dir in _backupDirectories()) {
+        try {
+          if (!await dir.exists()) await dir.create(recursive: true);
+          final file = File('${dir.path}${Platform.pathSeparator}$_eventLogName');
+          if (await file.exists() && await file.length() > _eventLogMaxBytes) {
+            final text = await file.readAsString();
+            await file.writeAsString(text.substring(text.length ~/ 2), flush: true);
+          }
+          await file.writeAsString(
+            '${DateTime.now().toIso8601String()}  $message\n',
+            mode: FileMode.append,
+            flush: true,
+          );
+          return; // one log location is enough
         } catch (_) {}
       }
     } catch (_) {}
-    return null;
+  }
+
+  /// Rewrites every backup location from the identity we just loaded, once per run. This repairs
+  /// a missing copy (e.g. a PC registered before backups existed, or one location wiped by a
+  /// cleanup tool) while the other source is still intact.
+  bool _replicasRefreshed = false;
+  Future<void> _refreshReplicas(PosTerminalIdentity identity, String source) async {
+    if (_replicasRefreshed) return;
+    _replicasRefreshed = true;
+    try {
+      final seed = await _loadSeed();
+      if (seed == null || seed.isEmpty) return;
+      final fingerprint = await _fingerprint();
+      await _writeBackup(identity, seed, fingerprint);
+      await _safeWrite(_kIdentity, jsonEncode(identity.toJson()));
+      await _safeWrite(_kSeed, seed);
+      await _logEvent('registration loaded from $source; all storage locations refreshed');
+    } catch (e) {
+      debugPrint('[PosTerminal] refreshing replicas failed — $e');
+    }
   }
 
   Future<bool> get isRegistered async {
     final identity = await loadIdentity();
-    return identity != null && (identity.status.isEmpty || identity.status == 'active');
+    return identity != null && identity.status != 'revoked';
   }
 
   /// The device's Ed25519 seed: secure storage, then memory, then the backup.
@@ -427,9 +537,9 @@ class PosTerminalService {
       return token;
     } catch (e) {
       debugPrint('[PosTerminal] ensureDeviceToken: mint FAILED — $e');
-      if (isDefinitiveRejection(e)) {
-        debugPrint('[PosTerminal] ensureDeviceToken: terminal rejected by server. Clearing local identity.');
-        await clear();
+      if (isDefinitiveRejection(e) && await _serverConfirmsGone(identity)) {
+        debugPrint('[PosTerminal] ensureDeviceToken: server confirms this terminal is gone. Clearing local identity.');
+        await clear(reason: 'server rejected the device sign-in and the status check confirmed the terminal is gone');
       }
       rethrow;
     }
@@ -462,11 +572,16 @@ class PosTerminalService {
       final data = Map<String, dynamic>.from((res.data as Map)['data'] as Map);
       final registered = data['registered'] == true;
       final status = '${data['status'] ?? ''}';
-
-      if (!registered || status == 'revoked') {
-        debugPrint('[PosTerminal] verifyWithServer: terminal ${identity.terminalId} is revoked/unregistered on server. Clearing local identity.');
-        await clear();
+      if (status == 'revoked') {
+        // explicitly revoked on the server: this device really is unregistered.
+        debugPrint('[PosTerminal] verifyWithServer: terminal ${identity.terminalId} is revoked on server. Clearing local identity.');
+        await clear(reason: 'server status is "revoked"');
         return null;
+      }
+      if (!registered || status == 'suspended') {
+        // Suspended or temporarily not active: keep the identity and key so it works again as soon as it is active.
+        debugPrint('[PosTerminal] verifyWithServer: terminal ${identity.terminalId} is $status (registered=$registered). Keeping registration.');
+        return identity;
       }
 
       // If branch or name changed on server (e.g. transfer branch):
@@ -513,24 +628,25 @@ class PosTerminalService {
   }
 
   /// Wipe local terminal identity (used after a server-side revoke/transfer).
-  Future<void> clear() async {
+  Future<void> clear({String reason = 'unspecified'}) async {
+    await _logEvent('registration CLEARED — reason: $reason');
+    _memIdentity = null;
     _memSeed = null;
     _memToken = null;
     _memTokenExp = 0;
+    _replicasRefreshed = false;
     await _safeDelete(_kIdentity);
     await _safeDelete(_kSeed);
     await _safeDelete(_kDeviceToken);
     await _safeDelete(_kDeviceTokenExp);
-    try {
-      final primary = await _backupFile();
-      if (primary != null) {
-        for (final file in [primary, _bakOf(primary), File('${primary.path}.tmp'), File('${_bakOf(primary).path}.tmp')]) {
-          try {
-            if (await file.exists()) await file.delete();
-          } catch (_) {}
-        }
+    for (final dir in _backupDirectories()) {
+      final primary = File('${dir.path}${Platform.pathSeparator}$_fileName');
+      for (final file in [primary, _bakOf(primary), File('${primary.path}.tmp'), File('${_bakOf(primary).path}.tmp')]) {
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
       }
-    } catch (_) {}
+    }
   }
 }
 
@@ -579,7 +695,7 @@ class TerminalRegistrationStatusNotifier extends StateNotifier<TerminalRegistrat
       try {
         final identity = PosTerminalIdentity.fromJson(
             Map<String, dynamic>.from(backup['identity'] as Map));
-        final registered = identity.status.isEmpty || identity.status == 'active';
+        final registered = identity.status != 'revoked';
         return TerminalRegistrationStatus(loaded: true, registered: registered);
       } catch (_) {}
     }
@@ -588,8 +704,14 @@ class TerminalRegistrationStatusNotifier extends StateNotifier<TerminalRegistrat
 
   Future<void> load() async {
     final service = _ref.read(posTerminalServiceProvider);
+    // 1. Immediately inspect local identity so router never bounces a registered device during network lookups
+    final local = await service.loadIdentity();
+    if (local != null && local.status != 'revoked' && mounted) {
+      state = const TerminalRegistrationStatus(loaded: true, registered: true);
+    }
+    // 2. Background verify with server
     final identity = await service.verifyWithServer();
-    final registered = identity != null && (identity.status.isEmpty || identity.status == 'active');
+    final registered = identity != null && identity.status != 'revoked';
     if (mounted) {
       state = TerminalRegistrationStatus(loaded: true, registered: registered);
     }
@@ -599,11 +721,11 @@ class TerminalRegistrationStatusNotifier extends StateNotifier<TerminalRegistrat
       try {
         await service.ensureDeviceToken();
       } catch (e) {
-        // ensureDeviceToken already wiped the identity if (and only if) the
-        // server definitively rejected this terminal; mirror that in the gate.
-        // Any other failure (offline, proxy 404/403, 5xx) keeps the terminal enrolled.
-        if (PosTerminalService.isDefinitiveRejection(e)) {
-          await service.clear();
+        // ensureDeviceToken already wiped the identity if (and only if) the server CONFIRMED
+        // this terminal is gone. Never wipe here on a single rejection: just mirror whatever
+        // is actually stored. Offline, proxy 404/403, 5xx and suspended terminals stay enrolled.
+        final stillRegistered = await service.isRegistered;
+        if (!stillRegistered) {
           _ref.invalidate(posTerminalIdentityProvider);
           if (mounted) {
             state = const TerminalRegistrationStatus(loaded: true, registered: false);

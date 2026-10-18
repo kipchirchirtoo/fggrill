@@ -37,13 +37,26 @@ describe('POS station / shift access rules', () => {
       expect(canAccessPosOutlet('executive_bar_cashier', execBar, [])).toBe(true);
       expect(canAccessPosOutlet('executive_bar_cashier', mainBar, [])).toBe(false);
     });
-    it('Kyogong receptionist behaves like restaurant cashier only on branch 1', () => {
-      const kyogongTypes = stationTypesForCashierRole('receptionist', 1);
-      const otherBranchTypes = stationTypesForCashierRole('receptionist', 2);
-      expect(kyogongTypes).toContain('restaurant');
-      expect(otherBranchTypes).toHaveLength(0);
+    it('Receptionist, cashier, and restaurant cashier clear bills for restaurant, choma_zone, and non_consumables across branches', () => {
+      const branch1Types = stationTypesForCashierRole('receptionist', 1);
+      const branch2Types = stationTypesForCashierRole('receptionist', 2);
+      const cashierTypes = stationTypesForCashierRole('cashier', 2);
+      const restCashierTypes = stationTypesForCashierRole('restaurant_cashier', 2);
+
+      expect(branch1Types).toEqual(['restaurant', 'choma_zone', 'non_consumables']);
+      expect(branch2Types).toEqual(['restaurant', 'choma_zone', 'non_consumables']);
+      expect(cashierTypes).toEqual(['restaurant', 'choma_zone', 'non_consumables']);
+      expect(restCashierTypes).toEqual(['restaurant', 'choma_zone', 'non_consumables']);
+
       expect(canAccessPosOutlet('receptionist', restaurantKyogong, [], 1)).toBe(true);
       expect(canAccessPosOutlet('receptionist', restaurantBomet, [], 2)).toBe(true);
+      expect(canAccessPosOutlet('receptionist', { id: 'o-choma', outlet_type: 'choma_zone', branch_id: 2 }, [], 2)).toBe(true);
+      expect(canAccessPosOutlet('receptionist', { id: 'o-noncon', outlet_type: 'non_consumables', branch_id: 2 }, [], 2)).toBe(true);
+      expect(canAccessPosOutlet('cashier', { id: 'o-choma', outlet_type: 'choma_zone', branch_id: 2 }, [], 2)).toBe(true);
+      expect(canAccessPosOutlet('restaurant_cashier', { id: 'o-noncon', outlet_type: 'non_consumables', branch_id: 2 }, [], 2)).toBe(true);
+      expect(canAccessPosOutlet('receptionist', mainBar, [], 2)).toBe(false);
+      expect(canAccessPosOutlet('cashier', mainBar, [], 2)).toBe(false);
+      expect(canAccessPosOutlet('restaurant_cashier', mainBar, [], 2)).toBe(false);
     });
   });
 

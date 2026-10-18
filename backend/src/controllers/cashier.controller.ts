@@ -4544,7 +4544,8 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         // Usually, these roles only see "Everything in THEIR branch" unless they are super_admin.
         const fullAccessRoles = [
             'super_admin', 'general_manager', 'accountant', 'branch_accountant',
-            'auditor', 'receptionist', 'front_desk_supervisor', 'kyogong_reception_cashier'
+            'auditor', 'receptionist', 'branch_receptionist', 'front_desk_supervisor',
+            'kyogong_reception_cashier', 'cashier', 'restaurant_cashier'
         ];
 
         const hasFullAccess = fullAccessRoles.includes(userRole);
@@ -6481,9 +6482,12 @@ export const recordStaffPaidBill = async (
             // For CASH: System auto-generates reference + requires cash rendered tracking
             finalReference = `CASH-PB-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-            cashRenderedAmount = Number(cash_rendered || 0);
+            // Older app builds never sent cash_rendered, so every cash paid credit was rejected.
+            // When it is absent, the cash received is the amount paid in.
+            const hasCashRendered = cash_rendered !== undefined && cash_rendered !== null && String(cash_rendered).trim() !== '';
+            cashRenderedAmount = hasCashRendered ? Number(cash_rendered) : paidAmount;
             if (!Number.isFinite(cashRenderedAmount) || cashRenderedAmount <= 0) {
-                throw new AppError('For cash payments, you must enter the cash amount physically rendered to staff', 400);
+                throw new AppError('For cash payments, the cash amount received must be greater than zero', 400);
             }
 
             // Calculate variance (should be 0, but tracks if cashier gave wrong amount)
@@ -8974,7 +8978,29 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
 
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
 
-    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - payouts;
+    // Paid credits are cleared by cash, M-Pesa or card. Only the CASH part ever enters the drawer;
+    // the M-Pesa / card part belongs with that method's collections. Adding the whole amount to
+    // expected cash overstated the drawer (and showed a false shortage) whenever staff paid by M-Pesa.
+    const paidBillEntries: any[] = Array.isArray(shift?.paid_bills_details)
+        ? shift.paid_bills_details
+        : (Array.isArray(breakdown.paid_bills_details) ? breakdown.paid_bills_details : []);
+    const paidBillsByMethod = { cash: 0, mpesa: 0, card: 0, other: 0 };
+    for (const entry of paidBillEntries) {
+        const amount = logbookNumber(entry?.amount);
+        if (amount <= 0) continue;
+        const raw = String(entry?.payment_method || entry?.method || '').trim();
+        // Older entries carry no method; they were always treated as cash, so keep that.
+        const method = raw ? normalizeLogbookPaymentMethod(raw) : 'cash';
+        if (method === 'mpesa') paidBillsByMethod.mpesa += amount;
+        else if (method === 'card') paidBillsByMethod.card += amount;
+        else if (method === 'cash') paidBillsByMethod.cash += amount;
+        else paidBillsByMethod.other += amount;
+    }
+    const paidBillsByMethodTotal = paidBillsByMethod.cash + paidBillsByMethod.mpesa + paidBillsByMethod.card + paidBillsByMethod.other;
+    // If the per-entry detail is missing but a stored total exists, fall back to the old behaviour.
+    if (paidBillsByMethodTotal <= 0 && creditPaymentsReceived > 0) paidBillsByMethod.cash = creditPaymentsReceived;
+
+    const expectedCash = openingFloat + totalCash + paidBillsByMethod.cash - payouts;
     const variance = closingFloat - expectedCash;
 
     const inferRevenueBucket = (line: any): string => {
@@ -9175,9 +9201,11 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         // out of the cashier side below, so the variance still equals the true
         // drawer shortage/surplus. The drawer-with-float reconciliation lives in
         // the separate "Cash Reconciliation" card.
+        // M-Pesa / card also include credits that staff cleared through that method.
         const salesForMethod = method === 'cash'
             ? totalCash
-            : (paymentBreakdownByMethod.get(method) ?? logbookNumber(row.system_amount));
+            : (paymentBreakdownByMethod.get(method) ?? logbookNumber(row.system_amount))
+                + (method === 'mpesa' ? paidBillsByMethod.mpesa : paidBillsByMethod.card);
         const sysExpected = salesForMethod;
 
         let cashierLogged: number;
@@ -9285,6 +9313,10 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             change_given: totalChangeGiven,
             drawer_cash_in: totalCash,
             credit_payments_received: creditPaymentsReceived,
+            paid_bills_cash: paidBillsByMethod.cash,
+            paid_bills_mpesa: paidBillsByMethod.mpesa,
+            paid_bills_card: paidBillsByMethod.card,
+            paid_bills_other: paidBillsByMethod.other,
             cash_drops: cashDrops,
             payouts,
             expense_total: expenseTotal,
@@ -9461,7 +9493,10 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
         if (logbookNumber(cr.cash_tendered) > 0) pairRow('Cash Tendered', logbookMoney(cr.cash_tendered));
         if (logbookNumber(cr.change_given) > 0) pairRow('- Change Given', logbookMoney(cr.change_given), { fill: LIGHT });
         if (logbookNumber(cr.drawer_cash_in) > 0) pairRow('Net Drawer Cash In', logbookMoney(cr.drawer_cash_in), { bold: true });
-        pairRow('+ Credit Payments Received', logbookMoney(cr.credit_payments_received));
+        pairRow('+ Paid Bills', logbookMoney(cr.credit_payments_received));
+        if (Number(cr.paid_bills_mpesa) > 0) pairRow('   of which M-Pesa', logbookMoney(cr.paid_bills_mpesa));
+        if (Number(cr.paid_bills_card) > 0) pairRow('   of which Card', logbookMoney(cr.paid_bills_card));
+        if (Number(cr.paid_bills_cash) > 0) pairRow('   of which Cash (in drawer)', logbookMoney(cr.paid_bills_cash));
         if (logbookNumber(cr.cash_drops) > 0) pairRow('- Cash Drops', logbookMoney(cr.cash_drops), { fill: LIGHT });
         if (logbookNumber(cr.payouts) > 0) pairRow('- Payouts', logbookMoney(cr.payouts));
         pairRow('= Expected Closing', logbookMoney(cr.expected_closing), { bold: true, fill: '#e8eef5' });
@@ -10311,14 +10346,21 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         // window.
         const requestedOutletId = String(req.query.outlet_id || '').trim();
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
+        const requestedOutletTypes = requestedOutletType
+            ? requestedOutletType.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+            : [];
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
         const assignedIds = assignedOutletIds(assignedOutlets);
         const roleOutletTypes = stationTypesForCashierRole(userRole, effectiveBranchId);
         const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, effectiveBranchId);
-        const allowedOutletTypes = new Set([
-            ...roleOutletTypes,
-            ...assignedOutlets.map((outlet) => String(outlet.outlet_type || '').toLowerCase()).filter(Boolean)
-        ]);
+        const allowedOutletTypes = new Set(
+            roleOutletTypes.length > 0
+                ? roleOutletTypes
+                : [
+                    ...roleOutletTypes,
+                    ...assignedOutlets.map((outlet) => String(outlet.outlet_type || '').toLowerCase()).filter(Boolean)
+                ]
+        );
         // Each POS-outlet cashier sees and clears ONLY their own outlet's bills
         // (a main-bar cashier sees main-bar orders, not executive-bar/restaurant).
         const includeLegacyWaiterOrders = !stationRestricted || req.query.include_legacy === 'true';
@@ -10335,7 +10377,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
 
         // Fetch pending restaurant orders
         let restaurantOrders: any[] = [];
-        if (!wantsVoidedOrders && canSeeLegacyRestaurant && (!requestedOutletType || requestedOutletType === 'restaurant')) {
+        const wantsLegacyRestaurant = requestedOutletTypes.length === 0 || requestedOutletTypes.includes('restaurant');
+        if (!wantsVoidedOrders && canSeeLegacyRestaurant && wantsLegacyRestaurant) {
             let restaurantQuery = supabase
                 .from('restaurant_orders')
                 .select(`
@@ -10373,7 +10416,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
 
         // Fetch pending bar orders
         let barOrders: any[] = [];
-        if (!wantsVoidedOrders && canSeeLegacyBar && (!requestedOutletType || isBarStationType(requestedOutletType))) {
+        const wantsLegacyBar = requestedOutletTypes.length === 0 || requestedOutletTypes.some(isBarStationType);
+        if (!wantsVoidedOrders && canSeeLegacyBar && wantsLegacyBar) {
             let barQuery = supabase
                 .from('bar_orders')
                 .select(`
@@ -10440,7 +10484,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             const visibleShifts = ((posShifts || []) as any[]).filter((shift: any) => {
                 const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
                 if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
-                if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
+                const outletType = String(outlet?.outlet_type || '').toLowerCase();
+                if (requestedOutletTypes.length > 0 && !requestedOutletTypes.includes(outletType)) return false;
                 // Only this cashier's own POS outlet(s).
                 return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
             });
@@ -10787,6 +10832,9 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
         const search = String(req.query.search || '').trim().toLowerCase();
         const requestedOutletId = String(req.query.outlet_id || '').trim();
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
+        const requestedOutletTypes = requestedOutletType
+            ? requestedOutletType.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+            : [];
 
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
         const assignedIds = assignedOutletIds(assignedOutlets);
@@ -10808,7 +10856,8 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
         const visibleShifts = ((posShifts || []) as any[]).filter((shift: any) => {
             const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
-            if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
+            const outletType = String(outlet?.outlet_type || '').toLowerCase();
+            if (requestedOutletTypes.length > 0 && !requestedOutletTypes.includes(outletType)) return false;
             return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
         });
 

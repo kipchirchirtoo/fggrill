@@ -228,7 +228,8 @@ const loadShiftCountMaps = async (
     branchId: number,
     barLocation: string,
     fromIso: string,
-    toIso: string
+    toIso: string,
+    cashierShiftId?: string
 ): Promise<{ additionsByDrinkId: Map<string, number>; salesByDrinkId: Map<string, number> }> => {
     const additionsByDrinkId = new Map<string, number>();
     const salesByDrinkId = new Map<string, number>();
@@ -236,16 +237,6 @@ const loadShiftCountMaps = async (
         return { additionsByDrinkId, salesByDrinkId };
     }
 
-    // Two joins were silently broken here, so additions/sales always summed to
-    // zero and every bar sale reduced stock with no Sales figure:
-    //   1. pos_shift_stock_counts.shift_id references pos_outlet_shifts.id (the
-    //      POS shift), NOT cashier_shift_logs.id — the old code matched the
-    //      latter, which never intersects.
-    //   2. count rows are keyed to a POS outlet item (sku 'M-<uuid>'), NOT the
-    //      bar_drinks sku — matching by sku found nothing. The reliable bridge
-    //      is outlet_item_id -> pos_outlet_items.source_item_id (= bar_drinks.id).
-    // Resolve the bar outlet(s), their POS shifts opened in the window, and the
-    // outlet-item -> drink map, then aggregate counts onto the right drink id.
     const outletTypes =
         barLocation === 'executive_bar'
             ? ['executive_bar', 'kyogong_executive_bar']
@@ -262,16 +253,39 @@ const loadShiftCountMaps = async (
         return { additionsByDrinkId, salesByDrinkId };
     }
 
+    let shiftCashierId: string | null = null;
+    let windowStart = fromIso;
+    let windowEnd = toIso;
+
+    if (cashierShiftId) {
+        const { data: cShift } = await supabase
+            .from('cashier_shift_logs')
+            .select('cashier_id, shift_start, shift_end')
+            .eq('id', cashierShiftId)
+            .maybeSingle();
+        if (cShift) {
+            shiftCashierId = cShift.cashier_id;
+            if (cShift.shift_start) windowStart = cShift.shift_start;
+            if (cShift.shift_end) windowEnd = cShift.shift_end;
+        }
+    }
+
+    let posShiftQuery = supabase
+        .from('pos_outlet_shifts')
+        .select('id')
+        .in('outlet_id', outletIds)
+        .gte('opened_at', windowStart)
+        .lte('opened_at', windowEnd);
+
+    if (shiftCashierId) {
+        posShiftQuery = posShiftQuery.eq('cashier_id', shiftCashierId);
+    }
+
     const [
         { data: posShifts, error: posShiftsError },
         { data: outletItems, error: itemsError },
     ] = await Promise.all([
-        supabase
-            .from('pos_outlet_shifts')
-            .select('id')
-            .in('outlet_id', outletIds)
-            .gte('opened_at', fromIso)
-            .lt('opened_at', toIso),
+        posShiftQuery,
         supabase
             .from('pos_outlet_items')
             .select('id, source_item_id')
@@ -282,9 +296,6 @@ const loadShiftCountMaps = async (
     if (itemsError) throw itemsError;
 
     const shiftIds = (posShifts || []).map((row: any) => String(row.id)).filter(Boolean);
-    if (shiftIds.length === 0) {
-        return { additionsByDrinkId, salesByDrinkId };
-    }
 
     const drinkIdByOutletItemId = new Map<string, string>();
     for (const it of (outletItems || [])) {
@@ -293,17 +304,61 @@ const loadShiftCountMaps = async (
         }
     }
 
-    const { data: countRows, error: countError } = await supabase
-        .from('pos_shift_stock_counts')
-        .select('outlet_item_id, additions, sold_quantity')
-        .in('shift_id', shiftIds);
-    if (countError) throw countError;
+    if (shiftIds.length > 0) {
+        const { data: countRows, error: countError } = await supabase
+            .from('pos_shift_stock_counts')
+            .select('outlet_item_id, additions, sold_quantity')
+            .in('shift_id', shiftIds);
+        if (countError) throw countError;
 
-    for (const row of (countRows || [])) {
-        const drinkId = drinkIdByOutletItemId.get(String((row as any).outlet_item_id || ''));
-        if (!drinkId) continue;
-        additionsByDrinkId.set(drinkId, (additionsByDrinkId.get(drinkId) ?? 0) + num(row.additions));
-        salesByDrinkId.set(drinkId, (salesByDrinkId.get(drinkId) ?? 0) + num(row.sold_quantity));
+        for (const row of (countRows || [])) {
+            const drinkId = drinkIdByOutletItemId.get(String((row as any).outlet_item_id || ''));
+            if (!drinkId) continue;
+            additionsByDrinkId.set(drinkId, (additionsByDrinkId.get(drinkId) ?? 0) + num(row.additions));
+            salesByDrinkId.set(drinkId, (salesByDrinkId.get(drinkId) ?? 0) + num(row.sold_quantity));
+        }
+
+        // Reconcile with pos_shift_orders to ensure untracked or recalled drink sales are captured
+        const { data: shiftOrders } = await supabase
+            .from('pos_shift_orders')
+            .select('items')
+            .eq('branch_id', branchId)
+            .in('shift_id', shiftIds)
+            .not('status', 'in', '("voided","cancelled")');
+
+        const orderSalesByDrinkId = new Map<string, number>();
+        for (const o of (shiftOrders || [])) {
+            for (const it of ((o as any).items || [])) {
+                const oid = String(it.outlet_item_id || it.id || '');
+                const did = drinkIdByOutletItemId.get(oid);
+                if (!did) continue;
+                const qty = num(it.quantity || it.qty || 1) - num(it.voided_qty || 0);
+                if (qty > 0) {
+                    orderSalesByDrinkId.set(did, (orderSalesByDrinkId.get(did) ?? 0) + qty);
+                }
+            }
+        }
+        for (const [did, oSales] of Array.from(orderSalesByDrinkId.entries())) {
+            const curSales = salesByDrinkId.get(did) ?? 0;
+            if (oSales > curSales) {
+                salesByDrinkId.set(did, oSales);
+            }
+        }
+    }
+
+    // Include any restocks logged in bar_stock_ledger for this window
+    const { data: ledgerRestocks } = await supabase
+        .from('bar_stock_ledger')
+        .select('drink_id, quantity')
+        .eq('branch_id', branchId)
+        .eq('transaction_type', 'restock')
+        .gte('created_at', windowStart)
+        .lte('created_at', windowEnd);
+
+    for (const lr of (ledgerRestocks || [])) {
+        if (!lr.drink_id) continue;
+        const did = String(lr.drink_id);
+        additionsByDrinkId.set(did, (additionsByDrinkId.get(did) ?? 0) + num(lr.quantity));
     }
 
     return { additionsByDrinkId, salesByDrinkId };
@@ -748,6 +803,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
 
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
+        const windowFrom = shiftWindow.from || sumWindow.from;
+        const windowTo = shiftWindow.to || sumWindow.to;
 
         // Build map of drink_id -> inventory_item_id, and the canonical
         // category keyed by both drink id and inventory item id (the latter is
@@ -767,29 +824,24 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const { additionsByDrinkId, salesByDrinkId } = await loadShiftCountMaps(
             branchId,
             locationFilter,
-            sumWindow.from,
-            sumWindow.to
+            windowFrom,
+            windowTo,
+            shiftWindow.shiftId || undefined
         );
         // Previous stocktake's physical counts → today's opening (submitted or
         // approved — see loadPreviousStocktakeCounts).
         const prevCountByInvId = await loadPreviousStocktakeCounts(branchId, locationFilter, rawDate);
         const salesByInvId = new Map<string, number>();
-        // Shift-count additions are only used to seed opening for the FIRST-EVER
-        // count (no prior stocktake). For every later count, additions is DERIVED
-        // from the outlet's authoritative current/system stock so that stock
-        // issued to the bar shows up even when no cashier shift was open at issue
-        // time — additions = closing − opening + sales.
         const shiftAdditionsByInvId = new Map<string, number>();
-        // Live POS current_stock per inventory item — used to repair the displayed
-        // system quantity for records that were stored with system_quantity=0
-        // (POS-driven branches before the outlet-sourcing fix).
         const liveStockByInvId = new Map<string, number>();
         for (const d of drinkRows) {
             const invId = invIdByDrinkId.get(String(d.id));
             if (!invId) continue;
-            salesByInvId.set(invId, salesByDrinkId.get(String(d.id)) ?? 0);
-            shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(d.id)) ?? 0);
-            liveStockByInvId.set(invId, stockByDrinkId.get(String(d.id)) ?? 0);
+            const invKey = String(invId);
+            const did = String(d.id);
+            salesByInvId.set(invKey, (salesByInvId.get(invKey) ?? 0) + (salesByDrinkId.get(did) ?? 0));
+            shiftAdditionsByInvId.set(invKey, (shiftAdditionsByInvId.get(invKey) ?? 0) + (additionsByDrinkId.get(did) ?? 0));
+            liveStockByInvId.set(invKey, Math.max(liveStockByInvId.get(invKey) ?? 0, stockByDrinkId.get(did) ?? 0));
         }
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
@@ -809,23 +861,12 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         if (existingRecords && existingRecords.length > 0) {
             const rawResult = existingRecords.map((r: any) => {
                 const invId = String(r.item_id);
-                const sales = salesByInvId.get(invId) ?? 0;
-                // Stored system_quantity is authoritative, but fall back to the
-                // live POS stock when it's 0 — POS-driven branches (Kyogong) saved
-                // 0 before the outlet-sourcing fix, which made every count a false
-                // +variance. A genuinely 0-stock drink has ~0 live stock too, so
-                // this only repairs the broken-zero case.
+                const sales = num(r.sales) > 0 ? num(r.sales) : (salesByInvId.get(invId) ?? 0);
+                const additions = num(r.additions) > 0 ? num(r.additions) : (shiftAdditionsByInvId.get(invId) ?? 0);
+                const opening = num(r.opening_stock) > 0 ? num(r.opening_stock) : (prevCountByInvId.get(invId) ?? 0);
+                const expectedClosing = Math.max(0, opening + additions - sales);
                 const storedSys = num(r.system_quantity);
-                const sysQty = storedSys > 0 ? storedSys : (liveStockByInvId.get(invId) ?? 0);
-                // Opening = previous stocktake's physical count; only reverse-
-                // compute (using shift additions) for the very first count.
-                const opening = prevCountByInvId.has(invId)
-                    ? prevCountByInvId.get(invId)!
-                    : Math.max(0, sysQty - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
-                // Additions DERIVED from the identity closing = opening + adds −
-                // sales, so every unit issued into the bar is reflected even if
-                // no shift was open when it was issued.
-                const additions = Math.max(0, sysQty - opening + sales);
+                const sysQty = storedSys > 0 ? storedSys : expectedClosing;
                 const itemName = r.item?.item_name || r.item_name || null;
                 return {
                     ...r,
@@ -867,25 +908,25 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             const did = String(d.id);
             const currentStock = stockByDrinkId.get(did) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
+            const additions = shiftAdditionsByInvId.get(invId) ?? 0;
+            const opening = prevCountByInvId.has(invId)
+                ? prevCountByInvId.get(invId)!
+                : Math.max(0, currentStock - additions + sales);
+            const expectedClosing = Math.max(0, opening + additions - sales);
+
             const existing = candidatesByInvId.get(invId);
             if (existing) {
-                existing.quantity = Math.max(num(existing.quantity), currentStock);
-                existing.additions = Math.max(num(existing.additions), Math.max(0, currentStock - num(existing.opening_stock) + sales));
+                existing.quantity = Math.max(num(existing.quantity), expectedClosing);
                 if (!/^FGB-/i.test(existing.sku) && /^FGB-/i.test(d.sku)) {
                     existing.sku = d.sku;
                     existing.name = d.name;
                 }
                 continue;
             }
-            const opening = prevCountByInvId.has(invId)
-                ? prevCountByInvId.get(invId)!
-                : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
-            const additions = Math.max(0, currentStock - opening + sales);
-            const system = currentStock;
             candidatesByInvId.set(invId, {
                 id: invId,
                 name: d.name,
-                quantity: system,
+                quantity: expectedClosing,
                 opening_stock: opening,
                 additions,
                 sales,
@@ -1022,30 +1063,32 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         }
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
+        const windowFrom = shiftWindow.from || sumWindow.from;
+        const windowTo = shiftWindow.to || sumWindow.to;
         const { additionsByDrinkId, salesByDrinkId } = await loadShiftCountMaps(
             branchId,
             bar_location,
-            sumWindow.from,
-            sumWindow.to
+            windowFrom,
+            windowTo,
+            shiftWindow.shiftId || undefined
         );
 
         // current_stock per drink comes straight from the outlet's POS items.
         const stockByDrinkId = posStockByDrinkId;
-        // Shift additions only seed opening for the first-ever count; later
-        // additions are derived from stock so shift-less issues still show.
         const shiftAdditionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
-        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
-            shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(drinkId)) ?? 0);
-            salesByInvId.set(invId, salesByDrinkId.get(String(drinkId)) ?? 0);
+        const stockByInvId = new Map<string, number>();
+        for (const d of branchDrinks) {
+            const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
+            if (!invId) continue;
+            const key = String(invId);
+            const did = String(d.id);
+            shiftAdditionsByInvId.set(key, (shiftAdditionsByInvId.get(key) ?? 0) + (additionsByDrinkId.get(did) ?? 0));
+            salesByInvId.set(key, (salesByInvId.get(key) ?? 0) + (salesByDrinkId.get(did) ?? 0));
+            stockByInvId.set(key, Math.max(stockByInvId.get(key) ?? 0, stockByDrinkId.get(did) ?? 0));
         }
         // Previous stocktake's physical count → today's opening (submitted too).
         const prevCountByInvId = await loadPreviousStocktakeCounts(branchId, bar_location, stocktakeDate);
-
-        const stockByInvId = new Map<string, number>();
-        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
-            stockByInvId.set(invId, stockByDrinkId.get(drinkId) ?? 0);
-        }
 
         const now = new Date().toISOString();
         const missingReasons: string[] = [];
@@ -1054,15 +1097,11 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             const invItem = invById.get(invId);
             const currentStock = stockByInvId.get(invId) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            // Opening = previous stocktake's physical count; reverse-compute with
-            // shift additions only for the first-ever count.
+            const additions = shiftAdditionsByInvId.get(invId) ?? 0;
             const opening = prevCountByInvId.has(invId)
                 ? prevCountByInvId.get(invId)!
-                : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
-            // Additions derived so bar issues are reflected even without a shift.
-            const additions = Math.max(0, currentStock - opening + sales);
-            // Must match the candidate-list formula (which resolves to currentStock)
-            const sysQty = currentStock;
+                : Math.max(0, currentStock - additions + sales);
+            const sysQty = Math.max(0, opening + additions - sales);
 
             const physQtyRaw = Number(it.physical_quantity);
             const physQty = Number.isFinite(physQtyRaw) ? physQtyRaw : NaN;

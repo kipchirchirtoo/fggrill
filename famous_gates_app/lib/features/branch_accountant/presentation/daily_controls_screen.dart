@@ -49,6 +49,69 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
     }
   }
 
+  bool _isBarOrNonFoodItem(dynamic item) {
+    if (item is! Map) return false;
+    final name = (item['item_name'] ?? item['produced_item_name'] ?? item['raw_item_name'] ?? item['name'] ?? '').toString().toLowerCase().trim();
+    final sku = (item['item_sku'] ?? item['sku'] ?? item['raw_item_sku'] ?? item['produced_item_sku'] ?? '').toString().toUpperCase().trim();
+    final category = (item['category'] ?? '').toString().toLowerCase().trim();
+    final outlet = (item['outlet_name'] ?? item['outlet_type'] ?? '').toString().toLowerCase().trim();
+
+    if (outlet.contains('bar') || outlet.contains('cellar') || outlet.contains('pub') || outlet.contains('lounge') || outlet.contains('beverage')) {
+      return true;
+    }
+
+    if (sku.startsWith('FGB-') ||
+        sku.startsWith('FGH-BEER') ||
+        sku.startsWith('FGH-WINE') ||
+        sku.startsWith('FGH-SPIRIT') ||
+        sku.startsWith('FGH-SOFT-DRINK') ||
+        sku.startsWith('FGH-CBV') ||
+        sku.startsWith('FGH-LIQ') ||
+        sku.startsWith('FGH-CIG') ||
+        sku.startsWith('FGH-TOB') ||
+        sku.startsWith('MOG-BAR') ||
+        sku.startsWith('BAR-') ||
+        sku.contains('WATER-PKG')) {
+      return true;
+    }
+
+    const barCategories = [
+      'beer', 'wine', 'spirit', 'liquor', 'liqueur', 'whisky', 'whiskey',
+      'brandy', 'vodka', 'gin', 'rum', 'tequila', 'cider', 'alcohol',
+      'soft drink', 'soft_drink', 'soft-drink', 'soda', 'water', 'mineral water',
+      'beverage', 'drink', 'tobacco', 'cigarette', 'cigar', 'token'
+    ];
+    if (barCategories.any((cat) => category.contains(cat))) {
+      return true;
+    }
+
+    const barKeywords = [
+      'white cap', 'tusker', 'guinness', 'guiness', 'guarana', 'manyatta', 'savanna', 'faxe',
+      'viceroy', 'richot', 'vodka', 'captain morgan', 'black & white', 'kc ', 'kc 750', 'kc 350',
+      'kenya cane', 'gilbeys', 'gordons', 'bond 7', 'chrome', 'tripple ace', 'konyagi',
+      'jameson', 'jack daniel', 'red label', 'black label', 'johnnie walker', 'jw black', 'jw red',
+      'chivas', 'hennessy', 'martell', 'tequila', 'bacardi', 'campari', 'jagermeister', 'baileys',
+      'amarula', 'heineken', 'snapp', 'smirnoff', 'pilsner', 'bavaria', 'cider', 'lager',
+      'alvaro', 'balozi', 'desperado', 'black ice', 'asconi', 'casabuena', 'camino',
+      'drostdy', 'caprice', 'cellar cask', 'four cousins', 'robertson',
+      'soda', 'coca cola', 'coke', 'fanta', 'sprite', 'stoney', 'krest', 'schweppes',
+      'tonic', 'water', 'mineral water', 'still water', 'sparkling water', 'keringet', 'dasani',
+      'aquamist', 'delmonte', 'minute maid', 'lemonade', 'red bull', 'redbull', 'energy drink',
+      'cocktail juice', 'milkshake', 'dawa', 'concoction', 'whisky', 'whiskey', 'brandy',
+      'cognac', 'liqueur', 'liquor', 'wine', 'beer', 'tot', 'can', '750ml', '350ml', '250ml',
+      '500ml', 'pool token', 'token', 'tokens', 'tin', 'packaging', 'trust', 'condom', 'cigar',
+      'cigarette', 'sportsman', 'dunhill', 'embassy', 'tobacco'
+    ];
+
+    return barKeywords.any((bk) {
+      if (bk.length <= 4) {
+        final regex = RegExp('\\b${RegExp.escape(bk)}\\b', caseSensitive: false);
+        return regex.hasMatch(name);
+      }
+      return name.contains(bk);
+    });
+  }
+
   Widget _buildHeader({
     required BuildContext context,
     VoidCallback? onBack,
@@ -273,6 +336,7 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
             final rows = ((data?['rows'] as List?) ?? const [])
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
+                .where((row) => !_isBarOrNonFoodItem(row))
                 .toList();
 
             return SafeArea(
@@ -575,34 +639,7 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
     final list = ((data['unmatched_pos_items'] as List?) ?? const [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
-        .where((u) {
-          final name = (u['item_name'] ?? '').toString().toLowerCase().trim();
-          final isBarOrNonFood = name.contains('white cap') ||
-              name.contains('tusker') ||
-              name.contains('guinness') ||
-              name.contains('guarana') ||
-              name.contains('viceroy') ||
-              name.contains('richot') ||
-              name.contains('savanna') ||
-              name.contains('manyatta') ||
-              name.contains('faxe') ||
-              name.contains('vodka') ||
-              name.contains('captain morgan') ||
-              name.contains('black & white') ||
-              name.contains('kc ') ||
-              name.contains('soda') ||
-              name.contains('water') ||
-              name.contains('juice') ||
-              name.contains('nescafe') ||
-              name.contains('token') ||
-              name.contains('trust') ||
-              name.contains('750ml') ||
-              name.contains('350ml') ||
-              name.contains('250ml') ||
-              name.contains('cider') ||
-              name.contains('lager');
-          return !isBarOrNonFood;
-        })
+        .where((u) => !_isBarOrNonFoodItem(u))
         .toList();
     if (list.isEmpty) return const SizedBox.shrink();
     return Container(
@@ -1611,6 +1648,7 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
       final unmatched = ((data['unmatched_pos_items'] as List?) ?? const [])
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
+          .where((u) => !_isBarOrNonFoodItem(u))
           .toList();
       if (unmatched.isNotEmpty) {
         buffer.writeln();

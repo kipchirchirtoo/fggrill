@@ -322,11 +322,13 @@ export const checkDeviceStatus = async (req: Request, res: Response, next: NextF
       return;
     }
 
-    const isActive = terminal.status === 'active' && Boolean(terminal.device_public_key);
+    const hasKey = Boolean(terminal.device_public_key);
+    const isActive = terminal.status === 'active' && hasKey;
     res.json({
       success: true,
       data: {
-        registered: isActive,
+        registered: hasKey && terminal.status !== 'revoked',
+        is_active: isActive,
         status: terminal.status,
         terminal_id: terminal.id,
         terminal_code: terminal.terminal_code,
@@ -458,7 +460,10 @@ export const deviceChallenge = async (req: Request, res: Response, next: NextFun
   try {
     const terminalId = String(req.body.terminal_id ?? req.body.terminalId ?? '').trim();
     if (!terminalId) throw new AppError('terminal_id is required', 400);
-    const { data: terminal } = await supabase.from('pos_terminals').select('id, status, device_public_key').eq('id', terminalId).maybeSingle();
+    const { data: terminal, error: terminalErr } = await supabase.from('pos_terminals').select('id, status, device_public_key').eq('id', terminalId).maybeSingle();
+    // A failed lookup (DB timeout / pooler hiccup) must NOT look like "not registered": the device
+    // treats that as proof it was removed and wipes its registration, forcing re-enrollment.
+    if (terminalErr) throw new AppError('Could not verify this terminal right now, please retry', 503);
     if (!terminal || !terminal.device_public_key) throw new AppError('Terminal is not registered', 404);
     if (terminal.status !== 'active') throw new AppError(`Terminal is ${terminal.status}`, 403);
 
@@ -489,7 +494,8 @@ export const deviceToken = async (req: Request, res: Response, next: NextFunctio
     }
     if (decoded?.kind !== 'pos_device_challenge' || !decoded?.terminal_id) throw new AppError('Malformed challenge', 400);
 
-    const { data: terminal } = await supabase.from('pos_terminals').select('*').eq('id', decoded.terminal_id).maybeSingle();
+    const { data: terminal, error: terminalErr } = await supabase.from('pos_terminals').select('*').eq('id', decoded.terminal_id).maybeSingle();
+    if (terminalErr) throw new AppError('Could not verify this terminal right now, please retry', 503);
     if (!terminal || !terminal.device_public_key) throw new AppError('Terminal is not registered', 404);
     if (terminal.status !== 'active') throw new AppError(`Terminal is ${terminal.status}`, 403);
 

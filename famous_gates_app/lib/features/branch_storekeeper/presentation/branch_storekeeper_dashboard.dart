@@ -7672,8 +7672,11 @@ class _LineEditorState extends State<_LineEditor> {
           Column(
             children: widget.lines.map((line) {
               final index = widget.lines.indexOf(line);
-              final centralQty =
-                  _num(line['quantity'] ?? line['available_quantity']);
+              final centralQty = _num(
+                line['available_quantity'] ??
+                (widget.quantityKey == 'quantity' ? null : line['quantity']) ??
+                0,
+              );
               final requestedQty = _num(line[widget.quantityKey] ?? 1);
               final overRequest =
                   widget.showCentralAvailable && requestedQty > centralQty;
@@ -8137,7 +8140,41 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
   List<Map<String, dynamic>> get _destinationOptions {
     final list = <Map<String, dynamic>>[];
 
-    // 1. Executive Bar
+    // 1. Kitchen (Main Kitchen)
+    final kitchenOutlet = widget.outletOptions.firstWhere(
+      (o) {
+        final name = '${o['name'] ?? ''}'.toLowerCase();
+        final type = '${o['outlet_type'] ?? ''}'.toLowerCase();
+        return name.contains('kitchen') || type.contains('kitchen');
+      },
+      orElse: () => <String, dynamic>{},
+    );
+    list.add({
+      'key': 'kitchen',
+      'name': 'Kitchen',
+      'icon': Icons.restaurant,
+      'outlet_id': kitchenOutlet.isNotEmpty ? _outletIdFor(kitchenOutlet) : '',
+      'department_code': 'main_kitchen',
+    });
+
+    // 2. Restaurant
+    final restaurantOutlet = widget.outletOptions.firstWhere(
+      (o) {
+        final name = '${o['name'] ?? ''}'.toLowerCase();
+        final type = '${o['outlet_type'] ?? ''}'.toLowerCase();
+        return name.contains('restaurant') || type.contains('restaurant');
+      },
+      orElse: () => <String, dynamic>{},
+    );
+    list.add({
+      'key': 'restaurant',
+      'name': 'Restaurant',
+      'icon': Icons.dining_outlined,
+      'outlet_id': restaurantOutlet.isNotEmpty ? _outletIdFor(restaurantOutlet) : '',
+      'department_code': 'main_kitchen',
+    });
+
+    // 3. Executive Bar
     final execOutlet = widget.outletOptions.firstWhere(
       (o) =>
           _destinationItemName(o).toLowerCase().contains('exec') ||
@@ -8153,7 +8190,7 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       'department_code': 'executive_bar',
     });
 
-    // 2. Main Bar
+    // 4. Main Bar
     final mainBarOutlet = widget.outletOptions.firstWhere(
       (o) =>
           '${o['name']}'.toLowerCase().contains('main bar') ||
@@ -8168,7 +8205,7 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       'department_code': 'main_bar',
     });
 
-    // 3. Other bar outlets (like Sports Bar)
+    // 5. Other bar outlets (like Sports Bar)
     for (final outlet in widget.outletOptions) {
       final name = '${outlet['name'] ?? ''}'.toLowerCase();
       final type = '${outlet['outlet_type'] ?? ''}'.toLowerCase();
@@ -8184,7 +8221,7 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       }
     }
 
-    // 4. Non-Consumables
+    // 6. Non-Consumables
     final ncOutlet = widget.outletOptions.firstWhere(
       (o) =>
           '${o['name']}'.toLowerCase().contains('non-consumable') ||
@@ -8216,15 +8253,19 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       if (_nonConsumableCategories.any((c) => c['code'] == preloadDept)) {
         _destinationKey = 'non_consumables';
         _nonConsumableCategory = preloadDept;
+      } else if (preloadDept.contains('kitchen') || preloadDept.contains('food')) {
+        _destinationKey = 'kitchen';
+      } else if (preloadDept.contains('restaurant')) {
+        _destinationKey = 'restaurant';
       } else if (preloadDept.contains('exec')) {
         _destinationKey = 'executive_bar';
       } else if (preloadDept.contains('main')) {
         _destinationKey = 'main_bar';
       } else {
-        _destinationKey = 'executive_bar';
+        _destinationKey = 'kitchen';
       }
     } else {
-      _destinationKey = 'executive_bar';
+      _destinationKey = 'kitchen';
     }
     _syncSelectedDestination();
   }
@@ -8296,6 +8337,10 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
         if (_nonConsumableCategories.any((c) => c['code'] == preloadDept)) {
           _destinationKey = 'non_consumables';
           _nonConsumableCategory = preloadDept;
+        } else if (preloadDept.contains('kitchen') || preloadDept.contains('food')) {
+          _destinationKey = 'kitchen';
+        } else if (preloadDept.contains('restaurant')) {
+          _destinationKey = 'restaurant';
         } else if (preloadDept.contains('exec')) {
           _destinationKey = 'executive_bar';
         } else if (preloadDept.contains('main')) {
@@ -8428,6 +8473,88 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
       _destinationKey == 'main_bar' ||
       _destinationKey == 'sports_bar' ||
       _destinationKey.contains('bar');
+
+  bool get _isKitchenDestination =>
+      _destinationKey == 'kitchen' ||
+      _destinationKey == 'restaurant' ||
+      _destinationKey.contains('kitchen') ||
+      _destinationKey.contains('restaurant');
+
+  bool _isPurelyAlcoholic(Map<String, dynamic> item) {
+    final sku =
+        '${item['item_sku'] ?? item['sku'] ?? ''}'.trim().toUpperCase();
+    final name =
+        '${item['item_name'] ?? item['name'] ?? ''}'.trim().toLowerCase();
+    final cat = '${item['category'] ?? ''}'.trim().toLowerCase();
+
+    // Check SKU prefixes for purely alcoholic items
+    if (sku.startsWith('FGB-') ||
+        sku.startsWith('KYO-FGB-') ||
+        sku.startsWith('KYO-TEQ-') ||
+        sku.startsWith('KYO-WHK-') ||
+        sku.startsWith('MOG-BAR-') ||
+        sku.startsWith('FGH-BEER') ||
+        sku.startsWith('FGH-CANNED-BEER') ||
+        sku.startsWith('FGH-WHISKY') ||
+        sku.startsWith('FGH-WHISKEY') ||
+        sku.startsWith('FGH-VODKA') ||
+        sku.startsWith('FGH-GIN') ||
+        sku.startsWith('FGH-RUM') ||
+        sku.startsWith('FGH-TEQUILA') ||
+        sku.startsWith('FGH-BRANDY') ||
+        sku.startsWith('FGH-COGNAC') ||
+        sku.startsWith('FGH-WINE') ||
+        sku.startsWith('FGH-CIDER') ||
+        sku.startsWith('FGH-LIQUEUR') ||
+        sku.startsWith('FGH-SPIRIT')) {
+      return true;
+    }
+
+    // Check purely alcoholic categories
+    if (cat.contains('beer') ||
+        cat.contains('wine') ||
+        cat.contains('whisky') ||
+        cat.contains('whiskey') ||
+        cat.contains('vodka') ||
+        cat.contains('gin') ||
+        cat.contains('rum') ||
+        cat.contains('tequila') ||
+        cat.contains('brandy') ||
+        cat.contains('cognac') ||
+        cat.contains('cider') ||
+        cat.contains('liqueur') ||
+        cat.contains('spirits') ||
+        cat.contains('tobacco') ||
+        cat.contains('cigarette')) {
+      return true;
+    }
+
+    const alcoholKeywords = [
+      'beer', 'lager', 'cider', 'wine', 'whisky', 'whiskey',
+      'vodka', 'gin', 'rum', 'tequila', 'brandy', 'cognac',
+      'liqueur', 'spirits', 'champagne', 'tusker', 'guinness',
+      'guiness', 'heineken', 'white cap', 'whitecap', 'balozi',
+      'pilsner', 'summit', 'windhoek', 'black ice', 'savanna',
+      'savannah', 'snapp', 'smirnoff', 'smirnof', 'amarula',
+      'jameson', 'johnnie walker', 'jw red', 'jw black', 'gilbeys',
+      'gilbey', 'richot', 'viceroy', 'grants', 'william lawson',
+      'glenfiddich', 'don julio', 'camino', 'jack daniel', 'baileys',
+      'tanqueray', 'captain morgan', 'bacardi', 'gordons', 'gordon',
+      'asconi', 'casabuena', '4th street', 'robertson', 'cellar cask',
+      'four cousins', 'tangaren', 'bond 7', 'v&a', 'kingfisher',
+      'jagermeister', 'martell', 'hennessy', 'remy martin', 'chivas',
+      'ballantines', 'famous grouse', 'singleton', 'talisker',
+      'macallan', 'curacao', 'kahlua', 'triple sec', 'campari',
+      'aperol', 'vermouth', 'martini', 'condom', 'trust',
+      'scottish leader', 'scottish', 'vat 69', 'j&b'
+    ];
+
+    for (final kw in alcoholKeywords) {
+      if (name.contains(kw)) return true;
+    }
+
+    return false;
+  }
 
   bool _isBarStockItem(Map<String, dynamic> item) {
     final sku =
@@ -8615,8 +8742,10 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
   List<Map<String, dynamic>> get _effectiveCatalog {
     if (_isBarDestination) {
       return widget.catalog.where(_isBarStockItem).toList();
+    } else if (_isKitchenDestination) {
+      return widget.catalog.where((item) => !_isPurelyAlcoholic(item)).toList();
     } else {
-      return widget.catalog.where((item) => !_isBarStockItem(item)).toList();
+      return widget.catalog.where((item) => !_isPurelyAlcoholic(item)).toList();
     }
   }
 
@@ -8625,12 +8754,13 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
     final invalidLines = _lines.where((line) {
       final stock = _stockForLine(line);
       final qty = _num(line['quantity']);
-      return stock.isEmpty || qty <= 0;
+      return (stock.isEmpty && _num(line['available_quantity']) <= 0) || qty <= 0;
     }).toList();
     final shortfallLines = _lines.where((line) {
       final stock = _stockForLine(line);
       final qty = _num(line['quantity']);
-      return stock.isNotEmpty && qty > _num(stock['quantity']);
+      final available = _num(stock['quantity'] ?? line['available_quantity']);
+      return qty > available;
     }).toList();
     final totalQuantity =
         _lines.fold<num>(0, (sum, line) => sum + _num(line['quantity']));
@@ -8835,6 +8965,12 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
                           }
                         } else {
                           final notes = _notesCtrl.text.trim();
+                          final destOption = _destinationOptions.firstWhere(
+                            (o) => o['key'] == _destinationKey,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          final deptCode = (destOption['department_code'] as String?) ?? _destinationKey;
+
                           if (_outletId != null &&
                               _outletId!.isNotEmpty &&
                               _hasMappedOutletLines(cleanLines)) {
@@ -8846,7 +8982,7 @@ class _DirectIssueWorkbenchState extends State<_DirectIssueWorkbench> {
                           } else {
                             success = await widget.onSubmit(
                               lines: cleanLines,
-                              departmentCode: _destinationKey,
+                              departmentCode: deptCode,
                               shiftCode: '',
                               notes: notes,
                             );

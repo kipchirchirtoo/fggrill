@@ -1,3 +1,4 @@
+import '../../../core/branding/print_branding.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -44,9 +45,13 @@ Future<void> printCustomerDocument(
     final data = _templateData(
       sale: sale,
       items: items,
+      branchId: branchId,
       branchName: branding.branchName,
       companyName: branding.companyName,
       tillNumber: doc?.tillNumber,
+      contactPhone: doc?.contactPhone,
+      contactEmail: doc?.contactEmail,
+      contactAddress: doc?.contactAddress,
       tableNumber: tableNumber,
       roomNumber: roomNumber,
       customerName: customerName,
@@ -63,7 +68,8 @@ Future<void> printCustomerDocument(
       duplicateLabel: duplicateLabel,
       extraKvRows: extraKvRows ?? const [],
     );
-    await TemplatePrintRenderer().printThermal(sections, data);
+    await TemplatePrintRenderer().printThermal(sections, data,
+        branding: PrintBranding.forBranch(branchId: branchId, branchName: branchName));
     return;
   }
 
@@ -121,8 +127,12 @@ Future<void> printCreditBillDocument(
     final data = _templateData(
       sale: sale,
       items: items,
+      branchId: branchId,
       branchName: branchName,
       tillNumber: doc?.tillNumber,
+      contactPhone: doc?.contactPhone,
+      contactEmail: doc?.contactEmail,
+      contactAddress: doc?.contactAddress,
       customerName: staffName,
       staffLabel: 'Issued by',
       publicCode: creditNumber,
@@ -144,7 +154,8 @@ Future<void> printCreditBillDocument(
         if (_clean(department) != null) 'department': department!.trim(),
       },
     );
-    await TemplatePrintRenderer().printThermal(sections, data);
+    await TemplatePrintRenderer().printThermal(sections, data,
+        branding: PrintBranding.forBranch(branchId: branchId, branchName: branchName));
     return;
   }
 
@@ -197,8 +208,12 @@ Future<void> printVoidOrderDocument(
     final data = _templateData(
       sale: sale,
       items: items,
+      branchId: branchId,
       branchName: branchName,
       tillNumber: doc?.tillNumber,
+      contactPhone: doc?.contactPhone,
+      contactEmail: doc?.contactEmail,
+      contactAddress: doc?.contactAddress,
       customerName: customerName,
       staffLabel: 'Waiter',
       publicCode: publicCode,
@@ -220,7 +235,8 @@ Future<void> printVoidOrderDocument(
           MapEntry('Printed by:', printedBy!.trim()),
       ],
     );
-    await TemplatePrintRenderer().printThermal(sections, data);
+    await TemplatePrintRenderer().printThermal(sections, data,
+        branding: PrintBranding.forBranch(branchId: branchId, branchName: branchName));
     return;
   }
 
@@ -243,8 +259,12 @@ TemplatePrintData _templateData({
   required SaleResult sale,
   required List<CartItem> items,
   required String branchName,
+  String? branchId,
   String companyName = 'FamousGate Hotels',
   String? tillNumber,
+  String? contactPhone,
+  String? contactEmail,
+  String? contactAddress,
   String? tableNumber,
   String? roomNumber,
   String? customerName,
@@ -264,6 +284,12 @@ TemplatePrintData _templateData({
   final money = NumberFormat('#,##0.00', 'en_KE');
   final date = _dateString(sale.createdAt);
   final total = sale.total;
+  // Sotik prints as KLUB DIAMOND with none of FamousGate's contact details.
+  final klub = PrintBranding.forBranch(branchId: branchId, branchName: branchName);
+  if (klub != null) {
+    companyName = klub.companyName;
+    branchName = '';
+  }
 
   // Price is all-inclusive of VAT 16%, Catering Levy (CL) 2% and Service
   // Charge (SC) 3% — these are disclosed as a breakdown of the unchanged
@@ -296,9 +322,16 @@ TemplatePrintData _templateData({
     values: {
       'company_name': companyName,
       'branch_name': branchName,
-      'company_address': 'Bomet, Kenya',
-      'company_phone': '+254 706 782 828',
-      'company_email': 'famousgateshotelsbmt@gmail.com',
+      // Branch-set details win; otherwise the long-standing FamousGate defaults (Sotik: none).
+      'company_address': klub != null
+          ? klub.address
+          : (_clean(contactAddress) ?? 'Bomet, Kenya'),
+      'company_phone': klub != null
+          ? klub.phone
+          : (_clean(contactPhone) ?? '+254 706 782 828'),
+      'company_email': klub != null
+          ? klub.email
+          : (_clean(contactEmail) ?? 'famousgateshotelsbmt@gmail.com'),
       'till_number': _clean(tillNumber) ?? '',
       'receipt_number': receiptNumber,
       'public_code': code ?? '',
@@ -391,13 +424,7 @@ _CustomerDocumentBranding _customerDocumentBranding({
   required String? branchId,
   required String branchName,
 }) {
-  final normalizedBranchId = _clean(branchId);
-  final normalizedBranchName = branchName.trim().toLowerCase();
-  final isSotik = normalizedBranchId == '4' ||
-      normalizedBranchName == 'sotik' ||
-      normalizedBranchName.contains('sotik ');
-
-  if (isSotik) {
+  if (PrintBranding.isSotik(branchId: branchId, branchName: branchName)) {
     return const _CustomerDocumentBranding(
       companyName: 'KLUB DIAMOND',
       branchName: '',

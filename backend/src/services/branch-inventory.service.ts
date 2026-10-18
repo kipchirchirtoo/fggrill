@@ -442,7 +442,7 @@ export async function getBranchStock(
   for (const [sku, liveRow] of liveBalances.entries()) {
     const legacyRow = stockBySku.get(sku);
     if (legacyRow) {
-      if (Number(legacyRow.quantity ?? 0) <= 0 && liveRow.quantity > 0) {
+      if (liveRow.quantity > 0 && Number(legacyRow.quantity ?? 0) !== liveRow.quantity) {
         legacyRow.quantity = liveRow.quantity;
       }
       continue;

@@ -16,11 +16,13 @@ import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../services/print_service.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/auth_notifier.dart';
 import '../../kitchen/domain/models.dart' show KitchenOrder;
 import '../../pos/domain/models.dart';
 import '../../templates/data/document_printer.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../../pos/presentation/cross_outlet_settlements_panel.dart';
+import '../../pos/presentation/outlet_pos_screen.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
@@ -33,12 +35,13 @@ const _kBarCaptainOrderCashierRoles = {
 enum CashierTab {
   station,
   pos,
-  bills,
+  voidManagement,
   voidRequests,
   exchangeRequests,
   voided,
   credit,
   expenses,
+  clearances,
   shifts,
   barcode
 }
@@ -69,11 +72,14 @@ class CashierDashboard extends ConsumerStatefulWidget {
 class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
+    CashierTab.pos,
+    CashierTab.voidManagement,
     CashierTab.voidRequests,
     CashierTab.exchangeRequests,
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.expenses,
+    CashierTab.clearances,
     CashierTab.shifts,
   ];
 
@@ -138,11 +144,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     });
   }
 
-  // Jump the cashier straight to the Cross-Outlet Clearances tab (index of the
-  // 'Cross-Outlet Clearances' entry in the tabs list built in build()).
+  // Jump the cashier straight to the Cross-Outlet Clearances tab.
   void _openCrossOutletClearances() {
     if (!mounted) return;
-    setState(() => _tab = 7);
+    final idx = _visibleTabs.indexOf(CashierTab.clearances);
+    setState(() => _tab = idx >= 0 ? idx : 8);
   }
 
   @override
@@ -185,6 +191,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           initialMethod: widget.initialMethod,
           onGoToClearances: _openCrossOutletClearances,
         )),
+      ),
+      const DashboardTab(
+        label: 'POS Orders',
+        icon: Icons.shopping_cart_checkout,
+        content: _RequiresOpenShift(child: _CashierPosTab()),
       ),
       const DashboardTab(
         label: 'Void Management',
@@ -508,6 +519,144 @@ class _RequiresOpenShift extends ConsumerWidget {
   }
 }
 
+class CashierPosRoleConfig {
+  const CashierPosRoleConfig({
+    required this.outletType,
+    required this.title,
+    required this.initials,
+    required this.unifiedStations,
+    this.allowedStationTypes,
+  });
+
+  final String outletType;
+  final String title;
+  final String initials;
+  final bool unifiedStations;
+  final List<String>? allowedStationTypes;
+
+  static CashierPosRoleConfig fromRole(String? rawRole) {
+    final role = (rawRole ?? '').trim().toLowerCase();
+
+    if (role == 'main_bar_cashier' || role.contains('main_bar')) {
+      return const CashierPosRoleConfig(
+        outletType: 'main_bar',
+        title: 'Main Bar POS',
+        initials: 'MB',
+        unifiedStations: false,
+        allowedStationTypes: ['main_bar', 'sports_bar', 'kyogong_sports_bar'],
+      );
+    }
+    if (role == 'restaurant_cashier' || role.contains('restaurant')) {
+      return const CashierPosRoleConfig(
+        outletType: 'restaurant',
+        title: 'Restaurant POS',
+        initials: 'RT',
+        unifiedStations: false,
+        allowedStationTypes: ['restaurant', 'choma_zone', 'non_consumables'],
+      );
+    }
+    if (role == 'cashier') {
+      return const CashierPosRoleConfig(
+        outletType: 'restaurant',
+        title: 'Cashier POS',
+        initials: 'CS',
+        unifiedStations: false,
+        allowedStationTypes: ['restaurant', 'choma_zone', 'non_consumables'],
+      );
+    }
+    if (role == 'receptionist' ||
+        role == 'branch_receptionist' ||
+        role == 'front_desk_supervisor' ||
+        role == 'kyogong_reception_cashier' ||
+        role.contains('reception')) {
+      return const CashierPosRoleConfig(
+        outletType: 'restaurant',
+        title: 'Reception POS',
+        initials: 'RC',
+        unifiedStations: false,
+        allowedStationTypes: ['restaurant', 'choma_zone', 'non_consumables'],
+      );
+    }
+    if (role == 'executive_bar_cashier' || role.contains('executive_bar')) {
+      return const CashierPosRoleConfig(
+        outletType: 'executive_bar',
+        title: 'Executive Bar POS',
+        initials: 'EB',
+        unifiedStations: false,
+        allowedStationTypes: ['executive_bar', 'kyogong_executive_bar'],
+      );
+    }
+    if (role == 'non_consumables_cashier' || role.contains('non_consumables')) {
+      return const CashierPosRoleConfig(
+        outletType: 'non_consumables',
+        title: 'Non-consumables POS',
+        initials: 'NC',
+        unifiedStations: false,
+        allowedStationTypes: ['non_consumables'],
+      );
+    }
+    if (role == 'choma_zone_cashier' || role.contains('choma_zone')) {
+      return const CashierPosRoleConfig(
+        outletType: 'choma_zone',
+        title: 'Choma Zone POS',
+        initials: 'CZ',
+        unifiedStations: false,
+        allowedStationTypes: ['choma_zone'],
+      );
+    }
+    if (role == 'kyogong_spa_cashier') {
+      return const CashierPosRoleConfig(
+        outletType: 'spa',
+        title: 'Spa POS',
+        initials: 'KS',
+        unifiedStations: false,
+        allowedStationTypes: ['spa', 'kyogong_spa'],
+      );
+    }
+    if (role == 'kyogong_sports_bar_cashier') {
+      return const CashierPosRoleConfig(
+        outletType: 'sports_bar',
+        title: 'Sports Bar POS',
+        initials: 'SB',
+        unifiedStations: false,
+        allowedStationTypes: ['sports_bar', 'kyogong_sports_bar', 'main_bar'],
+      );
+    }
+
+    // Default for general 'cashier' and managers/administrators:
+    // Full access to order across any station in the branch.
+    return const CashierPosRoleConfig(
+      outletType: 'restaurant',
+      title: 'POS Orders',
+      initials: 'PO',
+      unifiedStations: true,
+      allowedStationTypes: null,
+    );
+  }
+}
+
+class _CashierPosTab extends ConsumerWidget {
+  const _CashierPosTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+    final config = CashierPosRoleConfig.fromRole(role);
+
+    return OutletPOSScreen(
+      key: ValueKey('cashier_pos_${user?.id}_${user?.branchId}_$role'),
+      outletType: config.outletType,
+      title: config.title,
+      initials: config.initials,
+      unifiedStations: config.unifiedStations,
+      allowedStationTypes: config.allowedStationTypes,
+      embedded: true,
+      logoutOnOrder: false,
+    );
+  }
+}
+
 class _StationTab extends ConsumerStatefulWidget {
   const _StationTab(
       {this.initialBillRef,
@@ -538,6 +687,28 @@ class _StationTabState extends ConsumerState<_StationTab> {
   Timer? _lookupDebounce;
   String? _selectedUnpaidRef;
   String _method = 'cash';
+  String _stationFilter = 'all';
+
+  String _stationFilterTitle(String st) {
+    switch (st.toLowerCase()) {
+      case 'restaurant':
+        return 'Restaurant';
+      case 'choma_zone':
+        return 'Choma Zone';
+      case 'non_consumables':
+        return 'Non-consumables';
+      case 'main_bar':
+        return 'Main Bar';
+      case 'executive_bar':
+        return 'Executive Bar';
+      case 'sports_bar':
+        return 'Sports Bar';
+      case 'spa':
+        return 'Spa';
+      default:
+        return st;
+    }
+  }
 
   // Barcode scanner (merged into Station). Mode 'camera' uses the device
   // camera; 'hardware' keeps the lookup field focused for keyboard-wedge
@@ -661,6 +832,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   List<_ShiftStaffMember> _staffOptions = const [];
   _ShiftStaffMember? _selectedStaff;
   bool _staffLoading = false;
+  Future<void>? _staffLoadingFuture;
   List<Map<String, dynamic>> _eligibleRoomChargeGuests = const [];
   Map<String, dynamic>? _selectedRoomChargeGuest;
   String? _selectedCorporateCustomerId;
@@ -697,18 +869,30 @@ class _StationTabState extends ConsumerState<_StationTab> {
     }
   }
 
-  Future<void> _loadStaff() async {
-    if (_staffOptions.isNotEmpty || _staffLoading) return;
+  Future<void> _loadStaff({bool force = false}) async {
+    if (_staffOptions.isNotEmpty && !force) return;
+    if (_staffLoadingFuture != null) {
+      await _staffLoadingFuture;
+      return;
+    }
     setState(() => _staffLoading = true);
-    final staff = await ref
-        .read(cashierRepositoryProvider)
-        .getBranchStaff()
-        .catchError((_) => <Map<String, dynamic>>[]);
-    if (!mounted) return;
-    setState(() {
-      _staffOptions = _shiftStaffMembers(staff);
-      _staffLoading = false;
-    });
+    final future = () async {
+      try {
+        final staff = await ref
+            .read(cashierRepositoryProvider)
+            .getBranchStaff()
+            .catchError((_) => <Map<String, dynamic>>[]);
+        if (!mounted) return;
+        setState(() {
+          _staffOptions = _shiftStaffMembers(staff);
+        });
+      } finally {
+        if (mounted) setState(() => _staffLoading = false);
+        _staffLoadingFuture = null;
+      }
+    }();
+    _staffLoadingFuture = future;
+    await future;
   }
 
   Future<void> _loadEligibleRoomChargeGuests({bool force = false}) async {
@@ -792,6 +976,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _lookupBill(keepAmount: true));
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStaff());
     _initBarCaptainOrderFeed();
   }
 
@@ -813,8 +998,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
   /// Kitchen Display auto-prints restaurant captain orders.
   Future<void> _pollBarCaptainOrders() async {
     try {
-      final raw =
-          await ref.read(cashierRepositoryProvider).getBarCaptainOrders();
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+      final config = CashierPosRoleConfig.fromRole(role);
+      final raw = await ref.read(cashierRepositoryProvider).getBarCaptainOrders(
+            outletType: config.outletType,
+          );
       if (!mounted) return;
       final orders = raw.map(KitchenOrder.fromJson).toList();
       for (final order in orders) {
@@ -993,12 +1182,30 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
   }
 
+  CashierBillFilters _stationBillFilters({String search = ''}) {
+    final user = ref.read(authNotifierProvider).valueOrNull;
+    final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+    final config = CashierPosRoleConfig.fromRole(role);
+    return CashierBillFilters(
+      search: search,
+      outletType: config.outletType,
+      allowedStationTypes: config.allowedStationTypes,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentShift = ref.watch(cashierCurrentShiftProvider);
     final currentShiftDetail = ref.watch(cashierCurrentShiftDetailProvider);
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+    final config = CashierPosRoleConfig.fromRole(role);
     final unpaidBills = ref.watch(
-        cashierUnpaidBillsProvider(CashierBillFilters(search: _unpaidSearch)));
+        cashierUnpaidBillsProvider(CashierBillFilters(
+          search: _unpaidSearch,
+          outletType: config.outletType,
+          allowedStationTypes: config.allowedStationTypes,
+        )));
 
     // Realtime pop-up: when a bill is cleared elsewhere and a new cross-outlet
     // share is assigned to this cashier, surface a snackbar prompting them to
@@ -1179,7 +1386,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   if (!mounted) return;
                   final bills = ref
                       .read(cashierUnpaidBillsProvider(
-                          CashierBillFilters(search: _unpaidSearch)))
+                          _stationBillFilters(search: _unpaidSearch)))
                       .valueOrNull;
                   if (bills == null || bills.isEmpty) return;
                   final term = trimmed.toLowerCase();
@@ -1316,13 +1523,64 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 if (rows.isEmpty) {
                   return const EmptyState(message: 'No unpaid bills to clear');
                 }
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: rows.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final row = rows[index];
+                final user = ref.watch(authNotifierProvider).valueOrNull;
+                final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+                final config = CashierPosRoleConfig.fromRole(role);
+                final allowedStations = config.allowedStationTypes;
+
+                final displayRows = _stationFilter == 'all'
+                    ? rows
+                    : rows.where((r) {
+                        final oType = _text(r, const ['outlet_type', 'outletType']).toLowerCase();
+                        final sName = _text(r, const ['station_name', 'outlet_name']).toLowerCase();
+                        final target = _stationFilter.toLowerCase();
+                        return oType == target || sName.contains(target.replaceAll('_', ' '));
+                      }).toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (allowedStations != null && allowedStations.length > 1) ...[
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ChoiceChip(
+                              label: Text('All (${rows.length})'),
+                              selected: _stationFilter == 'all',
+                              onSelected: (_) => setState(() => _stationFilter = 'all'),
+                            ),
+                            for (final st in allowedStations) ...[
+                              const SizedBox(width: 8),
+                              Builder(builder: (_) {
+                                final count = rows.where((r) {
+                                  final oType = _text(r, const ['outlet_type', 'outletType']).toLowerCase();
+                                  final sName = _text(r, const ['station_name', 'outlet_name']).toLowerCase();
+                                  final target = st.toLowerCase();
+                                  return oType == target || sName.contains(target.replaceAll('_', ' '));
+                                }).length;
+                                return ChoiceChip(
+                                  label: Text('${_stationFilterTitle(st)} ($count)'),
+                                  selected: _stationFilter == st,
+                                  onSelected: (_) => setState(() => _stationFilter = st),
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (displayRows.isEmpty)
+                      const EmptyState(message: 'No unpaid bills for selected outlet')
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: displayRows.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final row = displayRows[index];
                     final refText = _billLookupReference(row);
                     final selected =
                         refText.isNotEmpty && refText == _selectedUnpaidRef;
@@ -1501,8 +1759,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                       ),
                     );
                   },
-                );
-              },
+                ),
+              ],
+            );
+          },
               loading: () => const LoadingSkeleton(type: SkeletonType.list),
               error: (error, _) => ErrorState(message: apiErrorMessage(error)),
             ),
@@ -1979,9 +2239,20 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   child: LinearProgressIndicator(),
                 )
               else if (_staffOptions.isEmpty)
-                const Text(
-                  'No branch staff loaded — cannot assign a credit bill.',
-                  style: TextStyle(color: AppColors.kError, fontSize: 12),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'No branch staff loaded — cannot assign a credit bill.',
+                        style: TextStyle(color: AppColors.kError, fontSize: 12),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _loadStaff,
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: const Text('Retry', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 )
               else
                 _StaffSearchField(
@@ -2257,7 +2528,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       var targetId = id;
       final bills = ref
           .read(cashierUnpaidBillsProvider(
-              CashierBillFilters(search: _unpaidSearch)))
+              _stationBillFilters(search: _unpaidSearch)))
           .valueOrNull;
       if (bills != null && bills.isNotEmpty) {
         final term = id.toLowerCase();
@@ -3241,10 +3512,15 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final balance = _balanceFromBill(bill);
     if (balance <= 0) return _snack('This bill has no balance to clear');
 
+    if (_staffOptions.isEmpty) {
+      await _loadStaff();
+    }
+
     final body = await _paymentPayload(
       context,
       balance,
       title: 'Split Payment',
+      staffOptions: _staffOptions,
     );
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
@@ -3280,13 +3556,36 @@ class _StationTabState extends ConsumerState<_StationTab> {
         Map<String, dynamic>? paymentCreditBill;
 
         if (method == 'credit_bill') {
-          final staff = await ref
-              .read(cashierRepositoryProvider)
-              .getBranchStaff()
-              .catchError((_) => <Map<String, dynamic>>[]);
-          if (!mounted) return;
-          final creditBill =
-              await _creditBillPayload(context, amount, staffMembers: staff);
+          final selectedStaffId = _text(payment, ['staff_id']);
+          final selectedStaffName = _text(payment, ['staff_name']);
+          Map<String, dynamic>? creditBill;
+
+          if (selectedStaffId.isNotEmpty && selectedStaffName.isNotEmpty) {
+            creditBill = {
+              'staff_id': selectedStaffId,
+              'staff_name': selectedStaffName,
+              'employee_id': _text(payment, ['employee_id']),
+              'department': _text(payment, ['department']),
+              'bill_type': 'cashier_payment',
+              'reference_type': 'cashier_payment',
+              'total_amount': amount,
+              'due_date':
+                  _dateOnly(DateTime.now().add(const Duration(days: 30))),
+              'payment_method': 'credit_bill',
+              'deduction_months': 1,
+              'remarks': _text(payment, ['payment_reference', 'remarks']),
+            };
+          } else {
+            if (_staffOptions.isEmpty) {
+              await _loadStaff();
+            }
+            if (!mounted) return;
+            creditBill = await _creditBillPayload(
+              context,
+              amount,
+              staffOptions: _staffOptions,
+            );
+          }
           if (creditBill == null) return;
           final createdCredit = await ref
               .read(cashierRepositoryProvider)
@@ -4015,13 +4314,47 @@ class _UnpaidBillsTab extends ConsumerStatefulWidget {
 class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
   String _status = 'all';
   String _search = '';
+  List<_ShiftStaffMember> _staffOptions = const [];
+  Future<void>? _staffLoadingFuture;
+
+  Future<void> _loadStaff({bool force = false}) async {
+    if (_staffOptions.isNotEmpty && !force) return;
+    if (_staffLoadingFuture != null) {
+      await _staffLoadingFuture;
+      return;
+    }
+    final future = () async {
+      try {
+        final staff = await ref
+            .read(cashierRepositoryProvider)
+            .getBranchStaff()
+            .catchError((_) => <Map<String, dynamic>>[]);
+        if (!mounted) return;
+        setState(() {
+          _staffOptions = _shiftStaffMembers(staff);
+        });
+      } finally {
+        _staffLoadingFuture = null;
+      }
+    }();
+    _staffLoadingFuture = future;
+    await future;
+  }
 
   @override
   Widget build(BuildContext context) {
     // Show EVERY still-unpaid bill while a shift is open — no date scoping. A
     // bill stays unpaid until it is settled, so one from yesterday must still
     // appear here. (No `date` filter is sent, so the backend returns all unpaid.)
-    final filters = CashierBillFilters(status: _status, search: _search);
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final role = (user?.role ?? user?.primaryRole ?? '').toLowerCase();
+    final config = CashierPosRoleConfig.fromRole(role);
+    final filters = CashierBillFilters(
+      status: _status,
+      search: _search,
+      outletType: config.outletType,
+      allowedStationTypes: config.allowedStationTypes,
+    );
     final bills = ref.watch(cashierUnpaidBillsProvider(filters));
     return _BillsScaffold(
       title: 'Unpaid Bills',
@@ -4047,17 +4380,16 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
   }
 
   Future<void> _recordPayment(Map<String, dynamic> row) async {
-    final staff = await ref
-        .read(cashierRepositoryProvider)
-        .getBranchStaff()
-        .catchError((_) => <Map<String, dynamic>>[]);
+    if (_staffOptions.isEmpty) {
+      await _loadStaff();
+    }
     if (!mounted) return;
     final body = await _paymentPayload(
       context,
       _num(row['balance_amount'] ?? row['balance']),
       title: 'Confirm Payment',
       allowCreditBill: true,
-      staffMembers: staff,
+      staffOptions: _staffOptions,
     );
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
@@ -5789,6 +6121,8 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
         'staff_name': staff.name,
         'amount': amount,
         'payment_method': _method,
+        // The server tracks cash received for cash payments; it equals the amount paid in.
+        if (_method == 'cash') 'cash_rendered': amount,
         if (reference.isNotEmpty) 'reference': reference,
       });
       _amountController.clear();
@@ -8914,6 +9248,8 @@ class _PaymentDraftLine {
   // Populated when method == 'credit_bill' (staff the credit is assigned to).
   String staffId = '';
   String staffName = '';
+  String employeeId = '';
+  String department = '';
 
   num get amount => _num(amountController.text);
 
@@ -8923,6 +9259,8 @@ class _PaymentDraftLine {
         'payment_reference': referenceController.text.trim(),
         if (method == 'credit_bill') 'staff_id': staffId,
         if (method == 'credit_bill') 'staff_name': staffName,
+        if (method == 'credit_bill') 'employee_id': employeeId,
+        if (method == 'credit_bill') 'department': department,
       };
 
   void dispose() {
@@ -8937,15 +9275,45 @@ Future<Map<String, dynamic>?> _paymentPayload(
   String title = 'Record Payment',
   bool allowCreditBill = true,
   List<Map<String, dynamic>> staffMembers = const [],
-}) {
-  final staffOptions = _shiftStaffMembers(staffMembers);
+  List<_ShiftStaffMember>? staffOptions,
+}) async {
+  var resolvedStaff = List<_ShiftStaffMember>.from(
+    staffOptions ?? _shiftStaffMembers(staffMembers),
+  );
+  if (resolvedStaff.isEmpty && allowCreditBill) {
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      final rawStaff =
+          await container.read(cashierRepositoryProvider).getBranchStaff();
+      resolvedStaff = _shiftStaffMembers(rawStaff);
+    } catch (_) {}
+  }
+  var dialogStaff = List<_ShiftStaffMember>.from(resolvedStaff);
+  var loadingStaff = false;
+
   final lines = <_PaymentDraftLine>[
     _PaymentDraftLine(amount: amount > 0 ? amount.toStringAsFixed(0) : ''),
   ];
   return showDialog<Map<String, dynamic>>(
     context: context,
-    builder: (context) => StatefulBuilder(
+    builder: (dialogCtx) => StatefulBuilder(
       builder: (context, setState) {
+        Future<void> reloadStaff() async {
+          setState(() => loadingStaff = true);
+          try {
+            final container = ProviderScope.containerOf(context, listen: false);
+            final rawStaff = await container
+                .read(cashierRepositoryProvider)
+                .getBranchStaff();
+            final fresh = _shiftStaffMembers(rawStaff);
+            if (fresh.isNotEmpty) {
+              dialogStaff = fresh;
+            }
+          } catch (_) {}
+          if (dialogCtx.mounted) {
+            setState(() => loadingStaff = false);
+          }
+        }
         final allocated = lines.fold<num>(0, (sum, line) => sum + line.amount);
         final remaining = amount - allocated;
         // Cash overpayment becomes change handed back to the customer.
@@ -9119,7 +9487,9 @@ Future<Map<String, dynamic>?> _paymentPayload(
                       line: lines[index],
                       canRemove: lines.length > 1,
                       allowCreditBill: allowCreditBill,
-                      staffOptions: staffOptions,
+                      staffOptions: dialogStaff,
+                      loadingStaff: loadingStaff,
+                      onReloadStaff: reloadStaff,
                       onChanged: () => setState(() {}),
                       onRemove: () {
                         setState(() {
@@ -9180,6 +9550,8 @@ class _PaymentLineEditor extends StatelessWidget {
     required this.staffOptions,
     required this.onChanged,
     required this.onRemove,
+    this.loadingStaff = false,
+    this.onReloadStaff,
   });
 
   final _PaymentDraftLine line;
@@ -9188,6 +9560,8 @@ class _PaymentLineEditor extends StatelessWidget {
   final List<_ShiftStaffMember> staffOptions;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
+  final bool loadingStaff;
+  final VoidCallback? onReloadStaff;
 
   @override
   Widget build(BuildContext context) {
@@ -9234,6 +9608,12 @@ class _PaymentLineEditor extends StatelessWidget {
                   ],
                   onChanged: (value) {
                     line.method = value ?? 'cash';
+                    if (line.method == 'credit_bill' &&
+                        staffOptions.isEmpty &&
+                        !loadingStaff &&
+                        onReloadStaff != null) {
+                      onReloadStaff!();
+                    }
                     onChanged();
                   },
                 ),
@@ -9249,21 +9629,74 @@ class _PaymentLineEditor extends StatelessWidget {
           ),
           if (line.method == 'credit_bill') ...[
             const SizedBox(height: 10),
-            if (staffOptions.isEmpty)
-              const Text(
-                'No branch staff loaded — cannot assign a credit bill.',
-                style: TextStyle(color: AppColors.kError, fontSize: 12),
+            if (loadingStaff)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Loading branch staff...',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
               )
-            else
+            else if (staffOptions.isEmpty)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'No branch staff loaded — cannot assign a credit bill.',
+                      style: TextStyle(color: AppColors.kError, fontSize: 12),
+                    ),
+                  ),
+                  if (onReloadStaff != null)
+                    TextButton.icon(
+                      onPressed: onReloadStaff,
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label:
+                          const Text('Retry', style: TextStyle(fontSize: 12)),
+                    ),
+                ],
+              )
+            else ...[
               _StaffSearchField(
                 staff: staffOptions,
                 initialId: line.staffId.isEmpty ? null : line.staffId,
                 onSelected: (selected) {
                   line.staffId = selected?.id ?? '';
                   line.staffName = selected?.name ?? '';
+                  line.employeeId = selected?.employeeId ?? '';
+                  line.department = selected?.department ?? '';
                   onChanged();
                 },
               ),
+              if (line.staffName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle,
+                          size: 13, color: AppColors.kSuccess),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Credit assigned to ${line.staffName}',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.kTextSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ],
           const SizedBox(height: 10),
           TextField(
@@ -9323,9 +9756,10 @@ Future<Map<String, dynamic>?> _creditBillPayload(
   num amount, {
   bool allowAmountEdit = false,
   List<Map<String, dynamic>> staffMembers = const [],
+  List<_ShiftStaffMember>? staffOptions,
   _ShiftStaffMember? initialStaff,
   String? initialRemarks,
-}) {
+}) async {
   final staffIdController = TextEditingController();
   final staffNameController = TextEditingController();
   final employeeIdController = TextEditingController();
@@ -9334,7 +9768,23 @@ Future<Map<String, dynamic>?> _creditBillPayload(
       TextEditingController(text: amount > 0 ? amount.toStringAsFixed(0) : '');
   final monthsController = TextEditingController(text: '1');
   final remarksController = TextEditingController(text: initialRemarks ?? '');
-  final staffOptions = _shiftStaffMembers(staffMembers);
+  var resolvedStaff = staffOptions != null && staffOptions.isNotEmpty
+      ? List<_ShiftStaffMember>.from(staffOptions)
+      : _shiftStaffMembers(staffMembers);
+
+  if (resolvedStaff.isEmpty) {
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      final fetched = await container
+          .read(cashierRepositoryProvider)
+          .getBranchStaff()
+          .catchError((_) => <Map<String, dynamic>>[]);
+      if (fetched.isNotEmpty) {
+        resolvedStaff = _shiftStaffMembers(fetched);
+      }
+    } catch (_) {}
+  }
+
   String billType = 'cashier_payment';
   String? errorText;
   final initialStaffId = initialStaff?.id ?? '';
@@ -9370,14 +9820,14 @@ Future<Map<String, dynamic>?> _creditBillPayload(
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (staffOptions.isEmpty)
+                if (resolvedStaff.isEmpty)
                   TextField(
                       controller: staffIdController,
                       decoration:
                           const InputDecoration(labelText: 'Staff profile ID'))
                 else
                   _StaffSearchField(
-                    staff: staffOptions,
+                    staff: resolvedStaff,
                     initialId: initialStaffId.isEmpty ? null : initialStaffId,
                     label: 'Branch staff member (search)',
                     onSelected: (selected) {
@@ -9393,18 +9843,18 @@ Future<Map<String, dynamic>?> _creditBillPayload(
                 const SizedBox(height: 12),
                 TextField(
                     controller: staffNameController,
-                    readOnly: staffOptions.isNotEmpty,
+                    readOnly: resolvedStaff.isNotEmpty,
                     decoration: const InputDecoration(labelText: 'Staff name')),
                 const SizedBox(height: 12),
                 TextField(
                     controller: employeeIdController,
-                    readOnly: staffOptions.isNotEmpty,
+                    readOnly: resolvedStaff.isNotEmpty,
                     decoration:
                         const InputDecoration(labelText: 'Employee ID')),
                 const SizedBox(height: 12),
                 TextField(
                     controller: departmentController,
-                    readOnly: staffOptions.isNotEmpty,
+                    readOnly: resolvedStaff.isNotEmpty,
                     decoration: const InputDecoration(labelText: 'Department')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(

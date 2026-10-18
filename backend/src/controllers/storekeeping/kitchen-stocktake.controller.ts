@@ -1086,11 +1086,13 @@ const buildFixedKitchenCatalogRows = async (
   return KITCHEN_STOCKTAKE_ITEMS.map((name) => {
     const inv = invByName.get(normalizeName(name)) || null;
     const invId = inv?.id ? String(inv.id) : null;
-    const opening = invId ? num(prevClosingByInvId.get(invId)) : 0;
     const saved =
       itemsByKey.get(String(invId || '')) ||
       itemsByKey.get(normalizeName(name)) ||
       null;
+    const opening = saved?.opening_qty != null
+      ? num(saved.opening_qty)
+      : (invId ? num(prevClosingByInvId.get(invId)) : 0);
     const closing = saved?.closing_qty != null ? num(saved.closing_qty) : null;
     return {
       item_id: invId,
@@ -1330,7 +1332,9 @@ const buildKitchenStocktakeContext = async (
         itemsByKey.get(inv?.id || '') ||
         itemsByKey.get(String(item.item_name || '').trim().toLowerCase()) ||
         null;
-      const opening = num(item.opening_stock);
+      const opening = saved?.opening_qty != null
+        ? num(saved.opening_qty)
+        : num(item.opening_stock);
       const added = additionsBySku.get(String(item.item_sku || '')) ?? num(item.additions);
       const sold = num(item.sold_quantity);
       const spoilage = num(item.spoilage_quantity);
@@ -1434,10 +1438,11 @@ const buildKitchenStocktakeContext = async (
         itemsByKey.get(String(standard.item_id || '')) ||
         itemsByKey.get(key) ||
         null;
-      // Opening = the closing COUNT of the last stocktake before this slot. It must never
-      // fall back to this stocktake's own saved count (that made "opening" mirror whatever
-      // was just counted). With no earlier count, keep the opening stored on first save.
-      const opening = prior ? num(prior.closing_qty) : num(saved?.opening_qty ?? 0);
+      // Opening = the recorded opening count saved for this stocktake, falling back to
+      // the closing count of the previous stocktake, or 0.
+      const opening = saved?.opening_qty != null
+        ? num(saved.opening_qty)
+        : (prior ? num(prior.closing_qty) : 0);
       const closing = saved?.closing_qty != null ? num(saved.closing_qty) : null;
       return {
         item_id: standard.item_id || prior?.inventory_item_id || prior?.item_id || null,
@@ -1877,7 +1882,7 @@ export const updateKitchenStocktakeItems = async (req: Request, res: Response, n
       inventory_item_id: it.inventory_item_id || sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.item_id || null,
       spoilage_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.spoilage_qty ?? 0,
       sold_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.sold_qty ?? 0,
-      opening_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.opening_qty ?? num(it.opening_qty),
+      opening_qty: it.opening_qty != null ? num(it.opening_qty) : (sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.opening_qty ?? 0),
       added_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.added_qty ?? num(it.added_qty),
       explanation: it.explanation || null,
       action_taken: it.action_taken || null,
@@ -2062,6 +2067,10 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     // figure. Drafts store just the counted rows; a submit needs every item counted.
     const hasCount = (value: any) =>
       value != null && String(value).trim() !== '' && Number.isFinite(Number(value));
+    const isOpeningStocktake =
+      String(context.stocktake_type || '').startsWith('opening_') ||
+      (context.shift === 'A' && (!context.kitchen_shift_id || context.kitchen_shift_status === 'draft'));
+
     const uncountedItems: string[] = [];
     const countedRows = context.rows
       .map((row: StocktakeContextRow) => {
@@ -2079,10 +2088,18 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
           uncountedItems.push(row.item_name);
           return null;
         }
+
+        const hasOpening = hasCount(submitted?.opening_qty);
+        const opening = hasOpening
+          ? num(submitted.opening_qty)
+          : (isOpeningStocktake && closing != null)
+              ? closing
+              : (row.opening_qty != null ? num(row.opening_qty) : 0);
+
         return {
           item_name: row.item_name,
           inventory_item_id: row.item_id || null,
-          opening_qty: num(row.opening_qty),
+          opening_qty: opening,
           added_qty: num(row.added_qty),
           closing_qty: closing,
           explanation: submitted?.explanation || row.explanation || null,
@@ -2143,13 +2160,31 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       return {
         ...it,
         inventory_item_id: it.inventory_item_id || source?.item_id || null,
-        opening_qty: source?.opening_qty ?? num(it.opening_qty),
+        opening_qty: it.opening_qty != null ? num(it.opening_qty) : (source?.opening_qty ?? 0),
         added_qty: source?.added_qty ?? num(it.added_qty),
         spoilage_qty: source?.spoilage_qty ?? 0,
         sold_qty: source?.sold_qty ?? 0,
       };
     });
     await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.shift, shiftRow.status, itemsForSync);
+
+    if (context.kitchen_shift_id) {
+      try {
+        for (const it of itemsForSync) {
+          const invId = it.inventory_item_id;
+          const openQty = num(it.opening_qty);
+          if (invId && openQty > 0) {
+            await supabase
+              .from('kitchen_shift_items')
+              .update({ opening_stock: openQty, updated_at: new Date().toISOString() })
+              .eq('shift_id', context.kitchen_shift_id)
+              .eq('inventory_item_id', invId);
+          }
+        }
+      } catch (shiftItemErr) {
+        logger.warn('Could not update kitchen_shift_items opening_stock:', shiftItemErr);
+      }
+    }
 
     if (submit) {
       for (const it of itemsForSync) {

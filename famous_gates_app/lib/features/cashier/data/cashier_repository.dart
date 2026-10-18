@@ -121,8 +121,14 @@ class CashierRepository {
   /// Main Bar / Executive Bar captain orders (new + recalled) for this
   /// branch, so the cashier station can auto-print a copy alongside the
   /// bar ticket. Returns the same shape as the kitchen KDS feed.
-  Future<List<Map<String, dynamic>>> getBarCaptainOrders() =>
-      _getList('/pos/captain-orders');
+  Future<List<Map<String, dynamic>>> getBarCaptainOrders({
+    String? outletType,
+    String? outletId,
+  }) =>
+      _getList('/pos/captain-orders', query: {
+        if (outletType != null && outletType.isNotEmpty) 'outlet_type': outletType,
+        if (outletId != null && outletId.isNotEmpty) 'outlet_id': outletId,
+      });
 
   /// Reports that this cashier station successfully printed a bar captain
   /// order's current state, so the server-side dedup flag is set even if
@@ -230,6 +236,8 @@ class CashierRepository {
     String? billType,
     String? search,
     String? date,
+    String? outletType,
+    String? outletId,
     int page = 1,
     int limit = 25,
   }) async {
@@ -237,8 +245,10 @@ class CashierRepository {
     final normalizedBillType = billType ?? 'all';
     final normalizedSearch = search?.trim().toLowerCase() ?? '';
     final normalizedDate = date?.trim() ?? '';
+    final normalizedOutletType = outletType?.trim().toLowerCase() ?? '';
+    final normalizedOutletId = outletId?.trim() ?? '';
     final cacheKey =
-        'cashier:unpaid-bills:$normalizedStatus:$normalizedBillType:$normalizedSearch:$normalizedDate:$page:$limit';
+        'cashier:unpaid-bills:$normalizedStatus:$normalizedBillType:$normalizedSearch:$normalizedDate:$normalizedOutletType:$normalizedOutletId:$page:$limit';
     final cached = _readListCache(cacheKey);
     if (cached != null) return cached;
     final inFlight = _pendingListRequests[cacheKey];
@@ -252,6 +262,8 @@ class CashierRepository {
       if (billType != null && billType != 'all') 'bill_type': billType,
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+      if (outletType != null && outletType.isNotEmpty) 'outlet_type': outletType,
+      if (outletId != null && outletId.isNotEmpty) 'outlet_id': outletId,
       // Whole open shift, not a page — backend returns every bill for limit=all.
       'limit': 'all',
     };
@@ -293,14 +305,18 @@ class CashierRepository {
     String? status,
     String? search,
     String? date,
+    String? outletType,
+    String? outletId,
     int page = 1,
     int limit = 25,
   }) async {
     final normalizedStatus = status ?? 'all';
     final normalizedSearch = search?.trim().toLowerCase() ?? '';
     final normalizedDate = date?.trim() ?? '';
+    final normalizedOutletType = outletType?.trim().toLowerCase() ?? '';
+    final normalizedOutletId = outletId?.trim() ?? '';
     final cacheKey =
-        'cashier:unpaid-orders-only:$normalizedStatus:$normalizedSearch:$normalizedDate:$page:$limit';
+        'cashier:unpaid-orders-only:$normalizedStatus:$normalizedSearch:$normalizedDate:$normalizedOutletType:$normalizedOutletId:$page:$limit';
     final cached = _readListCache(cacheKey);
     if (cached != null) return cached;
     final inFlight = _pendingListRequests[cacheKey];
@@ -313,6 +329,8 @@ class CashierRepository {
       if (status != null && status != 'all') 'status': status,
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+      if (outletType != null && outletType.isNotEmpty) 'outlet_type': outletType,
+      if (outletId != null && outletId.isNotEmpty) 'outlet_id': outletId,
       // Whole open shift, not a page — backend returns every order for limit=all.
       'limit': 'all',
     };

@@ -1,3 +1,4 @@
+import '../core/branding/print_branding.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
@@ -135,14 +136,25 @@ class PrintService {
     String? duplicateLabel,
   }) async {
     final billCode = (publicCode ?? '').trim();
-    final receiptCompanyName = (companyNameOverride ?? '').trim().isNotEmpty
-        ? companyNameOverride!.trim()
-        : companyName;
+    // Sotik prints as KLUB DIAMOND with nothing of FamousGate on it.
+    final klub = PrintBranding.forBranch(branchName: branchName);
+    final receiptCompanyName = klub != null
+        ? klub.companyName
+        : (companyNameOverride ?? '').trim().isNotEmpty
+            ? companyNameOverride!.trim()
+            : companyName;
     // Try Python service first (NO DIALOG!)
     try {
       final receiptData = {
         'company_name': receiptCompanyName,
-        'branch_name': branchName,
+        'branch_name': klub != null ? '' : branchName,
+        if (klub != null) ...{
+          // Present-but-empty tells the thermal printer to omit these lines instead of
+          // falling back to FamousGate's own address / phone.
+          'company_address': klub.address,
+          'company_phone': klub.phone,
+          'company_email': klub.email,
+        },
         'receipt_type': receiptType,
         'receipt_number': sale.receiptNumber,
         'short_code': publicCode,
@@ -203,7 +215,7 @@ class PrintService {
     final isPendingPayment =
         ['pending', 'unpaid'].contains(sale.paymentMethod.trim().toLowerCase());
 
-    final logoImage = await _getLogoImage();
+    final logoImage = klub != null ? null : await _getLogoImage();
 
     // 79-80mm thermal roll with a 76mm printable area. Keep symmetrical
     // 2mm margins so the printer gets the correct roll size without clipping.
@@ -233,9 +245,11 @@ class PrintService {
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 14)),
               pw.SizedBox(height: 2),
-              pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Tel: $companyPhone',
-                  style: const pw.TextStyle(fontSize: 8)),
+              if (klub == null) ...[
+                pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Tel: $companyPhone',
+                    style: const pw.TextStyle(fontSize: 8)),
+              ],
               pw.SizedBox(height: 4),
               pw.Text(receiptType.toUpperCase(),
                   style: pw.TextStyle(
@@ -382,7 +396,8 @@ class PrintService {
                 _tillComplianceBlock(tillNumber.trim()),
               pw.Text('Please come again',
                   style: const pw.TextStyle(fontSize: 7)),
-              pw.Text(companyEmail, style: const pw.TextStyle(fontSize: 7)),
+              if (klub == null)
+                pw.Text(companyEmail, style: const pw.TextStyle(fontSize: 7)),
               pw.SizedBox(height: 10),
               if ((barcodeValue != null && barcodeValue.trim().isNotEmpty) ||
                   (sale.receiptNumber != null &&
@@ -612,12 +627,15 @@ class PrintService {
         .format(_toKenyaTime(DateTime.now()));
     final code = (creditNumber ?? '').trim();
 
+    final klub = PrintBranding.forBranch(branchName: branchName);
     pw.MemoryImage? logoImage;
-    try {
-      final logoBytes =
-          await rootBundle.load('assets/frontend_public/fglogo.png');
-      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
-    } catch (_) {}
+    if (klub == null) {
+      try {
+        final logoBytes =
+            await rootBundle.load('assets/frontend_public/fglogo.png');
+        logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+      } catch (_) {}
+    }
 
     const receiptFormat = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,
@@ -642,14 +660,16 @@ class PrintService {
                       width: 24 * PdfPageFormat.mm,
                       height: 24 * PdfPageFormat.mm),
                 ),
-              pw.Text(companyName,
+              pw.Text(klub != null ? klub.companyName : companyName,
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 14)),
               pw.SizedBox(height: 2),
-              pw.Text(branchName.isEmpty ? companyAddress : branchName,
-                  style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Tel: $companyPhone',
-                  style: const pw.TextStyle(fontSize: 8)),
+              if (klub == null) ...[
+                pw.Text(branchName.isEmpty ? companyAddress : branchName,
+                    style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Tel: $companyPhone',
+                    style: const pw.TextStyle(fontSize: 8)),
+              ],
               pw.SizedBox(height: 4),
               pw.Text('STAFF CREDIT BILL',
                   style: pw.TextStyle(
@@ -816,12 +836,15 @@ class PrintService {
     final printedStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
         .format(_toKenyaTime(DateTime.now()));
 
+    final klub = PrintBranding.forBranch(branchName: branchName);
     pw.MemoryImage? logoImage;
-    try {
-      final logoBytes =
-          await rootBundle.load('assets/frontend_public/fglogo.png');
-      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
-    } catch (_) {}
+    if (klub == null) {
+      try {
+        final logoBytes =
+            await rootBundle.load('assets/frontend_public/fglogo.png');
+        logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+      } catch (_) {}
+    }
 
     const receiptFormat = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,
@@ -846,14 +869,16 @@ class PrintService {
                       width: 24 * PdfPageFormat.mm,
                       height: 24 * PdfPageFormat.mm),
                 ),
-              pw.Text(companyName,
+              pw.Text(klub != null ? klub.companyName : companyName,
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 14)),
               pw.SizedBox(height: 2),
-              pw.Text(branchName.isEmpty ? companyAddress : branchName,
-                  style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Tel: $companyPhone',
-                  style: const pw.TextStyle(fontSize: 8)),
+              if (klub == null) ...[
+                pw.Text(branchName.isEmpty ? companyAddress : branchName,
+                    style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Tel: $companyPhone',
+                    style: const pw.TextStyle(fontSize: 8)),
+              ],
               pw.SizedBox(height: 4),
               pw.Text('VOIDED CAPTAIN ORDER',
                   style: pw.TextStyle(
