@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../data/branch_storekeeper_repository.dart';
 
 final _moneyFormat = NumberFormat('#,##0.00', 'en_KE');
@@ -507,7 +508,10 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
       );
       Navigator.of(context).pop(true);
     } catch (error) {
-      if (mounted) _snack('Could not create PO: $error');
+      if (mounted) {
+        _snack(
+            'Could not create PO: ${apiErrorMessage(error, fallback: error.toString())}');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

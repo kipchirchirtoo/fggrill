@@ -383,7 +383,11 @@ export const listTemplates = async (req: Request, res: Response, next: NextFunct
       overrideKeys.set(k, o);
     });
 
-    const list = Object.entries(DEFAULT_TEMPLATES).map(([key, def]) => {
+    const editableOnly = (req.user as any)?.role !== 'super_admin';
+    const BRANCH_KEYS = ['customer_bill', 'customer_receipt', 'credit_bill', 'void_order'];
+    const list = Object.entries(DEFAULT_TEMPLATES)
+      .filter(([key]) => !editableOnly || BRANCH_KEYS.includes(key))
+      .map(([key, def]) => {
       const globalOv = overrideKeys.get(`${key}|global`);
       const branchOv = branchId ? overrideKeys.get(`${key}|${branchId}`) : null;
       return {
@@ -436,6 +440,27 @@ export const resolveDocument = async (req: Request, res: Response, next: NextFun
     if (!def) { res.status(404).json({ success: false, message: 'Unknown template' }); return; }
     const override = await resolveTemplateRow(key, branchId);
     const tillNumber = await resolveTillNumber(outletId, branchId);
+    // Branch contact details printed on customer paper (null/empty = keep the app's default).
+    let contact: any = null;
+    let contactBranchId = branchId;
+    if (!contactBranchId && outletId) {
+      const { data: outletRow } = await supabase.from('pos_outlets').select('branch_id').eq('id', outletId).maybeSingle();
+      contactBranchId = outletRow?.branch_id ?? null;
+    }
+    if (contactBranchId) {
+      const { data: branchRow } = await supabase
+        .from('branches')
+        .select('phone, email, address')
+        .eq('id', contactBranchId)
+        .maybeSingle();
+      if (branchRow) {
+        contact = {
+          phone: branchRow.phone || null,
+          email: branchRow.email || null,
+          address: branchRow.address || null,
+        };
+      }
+    }
     res.json({
       success: true,
       data: {
@@ -443,6 +468,7 @@ export const resolveDocument = async (req: Request, res: Response, next: NextFun
         document_type: def.document_type,
         sections: override?.sections?.length ? override.sections : def.sections,
         till_number: tillNumber,
+        contact,
       },
     });
   } catch (e) { next(e); }
@@ -557,5 +583,98 @@ export const updateBranchTill = async (req: Request, res: Response, next: NextFu
       .single();
     if (error) throw error;
     res.json({ success: true, message: 'Branch default till updated', data });
+  } catch (e) { next(e); }
+};
+
+// ── Branch accountant: contact details + tills of their own branch ───────────
+
+const cleanText = (value: any, max = 200): string | null => {
+  const text = String(value ?? '').trim();
+  return text ? text.slice(0, max) : null;
+};
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const resolveSettingsBranchId = (req: Request): number | null => {
+  const id = Number(req.query.branch_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+};
+
+export const getBranchPrintSettings = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const branchId = resolveSettingsBranchId(req);
+    if (!branchId) { res.status(400).json({ success: false, message: 'branch_id is required' }); return; }
+    const { data: branch, error } = await supabase
+      .from('branches')
+      .select('id, name, phone, email, address, default_till_number')
+      .eq('id', branchId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!branch) { res.status(404).json({ success: false, message: 'Branch not found' }); return; }
+    const { data: outlets, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('id, name, outlet_type, till_number')
+      .eq('branch_id', branchId)
+      .order('name');
+    if (outletError) throw outletError;
+    res.json({
+      success: true,
+      data: {
+        branch_id: branch.id,
+        branch_name: branch.name,
+        phone: branch.phone || '',
+        email: branch.email || '',
+        address: branch.address || '',
+        default_till_number: branch.default_till_number || '',
+        outlets: (outlets || []).map((o: any) => ({
+          outlet_id: o.id,
+          outlet_name: o.name,
+          outlet_type: o.outlet_type,
+          till_number: o.till_number || '',
+        })),
+      },
+    });
+  } catch (e) { next(e); }
+};
+
+export const updateBranchPrintSettings = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const branchId = resolveSettingsBranchId(req);
+    if (!branchId) { res.status(400).json({ success: false, message: 'branch_id is required' }); return; }
+    const body = req.body || {};
+
+    const email = cleanText(body.email, 120);
+    if (email && !EMAIL_PATTERN.test(email)) {
+      res.status(400).json({ success: false, message: 'Enter a valid email address' });
+      return;
+    }
+
+    const update: Record<string, any> = { updated_at: new Date().toISOString() };
+    if ('phone' in body) update.phone = cleanText(body.phone, 40);
+    if ('email' in body) update.email = email;
+    if ('address' in body) update.address = cleanText(body.address, 200);
+    if ('default_till_number' in body) update.default_till_number = cleanText(body.default_till_number, 30);
+
+    const { error: branchError } = await supabase.from('branches').update(update).eq('id', branchId);
+    if (branchError) throw branchError;
+
+    // Outlet tills: only outlets that belong to THIS branch can be changed.
+    if (Array.isArray(body.outlets)) {
+      const { data: ownOutlets, error: ownError } = await supabase
+        .from('pos_outlets').select('id').eq('branch_id', branchId);
+      if (ownError) throw ownError;
+      const ownIds = new Set((ownOutlets || []).map((o: any) => String(o.id)));
+      for (const outlet of body.outlets) {
+        const outletId = String(outlet?.outlet_id || '');
+        if (!ownIds.has(outletId)) continue;
+        const { error: tillError } = await supabase
+          .from('pos_outlets')
+          .update({ till_number: cleanText(outlet.till_number, 30) })
+          .eq('id', outletId);
+        if (tillError) throw tillError;
+      }
+    }
+
+    res.json({ success: true, message: 'Branch print settings saved' });
   } catch (e) { next(e); }
 };

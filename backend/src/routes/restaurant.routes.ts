@@ -865,6 +865,7 @@ router.get('/kitchen/orders/history',
       });
 
       let posHistory: any[] = [];
+      const scopeIsChoma = outletScope === 'choma_zone';
       try {
         const shiftLookbackSince = new Date(
           Math.min(
@@ -893,6 +894,16 @@ router.get('/kitchen/orders/history',
           })
           .map((shift: any) => shift.id);
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
+        // Same rule as the live KDS: Main Bar / Executive Bar orders belong in the kitchen's
+        // History only for the food lines the kitchen prepared. Drinks-only bar orders are hidden.
+        const restaurantTypeShiftSet = new Set(
+          (outletShifts || [])
+            .filter((shift: any) => {
+              const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+              return String(outlet?.outlet_type || '').trim().toLowerCase() === 'restaurant';
+            })
+            .map((shift: any) => shift.id)
+        );
 
         if (restaurantShiftIds.length) {
           let posQuery = supabase
@@ -912,7 +923,14 @@ router.get('/kitchen/orders/history',
 
           if (posOrdersError) throw posOrdersError;
 
-          posHistory = (posOrders || []).map((order: any) => {
+          posHistory = (posOrders || [])
+            .map((order: any) => {
+              if (restaurantTypeShiftSet.has(order.shift_id) || scopeIsChoma) return order;
+              const foodItems = (Array.isArray(order.items) ? order.items : []).filter(isFoodItem);
+              return foodItems.length ? { ...order, items: foodItems } : null;
+            })
+            .filter(Boolean)
+            .map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
             const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];

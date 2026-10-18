@@ -19,6 +19,8 @@ import 'core/state/app_refresh.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/working_directory_guard.dart';
 import 'core/widgets/notification_toast_overlay.dart';
+import 'package:path_provider/path_provider.dart';
+import 'features/pos_terminal/data/pos_terminal_service.dart';
 
 bool _updateNoticeShown = false;
 bool _isExitingFullScreen = false;
@@ -31,6 +33,12 @@ bool get _isDesktop =>
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb) {
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      PosTerminalService.initSupportDirectory(supportDir.path);
+    } catch (_) {}
+  }
   tz.initializeTimeZones(); // KENYA TIME
   ensureStableWorkingDirectory();
 

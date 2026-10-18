@@ -234,7 +234,10 @@ def generate_cashier_logbook_pdf(data: dict) -> bytes:
     cash_rows = [
         ["Opening Float", money(cash_rec.get("opening_float"))],
         ["Cash Sales", money(cash_rec.get("cash_sales"))],
-        ["Credit Payments Received", money(cash_rec.get("credit_payments_received"))],
+        ["Paid Bills", money(cash_rec.get("credit_payments_received"))],
+        *([["   of which Cash (in drawer)", money(cash_rec.get("paid_bills_cash"))]] if (cash_rec.get("paid_bills_cash") or 0) > 0 else []),
+        *([["   of which M-Pesa", money(cash_rec.get("paid_bills_mpesa"))]] if (cash_rec.get("paid_bills_mpesa") or 0) > 0 else []),
+        *([["   of which Card", money(cash_rec.get("paid_bills_card"))]] if (cash_rec.get("paid_bills_card") or 0) > 0 else []),
         ["Cash Drops", money(cash_rec.get("cash_drops"))],
         ["Payouts", money(cash_rec.get("payouts"))],
         ["Expected Closing", money(cash_rec.get("expected_closing"))],

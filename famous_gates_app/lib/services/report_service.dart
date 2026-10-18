@@ -615,6 +615,7 @@ class ReportService {
             '#',
             'ITEM NAME',
             'UNIT',
+            'OPENING',
             'PHYSICAL COUNT',
             'EXPECTED',
             'VARIANCE',
@@ -626,9 +627,13 @@ class ReportService {
             final item = entry.value;
             final name = (item['item_name'] ?? item['name'] ?? 'Item').toString();
             final unit = (item['unit'] ?? item['unit_of_measure'] ?? 'units').toString();
+            final opening = _asNum(item['opening_qty']);
             final closing = _asNum(item['closing_qty'] ?? item['physical_qty']);
             final expected = _asNum(item['expected_qty'] ?? item['book_qty'] ?? item['opening_qty']);
             final variance = closing - expected;
+            final openingStr = opening > 0 || item['opening_qty'] != null
+                ? (opening == opening.roundToDouble() ? opening.toInt().toString() : opening.toStringAsFixed(2))
+                : '0';
             final closingStr = closing > 0 || item['closing_qty'] != null
                 ? (closing == closing.roundToDouble() ? closing.toInt().toString() : closing.toStringAsFixed(2))
                 : '—';
@@ -647,6 +652,7 @@ class ReportService {
               '$idx',
               name,
               unit,
+              openingStr,
               closingStr,
               expectedStr,
               varianceStr,

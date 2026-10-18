@@ -14,7 +14,7 @@ DioException _err(int? status, [Object? body]) {
 
 void main() {
   group('PosTerminalService.isDefinitiveRejection', () {
-    test('server says terminal is gone / revoked / key replaced -> wipe', () {
+    test('server says terminal is gone or revoked -> candidate for wipe (still confirmed first)', () {
       expect(
           PosTerminalService.isDefinitiveRejection(
               _err(404, {'message': 'Terminal is not registered'})),
@@ -23,10 +23,25 @@ void main() {
           PosTerminalService.isDefinitiveRejection(
               _err(403, {'message': 'Terminal is revoked'})),
           isTrue);
+    });
+
+    test('a signature failure alone does not wipe the registration', () {
+      // The key stays; an admin can still re-register deliberately from the enrollment screen.
       expect(
           PosTerminalService.isDefinitiveRejection(
               _err(401, {'message': 'Device signature verification failed'})),
-          isTrue);
+          isFalse);
+    });
+
+    test('a suspended terminal is NOT forgotten (it returns when re-activated)', () {
+      expect(
+          PosTerminalService.isDefinitiveRejection(
+              _err(403, {'message': 'Terminal is suspended'})),
+          isFalse);
+      expect(
+          PosTerminalService.isDefinitiveRejection(
+              _err(503, {'message': 'Could not verify this terminal right now, please retry'})),
+          isFalse);
     });
 
     test('ambiguous failures must keep the terminal enrolled', () {

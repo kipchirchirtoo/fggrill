@@ -196,7 +196,34 @@ class AuthRepository {
     } catch (_) {
       // Local logout must still complete if the network request fails.
     } finally {
-      await _ref.read(secureStorageProvider).deleteAll();
+      final storage = _ref.read(secureStorageProvider);
+      final sessionKeys = [
+        jwtKey,
+        refreshKey,
+        supabaseTokenKey,
+        branchIdKey,
+        branchNameKey,
+        roleKey,
+        rolesKey,
+        licenseKey,
+        userIdKey,
+        userNameKey,
+        primaryRoleKey,
+        outletIdKey,
+        outletTypeKey,
+        outletPrefixKey,
+        activeShiftIdKey,
+        activeContextTypeKey,
+        activeWarehouseIdKey,
+        activeWarehouseNameKey,
+      ];
+      for (final key in sessionKeys) {
+        await storage.delete(key: key);
+      }
+      final rememberMe = await storage.read(key: rememberMeKey);
+      if (rememberMe != 'true') {
+        await storage.delete(key: rememberedEmailKey);
+      }
     }
   }
 

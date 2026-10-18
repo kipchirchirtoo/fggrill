@@ -30,12 +30,18 @@ class OutletPOSScreen extends ConsumerStatefulWidget {
     required this.title,
     required this.initials,
     this.unifiedStations = false,
+    this.embedded = false,
+    this.logoutOnOrder = true,
+    this.allowedStationTypes,
   });
 
   final String outletType;
   final String title;
   final String initials;
   final bool unifiedStations;
+  final bool embedded;
+  final bool logoutOnOrder;
+  final List<String>? allowedStationTypes;
 
   @override
   ConsumerState<OutletPOSScreen> createState() => _OutletPOSScreenState();
@@ -48,16 +54,20 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     'restaurant',
     'main_bar',
     'executive_bar',
-    'non_consumables',
+    'sports_bar',
     'choma_zone',
+    'non_consumables',
+    'spa',
   ];
 
   static const _stationLabels = {
     'restaurant': 'Restaurant',
     'main_bar': 'Main Bar',
     'executive_bar': 'Executive Bar',
+    'sports_bar': 'Sports Bar',
     'non_consumables': 'Non-consumables',
     'choma_zone': 'Choma Zone',
+    'spa': 'Spa',
   };
 
   OutletPosSection _section = OutletPosSection.station;
@@ -180,12 +190,32 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 
   List<PosOutlet> _normaliseStationOutlets(List<PosOutlet> outlets) {
-    final filtered = widget.unifiedStations
-        ? outlets
-            .where((outlet) =>
-                _unifiedStationTypes.contains(outlet.outletType.toLowerCase()))
-            .toList()
-        : outlets.toList();
+    List<PosOutlet> filtered;
+    if (widget.allowedStationTypes != null &&
+        widget.allowedStationTypes!.isNotEmpty) {
+      final allowedSet = widget.allowedStationTypes!
+          .map((t) => t.trim().toLowerCase())
+          .toSet();
+      filtered = outlets
+          .where((o) => allowedSet.contains(o.outletType.trim().toLowerCase()))
+          .toList();
+      if (filtered.isEmpty) {
+        filtered = outlets.toList();
+      }
+    } else if (widget.unifiedStations) {
+      filtered = outlets
+          .where((outlet) {
+            final type = outlet.outletType.trim().toLowerCase();
+            return type != 'cashier' ||
+                _unifiedStationTypes.contains(type);
+          })
+          .toList();
+      if (filtered.isEmpty) {
+        filtered = outlets.toList();
+      }
+    } else {
+      filtered = outlets.toList();
+    }
     filtered.sort((a, b) {
       final aIndex = _stationSortIndex(a.outletType);
       final bIndex = _stationSortIndex(b.outletType);
@@ -196,8 +226,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 
   int _stationSortIndex(String outletType) {
-    final index = _unifiedStationTypes.indexOf(outletType.toLowerCase());
-    return index == -1 ? 999 : index;
+    final type = outletType.toLowerCase();
+    final index = _unifiedStationTypes.indexOf(type);
+    if (index != -1) return index;
+    if (type.contains('sports')) return 3;
+    if (type.contains('spa')) return 6;
+    return 999;
   }
 
   PosOutlet? _resolveInitialOutlet(List<PosOutlet> outlets) {
@@ -208,8 +242,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         if (outlet.id == currentOutlet.id) return outlet;
       }
     }
+    final targetType = widget.outletType.toLowerCase();
     for (final outlet in outlets) {
-      if (outlet.outletType.toLowerCase() == widget.outletType.toLowerCase()) {
+      final type = outlet.outletType.toLowerCase();
+      if (type == targetType ||
+          (targetType.contains('sports') && type.contains('sports')) ||
+          (targetType.contains('bar') && type == targetType)) {
         return outlet;
       }
     }
@@ -237,7 +275,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      final bootstrap = await repo.getBootstrap(outletId: outlet.id);
+      final bootstrap = await repo.getBootstrap(
+        outletId: outlet.id,
+        allOutlets: widget.unifiedStations,
+      );
       final snapshot = bootstrap.outlet?.id == outlet.id
           ? _OutletStationSnapshot(
               shift: bootstrap.shift,
@@ -274,6 +315,148 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     _PosPalette.isChomaZone = _isChomaZone;
     _PosPalette.isMainBar = _isMainBar;
     _PosPalette.isDark = !_usesLightPalette;
+
+    if (widget.embedded) {
+      return Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _resetSessionTimeout(),
+        onPointerSignal: (_) => _resetSessionTimeout(),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                children: [
+                  SegmentedButton<OutletPosSection>(
+                    segments: const [
+                      ButtonSegment(
+                        value: OutletPosSection.station,
+                        label: Text('Take Orders'),
+                        icon: Icon(Icons.point_of_sale, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: OutletPosSection.orders,
+                        label: Text('Shift Orders'),
+                        icon: Icon(Icons.receipt_long, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: OutletPosSection.myCreditBills,
+                        label: Text('My Credit Bills'),
+                        icon: Icon(Icons.credit_card, size: 16),
+                      ),
+                    ],
+                    selected: {_section},
+                    onSelectionChanged: (value) {
+                      setState(() {
+                        _section = value.first;
+                        if (_section == OutletPosSection.myCreditBills) {
+                          _creditBillsFuture = ref
+                              .read(outletPosRepositoryProvider)
+                              .getMyCreditBills();
+                        }
+                      });
+                    },
+                  ),
+                  const Spacer(),
+                  if (_outlet != null)
+                    _stationOutlets.length > 1
+                        ? PopupMenuButton<PosOutlet>(
+                            tooltip: 'Switch Station Outlet',
+                            initialValue: _outlet,
+                            onSelected: (outlet) => _selectOutlet(outlet),
+                            itemBuilder: (context) => [
+                              for (final o in _stationOutlets)
+                                PopupMenuItem<PosOutlet>(
+                                  value: o,
+                                  child: Row(
+                                    children: [
+                                      Icon(_stationIcon(o.outletType),
+                                          size: 16,
+                                          color: o.id == _outlet?.id
+                                              ? _PosPalette.accent
+                                              : _PosPalette.textMuted),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _stationLabel(o),
+                                        style: TextStyle(
+                                          fontWeight: o.id == _outlet?.id
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: o.id == _outlet?.id
+                                              ? _PosPalette.accent
+                                              : _PosPalette.text,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _PosPalette.surfaceAlt,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                    color: _PosPalette.accent
+                                        .withValues(alpha: 0.5)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(_stationIcon(_outlet!.outletType),
+                                      size: 14, color: _PosPalette.accent),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _outlet!.name,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _PosPalette.text,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.arrow_drop_down,
+                                      size: 18, color: _PosPalette.accent),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _PosPalette.surfaceAlt,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: _PosPalette.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(_stationIcon(_outlet!.outletType),
+                                    size: 14, color: _PosPalette.accent),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _outlet!.name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _PosPalette.text,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                ],
+              ),
+            ),
+            const Divider(height: 8),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      );
+    }
+
     return MasterDashboardShell<OutletPosSection>(
       title: widget.title,
       subtitle: 'Outlet POS',
@@ -448,7 +631,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (widget.unifiedStations && _stationOutlets.isNotEmpty) ...[
+              if ((widget.unifiedStations ||
+                      (widget.allowedStationTypes?.length ?? 0) > 1) &&
+                  _stationOutlets.length > 1) ...[
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -2750,7 +2935,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       _cart = [];
       _recalledOrder = null;
       _orders = await repo.getOrders(_shift!.id);
-      await _logoutAfterOrderPlacement();
+      await _logoutAfterOrderPlacement(order);
     });
   }
 
@@ -3253,8 +3438,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     if (type == 'restaurant') return Icons.restaurant_menu;
     if (type == 'main_bar') return Icons.local_bar;
     if (type == 'executive_bar') return Icons.wine_bar;
+    if (type == 'sports_bar' || type.contains('sports')) return Icons.sports_bar;
     if (type == 'non_consumables') return Icons.inventory_2;
     if (type == 'choma_zone') return Icons.outdoor_grill;
+    if (type == 'spa') return Icons.spa;
     return Icons.point_of_sale;
   }
 
@@ -3510,12 +3697,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 
   void _resetSessionTimeout() {
+    if (widget.embedded) return;
     _sessionTimeoutTimer?.cancel();
     _sessionTimeoutTimer = Timer(_sessionTimeout, _logoutForTimeout);
   }
 
   Future<void> _logoutForTimeout() async {
-    if (!mounted) return;
+    if (!mounted || widget.embedded) return;
     AppNotifier.showSnackBar(
       context,
       const SnackBar(
@@ -3524,8 +3712,22 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     await ref.read(authNotifierProvider.notifier).logout();
   }
 
-  Future<void> _logoutAfterOrderPlacement() async {
+  Future<void> _logoutAfterOrderPlacement([OutletShiftOrder? order]) async {
     if (!mounted) return;
+    if (widget.logoutOnOrder == false || widget.embedded) {
+      final orderRef = order?.orderNumber;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+          content: Text(orderRef != null && orderRef.isNotEmpty
+              ? 'Order $orderRef posted successfully.'
+              : 'Customer order posted successfully.'),
+          backgroundColor: Colors.green.shade800,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
     AppNotifier.showSnackBar(
       context,
       const SnackBar(

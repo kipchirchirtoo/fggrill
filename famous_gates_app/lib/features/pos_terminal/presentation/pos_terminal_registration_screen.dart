@@ -48,7 +48,7 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
     final identity = await service.loadIdentity();
     if (!mounted) return;
 
-    if (identity == null || (identity.status.isNotEmpty && identity.status != 'active')) {
+    if (identity == null || identity.status == 'revoked') {
       setState(() {
         _existingIdentity = null;
         _checkingExisting = false;
@@ -56,35 +56,25 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
       return;
     }
 
+    // Terminal identity is present locally!
+    setState(() {
+      _existingIdentity = identity;
+      _checkingExisting = false;
+    });
+
     // Best-effort check with server: verify terminal validity
     try {
-      final token = await service.ensureDeviceToken();
-      if (!mounted) return;
-      if (token == null) {
-        setState(() {
-          _existingIdentity = null;
-          _checkingExisting = false;
-        });
-        return;
-      }
+      await service.ensureDeviceToken();
     } catch (e) {
-      // Only a definitive server rejection sends the device back to the enrollment
+      // Only a definitive server rejection (e.g. revoked) sends the device back to the enrollment
       // code step; offline / proxy errors keep the enrolled identity.
       if (PosTerminalService.isDefinitiveRejection(e)) {
         if (!mounted) return;
         setState(() {
           _existingIdentity = null;
-          _checkingExisting = false;
         });
-        return;
       }
     }
-
-    if (!mounted) return;
-    setState(() {
-      _existingIdentity = identity;
-      _checkingExisting = false;
-    });
   }
 
   void _goBack() {
@@ -96,8 +86,26 @@ class _PosTerminalRegistrationScreenState extends ConsumerState<PosTerminalRegis
   }
 
   Future<void> _reRegister() async {
+    // Erases this PC's registration: it then needs a NEW one-time code from an administrator.
+    // A stray tap here used to do that instantly.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Erase this PC\'s registration?'),
+        content: const Text(
+          'This PC is already registered. Continuing erases that registration and the PC will '
+          'not work until an administrator gives you a NEW enrollment code.\n\n'
+          'Only continue if an administrator told you to.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it registered')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Erase and re-register')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
-    await ref.read(posTerminalServiceProvider).clear();
+    await ref.read(posTerminalServiceProvider).clear(reason: 'user pressed RE-REGISTER on the enrollment screen (confirmed)');
     ref.invalidate(posTerminalIdentityProvider);
     await ref.read(terminalRegistrationStatusProvider.notifier).load();
     if (mounted) {

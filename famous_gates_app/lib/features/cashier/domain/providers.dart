@@ -33,25 +33,48 @@ class CashierBillFilters {
     this.billType = 'all',
     this.search = '',
     this.date,
+    this.outletType,
+    this.allowedStationTypes,
   });
 
   final String status;
   final String billType;
   final String search;
   final String? date;
+  final String? outletType;
+  final List<String>? allowedStationTypes;
 
   @override
   bool operator ==(Object other) {
-    return identical(this, other) ||
-        other is CashierBillFilters &&
-            other.status == status &&
-            other.billType == billType &&
-            other.search == search &&
-            other.date == date;
+    if (identical(this, other)) return true;
+    if (other is! CashierBillFilters) return false;
+    if (other.status != status ||
+        other.billType != billType ||
+        other.search != search ||
+        other.date != date ||
+        other.outletType != outletType) {
+      return false;
+    }
+    final otherTypes = other.allowedStationTypes;
+    final thisTypes = allowedStationTypes;
+    if (otherTypes == null && thisTypes == null) return true;
+    if (otherTypes == null || thisTypes == null) return false;
+    if (otherTypes.length != thisTypes.length) return false;
+    for (var i = 0; i < thisTypes.length; i++) {
+      if (otherTypes[i] != thisTypes[i]) return false;
+    }
+    return true;
   }
 
   @override
-  int get hashCode => Object.hash(status, billType, search, date);
+  int get hashCode => Object.hash(
+        status,
+        billType,
+        search,
+        date,
+        outletType,
+        allowedStationTypes == null ? 0 : Object.hashAll(allowedStationTypes!),
+      );
 }
 
 class CashierShiftFilters {
@@ -93,6 +116,7 @@ final cashierUnpaidBillsProvider = StreamProvider.autoDispose
     yield* powerSync.watchUnpaidOrders(
       search: filters.search.isEmpty ? null : filters.search,
       date: filters.date,
+      allowedStationTypes: filters.allowedStationTypes,
     );
     return;
   }
@@ -101,6 +125,10 @@ final cashierUnpaidBillsProvider = StreamProvider.autoDispose
   final repo = ref.watch(cashierRepositoryProvider);
   var cancelled = false;
   ref.onDispose(() => cancelled = true);
+  final effectiveOutletType = (filters.allowedStationTypes != null &&
+          filters.allowedStationTypes!.isNotEmpty)
+      ? filters.allowedStationTypes!.join(',')
+      : filters.outletType;
   while (!cancelled) {
     try {
       final results = await Future.wait([
@@ -108,12 +136,14 @@ final cashierUnpaidBillsProvider = StreamProvider.autoDispose
           status: filters.status,
           search: filters.search,
           date: filters.date,
+          outletType: effectiveOutletType,
         ),
         repo.getUnpaidBills(
           status: filters.status,
           billType: filters.billType,
           search: filters.search,
           date: filters.date,
+          outletType: effectiveOutletType,
         ),
       ]);
       final quickRows = results[0];

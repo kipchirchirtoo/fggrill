@@ -391,6 +391,17 @@ class ThermalPrinter:
             p = self.printer
             
             company_name = str(receipt_data.get('company_name') or self.company_name).strip() or self.company_name
+            # A branch with its own branding (Sotik = KLUB DIAMOND) sends company_address /
+            # company_phone as present-but-empty so FamousGate's details are not printed.
+            # When the keys are absent the usual FamousGate defaults apply.
+            company_address = (
+                str(receipt_data.get('company_address') or '').strip()
+                if 'company_address' in receipt_data else self.company_address
+            )
+            company_phone = (
+                str(receipt_data.get('company_phone') or '').strip()
+                if 'company_phone' in receipt_data else self.company_phone
+            )
             till_number = str(receipt_data.get('till_number') or '').strip()
 
             # === HEADER ===
@@ -398,8 +409,10 @@ class ThermalPrinter:
             p.text(f"{company_name}\n")
             
             p.set(align='center', font='a', bold=False, double_height=False)
-            p.text(f"{self.company_address}\n")
-            p.text(f"{self.company_phone}\n")
+            if company_address:
+                p.text(f"{company_address}\n")
+            if company_phone:
+                p.text(f"{company_phone}\n")
             p.text("\n")
             
             # === ORDER INFO ===

@@ -10,7 +10,19 @@ import '../../../templates/domain/template_providers.dart';
 /// sections, see a live preview, insert placeholders, save (publish) or reset
 /// to the factory default. SuperAdmin only.
 class DocumentTemplatesSection extends ConsumerStatefulWidget {
-  const DocumentTemplatesSection({super.key});
+  const DocumentTemplatesSection({
+    super.key,
+    this.branchId,
+    this.title = 'Document Templates',
+    this.subtitle =
+        'Edit every system bill & receipt template. Changes publish instantly and are picked up by all print outputs.',
+  });
+
+  /// When set, the editor works on that ONE branch's version of each template (a Branch
+  /// Accountant editing their own branch). Null = the global templates (SuperAdmin).
+  final int? branchId;
+  final String title;
+  final String subtitle;
 
   @override
   ConsumerState<DocumentTemplatesSection> createState() =>
@@ -33,7 +45,9 @@ class _DocumentTemplatesSectionState
       _dirty = false;
     });
     try {
-      final t = await ref.read(templateRepositoryProvider).getTemplate(key);
+      final t = await ref
+          .read(templateRepositoryProvider)
+          .getTemplate(key, branchId: widget.branchId);
       if (mounted) setState(() => _editing = t);
     } catch (e) {
       if (mounted) {
@@ -52,7 +66,8 @@ class _DocumentTemplatesSectionState
     try {
       await ref
           .read(templateRepositoryProvider)
-          .saveTemplate(t.key, t.sections, name: t.name);
+          .saveTemplate(t.key, t.sections,
+              name: t.name, branchId: widget.branchId);
       ref.read(resolvedTemplateCacheProvider).clear(); // printers re-fetch
       ref.invalidate(templateListProvider);
       setState(() => _dirty = false);
@@ -92,7 +107,9 @@ class _DocumentTemplatesSectionState
     if (ok != true) return;
     setState(() => _loading = true);
     try {
-      await ref.read(templateRepositoryProvider).resetTemplate(t.key);
+      await ref
+          .read(templateRepositoryProvider)
+          .resetTemplate(t.key, branchId: widget.branchId);
       ref.read(resolvedTemplateCacheProvider).clear();
       ref.invalidate(templateListProvider);
       await _load(t.key);
@@ -114,19 +131,19 @@ class _DocumentTemplatesSectionState
 
   @override
   Widget build(BuildContext context) {
-    final list = ref.watch(templateListProvider(null));
+    final list = ref.watch(templateListProvider(widget.branchId));
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Document Templates',
-            style: TextStyle(
+        Text(widget.title,
+            style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: AppColors.kTextPrimary)),
         const SizedBox(height: 4),
-        const Text(
-            'Edit every system bill & receipt template. Changes publish instantly and are picked up by all print outputs.',
-            style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+        Text(widget.subtitle,
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
         const SizedBox(height: 16),
         Expanded(
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -72,6 +72,16 @@ class TemplateRepository {
         {'default_till_number': tillNumber});
   }
 
+  // ── Branch accountant: own-branch contact details + tills ─────────────────
+  Future<Map<String, dynamic>> getBranchPrintSettings() async {
+    final r = await _get('/document-templates/branch-settings');
+    return Map<String, dynamic>.from(r.data['data'] ?? {});
+  }
+
+  Future<void> saveBranchPrintSettings(Map<String, dynamic> settings) async {
+    await _put('/document-templates/branch-settings', settings);
+  }
+
   // ── App-side resolve (for printing) ────────────────────────────────────────
   Future<ResolvedDocument?> resolve(
     String key, {
@@ -91,10 +101,21 @@ class TemplateRepository {
               .map((e) => TemplateSection.fromJson(Map<String, dynamic>.from(e)))
               .toList()
           : <TemplateSection>[];
+      final contact = data['contact'] is Map
+          ? Map<String, dynamic>.from(data['contact'] as Map)
+          : const <String, dynamic>{};
+      String? contactValue(String field) {
+        final value = contact[field]?.toString().trim();
+        return (value == null || value.isEmpty) ? null : value;
+      }
+
       return ResolvedDocument(
         key: key,
         sections: sections,
         tillNumber: data['till_number']?.toString(),
+        contactPhone: contactValue('phone'),
+        contactEmail: contactValue('email'),
+        contactAddress: contactValue('address'),
       );
     } catch (_) {
       // Offline / not configured → caller falls back to the built-in layout.
@@ -130,9 +151,20 @@ class TemplateRepository {
 }
 
 class ResolvedDocument {
-  ResolvedDocument(
-      {required this.key, required this.sections, this.tillNumber});
+  ResolvedDocument({
+    required this.key,
+    required this.sections,
+    this.tillNumber,
+    this.contactPhone,
+    this.contactEmail,
+    this.contactAddress,
+  });
   final String key;
   final List<TemplateSection> sections;
   final String? tillNumber;
+
+  /// Branch contact details set by the branch accountant (null = use the app default).
+  final String? contactPhone;
+  final String? contactEmail;
+  final String? contactAddress;
 }

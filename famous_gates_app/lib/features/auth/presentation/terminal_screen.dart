@@ -166,7 +166,52 @@ class TerminalScreen extends ConsumerWidget {
               child: Center(
                 child: _RegistrationChip(
                   identity: terminalIdentity,
-                  onTap: () => context.go('/terminal-setup'),
+                  onTap: () {
+                    if (terminalIdentity != null && terminalIdentity.status != 'revoked') {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Row(
+                            children: [
+                              Icon(Icons.verified_user, color: Color(0xFF16A34A)),
+                              SizedBox(width: 8),
+                              Text('Terminal Bound'),
+                            ],
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Name: ${terminalIdentity.terminalName}'),
+                              const SizedBox(height: 4),
+                              Text('Code: ${terminalIdentity.terminalCode}'),
+                              const SizedBox(height: 4),
+                              Text('Type: ${terminalIdentity.terminalType}'),
+                              const SizedBox(height: 4),
+                              Text('Branch ID: ${terminalIdentity.branchId}'),
+                              const SizedBox(height: 4),
+                              Text('Status: ${terminalIdentity.status.toUpperCase()}'),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Close'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                context.go('/terminal-setup');
+                              },
+                              child: const Text('Re-register Device', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else {
+                      context.go('/terminal-setup');
+                    }
+                  },
                 ),
               ),
             ),
@@ -378,7 +423,7 @@ class _RegistrationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final registered = identity != null && (identity!.status.isEmpty || identity!.status == 'active');
+    final registered = identity != null && identity!.status != 'revoked';
     final Color bg = registered
         ? Colors.white.withValues(alpha: 0.10)
         : const Color(0xFFB45309);

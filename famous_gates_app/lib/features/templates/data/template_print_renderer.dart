@@ -1,3 +1,4 @@
+import '../../../core/branding/print_branding.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -100,10 +101,27 @@ class TemplatePrintRenderer {
   }
 
   Future<void> printThermal(
-      List<TemplateSection> sections, TemplatePrintData data) async {
+      List<TemplateSection> sections, TemplatePrintData data,
+      {PrintBranding? branding}) async {
     final doc = pw.Document();
 
-    final logo = await _resolveLogo();
+    // A branch with its own branding (Sotik = KLUB DIAMOND) prints NO logo and no FamousGate
+    // wording. A null logo makes the template's logo section render nothing.
+    final logo = branding != null ? null : await _resolveLogo();
+    if (branding != null) {
+      sections = sections
+          .map((section) => TemplateSection(
+                id: section.id,
+                type: section.type,
+                label: branding.rebrandText(section.label),
+                content: branding.rebrandText(section.content),
+                visible: section.visible,
+                align: section.align,
+                bold: section.bold,
+                size: section.size,
+              ))
+          .toList();
+    }
 
     const fmt = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,

@@ -257,6 +257,15 @@ const isMissingDepartmentLedgerTable = (error: any): boolean =>
 const normalizeDepartmentCode = (code: unknown): string => {
   const normalized = String(code || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!normalized) throw new AppError('Department account is required', 400);
+  if (normalized === 'kitchen' || normalized === 'restaurant' || normalized === 'food' || normalized === 'kitchen_department') {
+    return 'main_kitchen';
+  }
+  if (normalized === 'bar' || normalized === 'bars' || normalized === 'central_bar') {
+    return 'main_bar';
+  }
+  if (['car_wash', 'swimming_pool', 'playground', 'pool', 'laundry', 'maintenance', 'non_consumables', 'non_consumable'].includes(normalized)) {
+    return 'housekeeping';
+  }
   return normalized;
 };
 
@@ -526,31 +535,30 @@ export async function recordDepartmentIssue(input: {
 
   const account = await getDepartmentAccount(input.branchId, input.departmentCode);
 
-  const [{ data: stock, error: stockError }, { data: item, error: itemError }] = await Promise.all([
-    supabase
-      .from('branch_stock')
-      .select('quantity')
-      .eq('branch_id', input.branchId)
-      .eq('item_sku', input.itemSku)
-      .maybeSingle(),
+  const [stockSource, { data: item, error: itemError }, { data: invItem }] = await Promise.all([
+    BranchInventoryService.resolveBranchStockSource(input.branchId, input.itemSku),
     supabase
       .from('simple_items')
       .select('sku, item_name, description, cost_price')
       .eq('sku', input.itemSku)
+      .maybeSingle(),
+    supabase
+      .from('inventory_items')
+      .select('sku, item_name, description, default_unit_cost')
+      .eq('sku', input.itemSku)
       .maybeSingle()
   ]);
 
-  if (stockError) throw stockError;
   if (itemError) throw itemError;
-  const previousStock = numberValue(stock?.quantity);
+  const previousStock = Number(stockSource.available ?? 0);
   const minNumber = input.sourceNumber || await generateMaterialIssueNumber(input.branchId);
   const requestedQuantity = input.quantity;
   const issuedQuantity = Math.min(previousStock, requestedQuantity);
   const pendingQuantity = Math.max(0, requestedQuantity - issuedQuantity);
   const issueStatus: DepartmentIssueResult['status'] =
     issuedQuantity <= 0 ? 'pending' : pendingQuantity > 0 ? 'partially_issued' : 'completed';
-  const itemName = item?.item_name || item?.description || input.itemSku;
-  const unitCost = numberValue(item?.cost_price);
+  const itemName = item?.item_name || invItem?.item_name || item?.description || invItem?.description || input.itemSku;
+  const unitCost = numberValue(item?.cost_price ?? invItem?.default_unit_cost);
   let movement: StockMovementResult = { previousStock, newStock: previousStock };
 
   if (issuedQuantity > 0) {
@@ -1967,40 +1975,44 @@ async function syncIssuedStockToBar(branchId: number, itemSku: string, quantity:
 }
 
 async function syncIssuedStockToKitchen(branchId: number, itemSku: string, quantity: number, itemName: string, userId: string) {
-  const { data: currentStock } = await supabase
-    .from('kitchen_stock')
-    .select('current_balance')
-    .eq('branch_id', branchId)
-    .eq('item_sku', itemSku)
-    .maybeSingle();
+  try {
+    const { data: currentStock } = await supabase
+      .from('kitchen_stock')
+      .select('current_balance')
+      .eq('branch_id', branchId)
+      .eq('item_sku', itemSku)
+      .maybeSingle();
+      
+    const newBalance = Number(currentStock?.current_balance || 0) + quantity;
     
-  const newBalance = Number(currentStock?.current_balance || 0) + quantity;
-  
-  await supabase
-    .from('kitchen_stock')
-    .upsert({
-      branch_id: branchId,
-      item_sku: itemSku,
-      item_name: itemName,
-      current_balance: newBalance,
-      last_updated: new Date().toISOString()
-    }, { onConflict: 'branch_id,item_sku' });
-    
-  await supabase
-    .from('kitchen_stock_ledger')
-    .insert({
-      branch_id: branchId,
-      item_sku: itemSku,
-      item_name: itemName,
-      transaction_type: 'RECEIPT',
-      reference_type: 'STOCK_OUT',
-      reference_id: null,
-      opening_balance: Number(currentStock?.current_balance || 0),
-      quantity_in: quantity,
-      quantity_out: 0,
-      closing_balance: newBalance,
-      unit_of_measure: 'Unit',
-      user_id: userId,
-      notes: `Issued from branch store`
-    });
+    await supabase
+      .from('kitchen_stock')
+      .upsert({
+        branch_id: branchId,
+        item_sku: itemSku,
+        item_name: itemName,
+        current_balance: newBalance,
+        last_updated: new Date().toISOString()
+      }, { onConflict: 'branch_id,item_sku' });
+      
+    await supabase
+      .from('kitchen_stock_ledger')
+      .insert({
+        branch_id: branchId,
+        item_sku: itemSku,
+        item_name: itemName,
+        transaction_type: 'RECEIPT',
+        reference_type: 'STOCK_OUT',
+        reference_id: null,
+        opening_balance: Number(currentStock?.current_balance || 0),
+        quantity_in: quantity,
+        quantity_out: 0,
+        closing_balance: newBalance,
+        unit_of_measure: 'Unit',
+        user_id: userId,
+        notes: `Issued from branch store`
+      });
+  } catch (err: any) {
+    logger.warn(`syncIssuedStockToKitchen failed for ${itemSku}:`, err?.message || err);
+  }
 }

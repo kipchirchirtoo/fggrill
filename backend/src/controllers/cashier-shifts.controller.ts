@@ -761,10 +761,22 @@ export const getShiftLogs = async (
                     }
                 }
 
+                // Shifts closed before expenses were netted stored an expected cash that still
+                // contained the cash paid out (expense_total was saved as 0). Correct it here.
+                let repairedExpected = shift.expected_closing_float;
+                let repairedVariance = shift.variance;
+                if (toNumber(shift.expense_total) <= 0 && actualExpenseTotal > 0 && shift.expected_closing_float !== null && shift.expected_closing_float !== undefined) {
+                    repairedExpected = toNumber(shift.expected_closing_float) - actualExpenseTotal;
+                    const storedClosing = toNumber(shift.closing_float);
+                    repairedVariance = storedClosing > 0 ? storedClosing - repairedExpected : shift.variance;
+                }
+
                 return {
                     ...shift,
                     cashier_name: cashierName,
                     expense_total: actualExpenseTotal,
+                    expected_closing_float: repairedExpected,
+                    variance: repairedVariance,
                     conference_revenue: actualConferenceRevenue,
                     void_summary: voidAudit?.summary || undefined,
                     net_sales: toNumber(shift.total_sales),
@@ -778,6 +790,16 @@ export const getShiftLogs = async (
 
             const shiftEnd = shift.shift_end || new Date().toISOString();
             const branchId = shift.branch_id;
+
+            // Cash paid out as expenses leaves the drawer, so it reduces the expected cash.
+            let liveShiftExpenses = 0;
+            try {
+                const { data: liveExpenseRows } = await supabase
+                    .from('shift_reconciliation_expenses')
+                    .select('amount')
+                    .eq('shift_id', shift.id);
+                liveShiftExpenses = (liveExpenseRows || []).reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+            } catch (_) { /* expenses unavailable: leave at 0 */ }
 
             try {
                 // Primary source of truth: the shift's own transaction rows.
@@ -817,7 +839,7 @@ export const getShiftLogs = async (
                     const cashPaidCreditsLive = paidBillsList
                         .filter((b: any) => !String(b.payment_method || 'cash').toLowerCase().match(/mpesa|card/))
                         .reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
-                    const expectedClosingFloat = Number(shift.opening_float || 0) + txnCash + cashPaidCreditsLive;
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + txnCash + cashPaidCreditsLive - liveShiftExpenses;
                     const closingFloat = Number(shift.closing_float || 0);
                     return {
                         ...shift,
@@ -846,7 +868,7 @@ export const getShiftLogs = async (
                     const cashPaidCreditsRpc = paidBillsListRpc
                         .filter((b: any) => !String(b.payment_method || 'cash').toLowerCase().match(/mpesa|card/))
                         .reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
-                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0) + cashPaidCreditsRpc;
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0) + cashPaidCreditsRpc - liveShiftExpenses;
                     const closingFloat = Number(shift.closing_float || 0);
                     return {
                         ...shift,
@@ -896,7 +918,7 @@ export const getShiftLogs = async (
                 const txCount = allOrders.length;
 
                 if (totalSales > 0) {
-                    const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash - liveShiftExpenses;
                     const closingFloat = Number(shift.closing_float || 0);
                     return {
                         ...shift,
@@ -2306,10 +2328,24 @@ export const closeShift = async (
 
             const ledger = await calculateCashierShiftLedgerTotals(id, Number(shift.branch_id), client);
 
-            const payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
+            let payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
+            if (payouts <= 0) {
+                // The app did not send the expense total (or sent 0). The expenses recorded against this
+                // shift are the source of truth, so the drawer is never expected to still hold cash that
+                // was paid out.
+                const { rows: expenseRows } = await client.query(
+                    'SELECT COALESCE(SUM(amount), 0) AS total FROM shift_reconciliation_expenses WHERE shift_id = $1',
+                    [id]
+                );
+                payouts = toNumber(expenseRows[0]?.total);
+            }
+            // Paid credits cleared in CASH are physically in the drawer; M-Pesa / card ones are not.
+            const cashPaidCreditsAtClose = (mergedPaidBills as any[])
+                .filter((b: any) => !String(b?.payment_method || 'cash').toLowerCase().match(/mpesa|m-pesa|card|swipe/))
+                .reduce((sum: number, b: any) => sum + toNumber(b?.amount), 0);
 
-            // Correct formula: Expected = Opening Float + Gross Cash Sales - Cash Refunds - Cash Expenses.
-            expectedClosingFloat = toNumber(shift.opening_float) + ledger.cash_collections - ledger.cash_refunds - payouts;
+            // Correct formula: Expected = Opening Float + Cash Sales + Cash Paid Credits - Cash Refunds - Expenses.
+            expectedClosingFloat = toNumber(shift.opening_float) + ledger.cash_collections + cashPaidCreditsAtClose - ledger.cash_refunds - payouts;
             const hasDeclaredClosingFloat = closing_float !== undefined && closing_float !== null && `${closing_float}`.trim() !== '';
             const hasDeclaredCashAtHand = cash_at_hand !== undefined && cash_at_hand !== null && `${cash_at_hand}`.trim() !== '';
             const hasDeclaredActualCashCounted = actual_cash_counted !== undefined && actual_cash_counted !== null && `${actual_cash_counted}`.trim() !== '';

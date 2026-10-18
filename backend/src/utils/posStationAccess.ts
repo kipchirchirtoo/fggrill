@@ -9,23 +9,26 @@ export type PosOutlet = {
   name?: string | null;
 };
 
-const KYOGONG_BRANCH_ID = 1;
-const KYOGONG_RESTAURANT_RECEPTION_ROLES = new Set([
+const FRONT_DESK_RECEPTION_ROLES = new Set([
   'receptionist',
   'branch_receptionist',
   'front_desk_supervisor',
 ]);
 
 export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
-  choma_zone_cashier: ['choma_zone'],
   restaurant_cashier: ['restaurant', 'choma_zone', 'non_consumables'],
-  main_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
-  executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
+  cashier: ['restaurant', 'choma_zone', 'non_consumables'],
+  receptionist: ['restaurant', 'choma_zone', 'non_consumables'],
+  branch_receptionist: ['restaurant', 'choma_zone', 'non_consumables'],
+  front_desk_supervisor: ['restaurant', 'choma_zone', 'non_consumables'],
+  kyogong_reception_cashier: ['restaurant', 'choma_zone', 'non_consumables', 'cashier', 'kyogong_reception'],
+  choma_zone_cashier: ['choma_zone'],
   non_consumables_cashier: ['non_consumables'],
-  kyogong_reception_cashier: ['cashier', 'kyogong_reception'],
-  kyogong_spa_cashier: ['kyogong_spa'],
+  main_bar_cashier: ['main_bar', 'sports_bar', 'kyogong_sports_bar'],
+  executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
+  kyogong_spa_cashier: ['spa', 'kyogong_spa'],
   kyogong_executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
-  kyogong_sports_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
+  kyogong_sports_bar_cashier: ['main_bar', 'sports_bar', 'kyogong_sports_bar'],
 };
 
 const EXPLICIT_ASSIGNMENT_CASHIER_ROLES = new Set([
@@ -60,10 +63,7 @@ export const resolveCashierStationRole = (
   branchId?: unknown
 ): string => {
   const normalizedRole = normalizePosRole(role);
-  if (
-    normalizeBranchId(branchId) === KYOGONG_BRANCH_ID &&
-    KYOGONG_RESTAURANT_RECEPTION_ROLES.has(normalizedRole)
-  ) {
+  if (FRONT_DESK_RECEPTION_ROLES.has(normalizedRole)) {
     return 'restaurant_cashier';
   }
   return normalizedRole;
@@ -114,10 +114,46 @@ export const canAccessPosOutlet = (
   if (!shouldRestrictCashierStationAccess(role, assignedOutletIds, effectiveBranchId)) {
     return true;
   }
-  if (assignedOutletIds.includes(String(outlet.id))) return true;
-  return stationTypesForCashierRole(role, effectiveBranchId).includes(
-    String(outlet.outlet_type || '').toLowerCase()
-  );
+  const roleOutletTypes = stationTypesForCashierRole(role, effectiveBranchId);
+  const outletType = String(outlet.outlet_type || '').toLowerCase();
+
+  // If this role has defined station types (e.g. main_bar_cashier, executive_bar_cashier, restaurant_cashier):
+  // The outlet MUST match one of the allowed station types for that role!
+  if (roleOutletTypes.length > 0) {
+    if (!roleOutletTypes.includes(outletType)) {
+      return false;
+    }
+
+    // For unified billing roles (restaurant_cashier, cashier, receptionist, etc.),
+    // they can clear bills across all stations of their allowed station types (restaurant, choma_zone, non_consumables)
+    // within their branch without being locked to a single physical terminal assignment.
+    const normalizedRole = normalizePosRole(role);
+    if (
+      normalizedRole === 'restaurant_cashier' ||
+      normalizedRole === 'cashier' ||
+      FRONT_DESK_RECEPTION_ROLES.has(normalizedRole) ||
+      normalizedRole === 'kyogong_reception_cashier'
+    ) {
+      return true;
+    }
+
+    // If the user has specific station assignments matching this specific outlet type,
+    // restrict to those assigned stations of that type; otherwise allow all stations of their role type.
+    const validAssignedIds = assignedOutlets
+      .filter((o) => String(o.outlet_type || '').toLowerCase() === outletType)
+      .map((o) => String(o.id || ''))
+      .filter(Boolean);
+    if (validAssignedIds.length > 0) {
+      return validAssignedIds.includes(String(outlet.id));
+    }
+    return true;
+  }
+
+  // Generic cashier with explicit outlet assignments:
+  if (assignedOutletIds.length > 0) {
+    return assignedOutletIds.includes(String(outlet.id));
+  }
+  return true;
 };
 
 export const loadAssignedPosOutlets = async (

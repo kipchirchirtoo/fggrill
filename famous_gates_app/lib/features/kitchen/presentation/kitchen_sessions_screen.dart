@@ -3267,6 +3267,23 @@ class _KitchenIssueStockScreenState
       );
     } catch (e) {
       if (!mounted) return;
+      if (e.toString().toLowerCase().contains('shift not open')) {
+        // The screen was still showing a shift that has since been closed (closed from another
+        // device, or at the end of the session). Reload so the dashboard shows the real state
+        // and the user can open a new shift, instead of failing again on every retry.
+        ref.invalidate(activeKitchenShiftProvider);
+        ref.invalidate(shiftDetailsProvider(widget.shift.id));
+        Navigator.of(context).pop(false);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+                'This kitchen shift has already been closed, so stock cannot be issued to it. '
+                'Open a new kitchen shift, then issue the stock.'),
+            duration: Duration(seconds: 8),
+          ),
+        );
+        return;
+      }
       messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) {
