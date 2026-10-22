@@ -1015,29 +1015,36 @@ export const cancelGRN = async (
     }
 };
 
-// @desc    Backfill inventory_balances from all posted GRNs (idempotent)
+// @desc    DISABLED. Used to backfill inventory_balances from all posted GRNs.
 // @route   POST /api/procurement/grn/backfill-stock
 // @access  Private (Admin/GM)
+// The backfill is not idempotent: when an item already has two or more NULL-batch balance rows its lookup errors, the
+// error is ignored and another row is inserted, and balances are raised back to the lifetime GRN total. It writes
+// nothing now and will stay off until the duplicate balance rows at BRANCH-STORE-1 are cleaned up.
 export const backfillGRNStock = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    _next: NextFunction
 ): Promise<void> => {
-    try {
-        const result = await runGRNStockBackfill();
-        res.status(200).json({ success: true, ...result });
-    } catch (error) {
-        logger.error('Error in GRN stock backfill:', error);
-        next(error);
-    }
+    logger.warn('GRN stock backfill endpoint called while disabled', { userId: (req as any).user?.id, role: (req as any).user?.role });
+    res.status(410).json({
+        success: false,
+        status: 'disabled',
+        message: 'disabled: the GRN stock backfill is switched off until the duplicate balance rows are cleaned up. Nothing was changed.',
+    });
 };
 
+const GRN_STOCK_BACKFILL_DISABLED = true;
+
 /**
- * Reconcile inventory_balances from all posted GRNs.
- * Idempotent — safe to call on startup or multiple times.
- * Only increases balances; never reduces them.
+ * DISABLED - returns immediately and writes nothing (see backfillGRNStock above).
+ * It was meant to reconcile inventory_balances from all posted GRNs, but it is not idempotent.
  */
-export async function runGRNStockBackfill(): Promise<{ updated: number; created: number; branches: number }> {
+export async function runGRNStockBackfill(): Promise<{ updated: number; created: number; branches: number; disabled?: boolean }> {
+    if (GRN_STOCK_BACKFILL_DISABLED) {
+        logger.warn('runGRNStockBackfill is disabled and wrote nothing');
+        return { updated: 0, created: 0, branches: 0, disabled: true };
+    }
     const { data: grns, error: grnsError } = await supabase
         .from('goods_receipts')
         .select('id, branch_id, status')
