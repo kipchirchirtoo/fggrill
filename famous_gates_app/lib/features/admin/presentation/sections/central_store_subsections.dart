@@ -2452,7 +2452,7 @@ class _InventorySearchBodyState extends State<_InventorySearchBody> {
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 onPressed: () => widget.onEditItem(item)),
             IconButton(
-                tooltip: 'Delete',
+                tooltip: 'Deactivate',
                 icon: const Icon(Icons.delete_outline, size: 18),
                 color: Colors.red,
                 onPressed: () => widget.onDeleteItem(item)),
@@ -2921,9 +2921,9 @@ class _InventoryListSection extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Item'),
+        title: const Text('Deactivate Item'),
         content: Text(
-            'Remove ${_text(item, ['item_name', 'name', 'description'])}?'),
+            'Deactivate ${_text(item, ['item_name', 'name', 'description'])}? It is hidden from lists but not erased, and is refused while it has stock, a live POS or bar link, or an open document.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -2931,7 +2931,7 @@ class _InventoryListSection extends ConsumerWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: const Text('Deactivate'),
           ),
         ],
       ),
@@ -2942,12 +2942,12 @@ class _InventoryListSection extends ConsumerWidget {
       _refresh(ref);
       if (context.mounted) {
         AppNotifier.showSnackBar(
-            context, const SnackBar(content: Text('Item deleted')));
+            context, const SnackBar(content: Text('Item deactivated')));
       }
     } catch (error) {
       if (context.mounted) {
         AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Failed: $error')));
+            context, SnackBar(content: Text(apiErrorMessage(error, fallback: 'Could not deactivate the item'))));
       }
     }
   }
