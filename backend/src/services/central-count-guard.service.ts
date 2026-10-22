@@ -4,34 +4,35 @@ import { logger } from '../utils/logger';
 /**
  * Central stock-count guard.
  *
- * Central Store stock is being reset by a physical count, and branch stock is being counted too. Until that count is
- * loaded, dispatch notes must not move any stock at their SOURCE, and old notes must not be confirmed at the
- * destination, because both would change numbers the count is about to replace.
+ * Central Store stock is reset by a physical count, and branch stock is counted too. From the count date on, dispatch
+ * notes created BEFORE the count must not move stock at their source, and the old ones must not be confirmed at the
+ * destination, because both would change numbers the count replaces.
  *
- * Two settings in system_config_values (key / jsonb value) drive it. Neither exists yet, so the guard starts ON:
- *   central_count_loaded_at   ISO timestamp, set when the Central and Kyogong counts have been loaded.
- *                             Absent / null = the count is not loaded: the guard is ON for every note.
- *   central_count_planned_at  ISO timestamp of the planned count (optional). Only used to place the 7-day window
- *                             before the count; when absent the window is the 7 days before now.
+ * ONE setting drives it, in system_config_values (key / jsonb value):
  *
- * Rules
- *   1. SOURCE: a dispatch note dated before the count is loaded never posts a source deduction. Notes dated after it
- *      deduct from Central as normal.
- *   2. DESTINATION, notes dated before the count:
- *        - destination = Kyogong (branch 1): cannot be confirmed (Kyogong's count covers it);
- *        - dated more than 7 days before the count: cannot be confirmed (they are closed as "superseded by stock
- *          take" after the count, with no stock effect on either side);
- *        - dated within the 7 days before the count: the receiving branch may confirm after physically checking the
- *          goods. Destination effect only (the confirm code never touches the source).
+ *     central_count_cutoff_at   ISO timestamp of the stock count (planned or loaded). Notes dated before it are
+ *                               "pre-count" notes.
+ *
+ * THE GUARD DOES NOTHING UNTIL THAT SETTING EXISTS. Absent, empty or invalid = guard inactive: dispatch and confirm
+ * behave exactly as before. Set it (SQL or the config screen) on the day you decide; clear it to switch the guard off.
+ *
+ * Rules once the cutoff C is set
+ *   SOURCE   A note dated before C never posts a source deduction (Central is reset by the count). Notes dated on or
+ *            after C deduct from Central as normal.
+ *   CONFIRM  For a note dated before C:
+ *              - going to Kyogong (branch 1): refused. Kyogong's physical count covers it.
+ *              - dated more than 7 days before C: refused. After the count it is closed as "superseded by stock take".
+ *              - dated within the 7 days before C: another branch may confirm it after physically checking the goods.
+ *                Destination effect only (the confirm code never touches the source).
+ *            Notes dated on or after C are confirmed normally.
+ *   Every refusal is logged (application log + a row in audit_logs) and the refusal message tells the staff member why.
  */
 
 export interface CountGuard {
-  loadedAt: Date | null;
-  plannedAt: Date | null;
+  cutoff: Date | null;
 }
 
-const KEY_LOADED = 'central_count_loaded_at';
-const KEY_PLANNED = 'central_count_planned_at';
+export const COUNT_CUTOFF_KEY = 'central_count_cutoff_at';
 const KYOGONG_BRANCH_ID = 1;
 const WINDOW_DAYS = 7;
 const CACHE_MS = 30_000;
@@ -50,50 +51,100 @@ export async function getCountGuard(): Promise<CountGuard> {
     const { data, error } = await supabase
       .from('system_config_values')
       .select('key, value')
-      .in('key', [KEY_LOADED, KEY_PLANNED]);
+      .eq('key', COUNT_CUTOFF_KEY)
+      .maybeSingle();
     if (error) throw error;
-    const byKey = new Map((data || []).map((row: any) => [row.key, row.value]));
-    const guard: CountGuard = { loadedAt: toDate(byKey.get(KEY_LOADED)), plannedAt: toDate(byKey.get(KEY_PLANNED)) };
+    const guard: CountGuard = { cutoff: toDate(data?.value) };
     cached = { at: Date.now(), guard };
     return guard;
   } catch (error: any) {
-    // Fail closed: if the setting cannot be read, behave as "count not loaded yet".
-    logger.warn('Central count guard: could not read settings, guard stays ON', { message: error?.message });
-    return { loadedAt: null, plannedAt: null };
+    // The guard is opt-in, so a read failure must not stop dispatching: keep the last value we knew, else inactive.
+    logger.warn('Central count guard: could not read the cutoff setting; using the last known value', { message: error?.message });
+    return cached ? cached.guard : { cutoff: null };
   }
 }
 
-/** Rule 1: may this note post a deduction at its source? */
+/** SOURCE rule: may this note post a deduction at its source? */
 export function sourceDeductionAllowed(noteCreatedAt: string | Date | null | undefined, guard: CountGuard): boolean {
+  if (!guard.cutoff) return true; // guard inactive
   const created = toDate(noteCreatedAt);
-  if (!guard.loadedAt || !created) return false;
-  return created.getTime() >= guard.loadedAt.getTime();
+  if (!created) return false; // cannot place the note in time: do not deduct
+  return created.getTime() >= guard.cutoff.getTime();
 }
 
-/** Rule 2: may the destination confirm this note? */
+export type ConfirmDecision = { allowed: true } | { allowed: false; rule: 'kyogong' | 'older_than_window'; reason: string };
+
+/** CONFIRM rule: may the destination confirm this note? The reason is written for staff. */
 export function destinationConfirmDecision(
   note: { created_at?: string | Date | null; to_branch_id?: number | string | null; dispatch_number?: string | null },
   guard: CountGuard,
-): { allowed: boolean; reason?: string } {
+): ConfirmDecision {
+  if (!guard.cutoff) return { allowed: true }; // guard inactive
   const created = toDate(note.created_at);
-  if (guard.loadedAt && created && created.getTime() >= guard.loadedAt.getTime()) return { allowed: true };
+  if (!created) return { allowed: true }; // no date to judge by: leave it to the normal checks
+  if (created.getTime() >= guard.cutoff.getTime()) return { allowed: true };
 
   const label = note.dispatch_number ? `Dispatch ${note.dispatch_number}` : 'This dispatch note';
+  const countDay = guard.cutoff.toISOString().slice(0, 10);
   if (Number(note.to_branch_id) === KYOGONG_BRANCH_ID) {
     return {
       allowed: false,
-      reason: `${label} is dated before the stock count and goes to Kyogong. Kyogong's physical count covers it, so it cannot be confirmed.`,
+      rule: 'kyogong',
+      reason:
+        `${label} cannot be confirmed. It was created before the stock count (${countDay}) and is going to Kyogong, ` +
+        `and Kyogong's physical stock count already covers this delivery. Do not receive it in the system. ` +
+        `If goods really arrived and are not on your count sheet, tell your branch accountant.`,
     };
   }
-  const reference = guard.loadedAt || guard.plannedAt || new Date();
-  const windowStart = reference.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
-  if (created && created.getTime() < windowStart) {
+  const windowStart = guard.cutoff.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  if (created.getTime() < windowStart) {
     return {
       allowed: false,
-      reason: `${label} is dated more than ${WINDOW_DAYS} days before the stock count. It will be closed as "superseded by stock take" and cannot be confirmed.`,
+      rule: 'older_than_window',
+      reason:
+        `${label} cannot be confirmed. It is more than ${WINDOW_DAYS} days older than the stock count (${countDay}). ` +
+        `It will be closed as "superseded by stock take" and has no effect on stock. ` +
+        `If goods really arrived and are not on your count sheet, tell your branch accountant.`,
     };
   }
   return { allowed: true };
+}
+
+/** Every refused confirmation is logged: application log + audit_logs (best effort, never blocks the refusal). */
+export async function logConfirmRefusal(input: {
+  dispatchId: string;
+  dispatchNumber?: string | null;
+  toBranchId?: number | string | null;
+  noteCreatedAt?: string | Date | null;
+  userId?: string | null;
+  rule: string;
+  reason: string;
+  cutoff: Date | null;
+}): Promise<void> {
+  const details = {
+    dispatch_id: input.dispatchId,
+    dispatch_number: input.dispatchNumber || null,
+    to_branch_id: input.toBranchId ?? null,
+    note_created_at: input.noteCreatedAt ? new Date(input.noteCreatedAt as any).toISOString() : null,
+    cutoff: input.cutoff ? input.cutoff.toISOString() : null,
+    rule: input.rule,
+    user_id: input.userId || null,
+  };
+  logger.warn('Dispatch confirmation refused by the stock-count guard', { ...details, reason: input.reason });
+  try {
+    const { error } = await supabase.from('audit_logs').insert({
+      user_id: input.userId || null,
+      branch_id: input.toBranchId != null ? Number(input.toBranchId) : null,
+      action: 'dispatch_confirm_refused_stock_count',
+      table_name: 'dispatch_notes',
+      record_id: input.dispatchId,
+      metadata: { ...details, reason: input.reason },
+      severity: 'warning',
+    });
+    if (error) throw error;
+  } catch (error: any) {
+    logger.error('Could not write the count-guard refusal to audit_logs', { message: error?.message, dispatch_id: input.dispatchId });
+  }
 }
 
 export const countGuardTestHooks = { reset: () => { cached = null; } };

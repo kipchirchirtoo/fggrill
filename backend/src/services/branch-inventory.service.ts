@@ -16,7 +16,7 @@ import {
 } from './inventory-warehouse.service';
 import { KYOGONG_BRANCH_STORE_CUTOVER_AT } from './kyogong-branch-cutover.service';
 import { StoreTransferPostingService } from '../modules/inventory';
-import { getCountGuard, sourceDeductionAllowed, destinationConfirmDecision } from './central-count-guard.service';
+import { getCountGuard, sourceDeductionAllowed, destinationConfirmDecision, logConfirmRefusal } from './central-count-guard.service';
 
 // ============================================================
 // TYPES
@@ -1698,7 +1698,7 @@ export async function dispatchItems(
       throw new Error('No items found in dispatch note');
     }
 
-    // Count guard: a note dated before the stock count never posts a source deduction (Central is reset by the count),
+    // Count guard (inactive until central_count_cutoff_at is set): a note dated before the stock count never posts a source deduction (Central is reset by the count),
     // so there is also nothing to validate against the (soon to be replaced) stock figure.
     const countGuard = await getCountGuard();
     const deductAtSource = sourceDeductionAllowed(dispatch.created_at, countGuard);
@@ -1936,11 +1936,22 @@ export async function confirmDelivery(
     throw new AppError(`Dispatch ${dispatch.dispatch_number} has already been confirmed`, 400);
   }
 
-  // Count guard: notes dated before the stock count are only confirmable inside the 7-day window and never for
-  // Kyogong. Confirming only ever credits the DESTINATION (the source is not touched here).
-  const confirmDecision = destinationConfirmDecision(dispatch, await getCountGuard());
+  // Count guard (inactive until central_count_cutoff_at is set): notes dated before the stock count are only
+  // confirmable inside the 7-day window and never for Kyogong. Confirming only ever credits the DESTINATION.
+  const confirmGuard = await getCountGuard();
+  const confirmDecision = destinationConfirmDecision(dispatch, confirmGuard);
   if (!confirmDecision.allowed) {
-    throw new AppError(confirmDecision.reason || 'This dispatch note cannot be confirmed before the stock count', 409);
+    await logConfirmRefusal({
+      dispatchId,
+      dispatchNumber: dispatch.dispatch_number,
+      toBranchId: dispatch.to_branch_id,
+      noteCreatedAt: dispatch.created_at,
+      userId: receiverId,
+      rule: confirmDecision.rule,
+      reason: confirmDecision.reason,
+      cutoff: confirmGuard.cutoff,
+    });
+    throw new AppError(confirmDecision.reason, 409);
   }
 
   const { data: noteItems, error: noteItemsError } = await supabase

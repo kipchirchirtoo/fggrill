@@ -3,48 +3,68 @@ jest.mock('../utils/logger', () => ({ logger: { warn: jest.fn(), info: jest.fn()
 
 import { destinationConfirmDecision, sourceDeductionAllowed } from '../services/central-count-guard.service';
 
-const day = (n: number) => new Date(Date.UTC(2026, 9, 22) - n * 24 * 60 * 60 * 1000).toISOString();
-const NOT_LOADED = { loadedAt: null, plannedAt: null };
-const PLANNED = { loadedAt: null, plannedAt: new Date(day(-10)) }; // count planned 10 days from "now"
-const LOADED = { loadedAt: new Date(day(0)), plannedAt: null };
+const DAY = 24 * 60 * 60 * 1000;
+const CUTOFF = new Date('2026-11-05T00:00:00.000Z'); // the count
+const before = (days: number) => new Date(CUTOFF.getTime() - days * DAY).toISOString();
+const after = (hours: number) => new Date(CUTOFF.getTime() + hours * 3600_000).toISOString();
+const INACTIVE = { cutoff: null };
+const ACTIVE = { cutoff: CUTOFF };
 
-describe('central count guard - source deduction', () => {
-  it('never deducts at source while the count is not loaded', () => {
-    expect(sourceDeductionAllowed(day(0), NOT_LOADED)).toBe(false);
-    expect(sourceDeductionAllowed(day(30), NOT_LOADED)).toBe(false);
+describe('count guard is INACTIVE until the cutoff setting exists', () => {
+  it('lets every note deduct at the source', () => {
+    expect(sourceDeductionAllowed(before(1), INACTIVE)).toBe(true);
+    expect(sourceDeductionAllowed(before(90), INACTIVE)).toBe(true);
+    expect(sourceDeductionAllowed(null, INACTIVE)).toBe(true);
   });
-  it('does not deduct for a note dated before the count was loaded', () => {
-    expect(sourceDeductionAllowed(day(1), LOADED)).toBe(false);
-  });
-  it('deducts as normal for a note dated after the count was loaded', () => {
-    expect(sourceDeductionAllowed(new Date(Date.parse(day(0)) + 3600_000), LOADED)).toBe(true);
-  });
-  it('fails closed on a missing date', () => {
-    expect(sourceDeductionAllowed(null, LOADED)).toBe(false);
+  it('lets every note be confirmed, Kyogong and old notes included', () => {
+    expect(destinationConfirmDecision({ created_at: before(1), to_branch_id: 1 }, INACTIVE).allowed).toBe(true);
+    expect(destinationConfirmDecision({ created_at: before(90), to_branch_id: 2 }, INACTIVE).allowed).toBe(true);
   });
 });
 
-describe('central count guard - destination confirm', () => {
-  it('never confirms a pre-count note going to Kyogong', () => {
-    expect(destinationConfirmDecision({ created_at: day(1), to_branch_id: 1 }, NOT_LOADED).allowed).toBe(false);
-    expect(destinationConfirmDecision({ created_at: day(1), to_branch_id: 1 }, LOADED).allowed).toBe(false);
+describe('count guard - source deduction (cutoff set)', () => {
+  it('never deducts for a note dated before the count', () => {
+    expect(sourceDeductionAllowed(before(1), ACTIVE)).toBe(false);
+    expect(sourceDeductionAllowed(before(30), ACTIVE)).toBe(false);
+  });
+  it('deducts as normal for a note dated on or after the count', () => {
+    expect(sourceDeductionAllowed(CUTOFF, ACTIVE)).toBe(true);
+    expect(sourceDeductionAllowed(after(3), ACTIVE)).toBe(true);
+  });
+  it('does not deduct when the note date is missing', () => {
+    expect(sourceDeductionAllowed(null, ACTIVE)).toBe(false);
+  });
+});
+
+describe('count guard - destination confirm (cutoff set)', () => {
+  it('refuses a pre-count note going to Kyogong, with a clear reason', () => {
+    const d = destinationConfirmDecision({ created_at: before(1), to_branch_id: 1, dispatch_number: 'DN-KYO-1' }, ACTIVE);
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) {
+      expect(d.rule).toBe('kyogong');
+      expect(d.reason).toContain('DN-KYO-1');
+      expect(d.reason).toContain('Kyogong');
+      expect(d.reason).toContain('2026-11-05');
+    }
   });
   it('allows another branch to confirm a note inside the 7 days before the count', () => {
-    expect(destinationConfirmDecision({ created_at: day(3), to_branch_id: 2 }, NOT_LOADED).allowed).toBe(true);
-    expect(destinationConfirmDecision({ created_at: day(6), to_branch_id: 8 }, LOADED).allowed).toBe(true);
+    expect(destinationConfirmDecision({ created_at: before(3), to_branch_id: 2 }, ACTIVE).allowed).toBe(true);
+    expect(destinationConfirmDecision({ created_at: before(6.9), to_branch_id: 8 }, ACTIVE).allowed).toBe(true);
   });
-  it('refuses a note older than 7 days before the count', () => {
-    expect(destinationConfirmDecision({ created_at: day(8), to_branch_id: 2 }, NOT_LOADED).allowed).toBe(false);
-    expect(destinationConfirmDecision({ created_at: day(40), to_branch_id: 9 }, LOADED).allowed).toBe(false);
+  it('refuses a note more than 7 days before the count, with a clear reason', () => {
+    const d = destinationConfirmDecision({ created_at: before(8), to_branch_id: 2, dispatch_number: 'DN-BTN-9' }, ACTIVE);
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) {
+      expect(d.rule).toBe('older_than_window');
+      expect(d.reason).toContain('superseded by stock take');
+      expect(d.reason).toContain('DN-BTN-9');
+    }
   });
-  it('uses the planned count date to place the window', () => {
-    // count planned in 10 days: a note from 5 days ago is 15 days before the count -> refused
-    expect(destinationConfirmDecision({ created_at: day(5), to_branch_id: 2 }, PLANNED).allowed).toBe(false);
-    // a note dated inside the 7 days before the planned count is allowed
-    expect(destinationConfirmDecision({ created_at: day(-5), to_branch_id: 2 }, PLANNED).allowed).toBe(true);
+  it('confirms notes dated on or after the count normally, Kyogong included', () => {
+    expect(destinationConfirmDecision({ created_at: after(2), to_branch_id: 1 }, ACTIVE).allowed).toBe(true);
+    expect(destinationConfirmDecision({ created_at: CUTOFF, to_branch_id: 5 }, ACTIVE).allowed).toBe(true);
   });
-  it('lets notes dated after the count be confirmed normally, Kyogong included', () => {
-    const after = new Date(Date.parse(day(0)) + 3600_000).toISOString();
-    expect(destinationConfirmDecision({ created_at: after, to_branch_id: 1 }, LOADED).allowed).toBe(true);
+  it('treats a Kyogong string id the same as a number', () => {
+    expect(destinationConfirmDecision({ created_at: before(2), to_branch_id: '1' }, ACTIVE).allowed).toBe(false);
   });
 });

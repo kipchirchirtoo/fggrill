@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/api_error_message.dart';
 import '../../../../core/widgets/mobile_shell.dart';
 import '../../data/repository.dart';
 
@@ -990,7 +991,7 @@ class _ConfirmDeliverySheetState extends ConsumerState<_ConfirmDeliverySheet> {
         );
       }
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = apiErrorMessage(e, fallback: 'Could not confirm the delivery'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
