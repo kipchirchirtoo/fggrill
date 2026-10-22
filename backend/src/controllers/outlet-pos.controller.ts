@@ -4569,9 +4569,28 @@ const scopeQueryToCashierStation = async (
     .select('id, outlet_id')
     .eq('cashier_id', req.user.id)
     .eq('status', 'open');
-  const myOutletIds = Array.from(new Set(
-    (myShifts || []).map((s: any) => String(s.outlet_id || '')).filter(Boolean)
-  ));
+  // The shift close guard counts requests for every outlet this user is allowed to run
+  // (canAccessPosOutlet), so this list has to cover the same outlets. Scoping only to the
+  // outlets of their OPEN shifts hid requests that still blocked their shift close
+  // (e.g. a receptionist assigned to Restaurant + Choma + Non-consumables, with open shifts
+  // on only two of them, could not see - or clear - the restaurant requests).
+  const accessibleOutletIds: string[] = [];
+  if (branchId) {
+    const { data: branchOutlets } = await supabase
+      .from('pos_outlets')
+      .select('id, outlet_type, branch_id, name')
+      .eq('branch_id', branchId);
+    const assignedForScope = await loadAssignedPosOutlets(supabase, req.user?.id);
+    for (const outlet of (branchOutlets || []) as any[]) {
+      if (canAccessPosOutlet(normalizedRole, outlet, assignedForScope, branchId)) {
+        accessibleOutletIds.push(String(outlet.id));
+      }
+    }
+  }
+  const myOutletIds = Array.from(new Set([
+    ...(myShifts || []).map((s: any) => String(s.outlet_id || '')).filter(Boolean),
+    ...accessibleOutletIds,
+  ]));
   if (myOutletIds.length > 0) {
     return query.in('outlet_id', myOutletIds);
   }

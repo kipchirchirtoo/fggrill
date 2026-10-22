@@ -4596,7 +4596,10 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                     icon: Icons.check_circle_outline,
                     message: 'No item void requests waiting on you.',
                   )
-                : Column(children: [for (final r in rows) _requestCard(r)]),
+                : Column(children: [
+                    if (rows.length > 1) _acknowledgeAllBar(rows),
+                    for (final r in rows) _requestCard(r),
+                  ]),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(
               message: apiErrorMessage(error),
@@ -4864,6 +4867,67 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
         ),
       ),
     );
+  }
+
+  bool _acknowledgingAll = false;
+
+  Widget _acknowledgeAllBar(List<ItemVoidRequest> rows) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: ElevatedButton.icon(
+          onPressed: _acknowledgingAll ? null : () => _acknowledgeAll(rows),
+          icon: _acknowledgingAll
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.done_all, size: 16),
+          label: Text('Acknowledge all (${rows.length})'),
+        ),
+      ),
+    );
+  }
+
+  /// Acknowledges every listed item void in turn (the same call as the per-item button), so a
+  /// backlog does not need one tap each. They move on to the branch accountant, who still sees
+  /// and approves every one of them.
+  Future<void> _acknowledgeAll(List<ItemVoidRequest> rows) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Acknowledge ${rows.length} item voids?'),
+        content: const Text(
+            'Each item void is applied and sent to the branch accountant for final approval. '
+            'They stay visible to the accountant. Decline any you disagree with first.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Acknowledge all')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _acknowledgingAll = true);
+    var done = 0;
+    String? firstError;
+    for (final r in rows) {
+      try {
+        await ref.read(outletPosRepositoryProvider).cashierAcknowledgeVoid(r.id);
+        done++;
+      } catch (error) {
+        firstError ??= apiErrorMessage(error);
+      }
+    }
+    ref.invalidate(cashierPendingItemVoidsProvider);
+    if (mounted) setState(() => _acknowledgingAll = false);
+    _snack(firstError == null
+        ? 'Acknowledged $done item void(s) — sent to branch accountant.'
+        : 'Acknowledged $done of ${rows.length}. First error: $firstError');
   }
 
   Future<void> _acknowledge(ItemVoidRequest r) async {
