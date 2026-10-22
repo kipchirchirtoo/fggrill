@@ -2676,19 +2676,8 @@ class _InventoryListSection extends ConsumerWidget {
                 valuation: valuationAsync?.valueOrNull ?? const {},
               ),
               onSyncStock: () async {
-                try {
-                  final result = await ref.read(adminRepositoryProvider).backfillGRNStock();
-                  final created = result['created'] ?? 0;
-                  final updated = result['updated'] ?? 0;
-                  if (context.mounted) {
-                    AppNotifier.show(context, 'Stock synced — $created new, $updated updated');
-                    _refresh(ref);
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    AppNotifier.show(context, apiErrorMessage(e, fallback: 'Sync failed'), isError: true);
-                  }
-                }
+                // Disabled: the GRN stock backfill rewrote balances. Stock is aligned by the physical count.
+                AppNotifier.show(context, 'Stock sync is switched off. Central stock is aligned by the stock count.', isError: true);
               },
               onAddItem: () => _showItemDialog(context, ref),
               onEditItem: (item) => _showItemDialog(context, ref, item: item),
