@@ -16,6 +16,7 @@ import {
 } from './inventory-warehouse.service';
 import { KYOGONG_BRANCH_STORE_CUTOVER_AT } from './kyogong-branch-cutover.service';
 import { StoreTransferPostingService } from '../modules/inventory';
+import { getCountGuard, sourceDeductionAllowed, destinationConfirmDecision } from './central-count-guard.service';
 
 // ============================================================
 // TYPES
@@ -1697,10 +1698,18 @@ export async function dispatchItems(
       throw new Error('No items found in dispatch note');
     }
 
+    // Count guard: a note dated before the stock count never posts a source deduction (Central is reset by the count),
+    // so there is also nothing to validate against the (soon to be replaced) stock figure.
+    const countGuard = await getCountGuard();
+    const deductAtSource = sourceDeductionAllowed(dispatch.created_at, countGuard);
+    if (!deductAtSource) {
+      logger.warn(`Dispatch ${dispatch.dispatch_number}: dated before the stock count - sent to transit WITHOUT any source deduction`);
+    }
+
     // Pre-flight stock validation — collect ALL failures before throwing
     const stockErrors: string[] = [];
 
-    for (const item of dispatch.items) {
+    for (const item of (deductAtSource ? dispatch.items : [])) {
       let stockSource: BranchStockSource;
       try {
         stockSource = await resolveBranchStockSource(dispatch.from_branch_id, item.item_sku);
@@ -1737,19 +1746,30 @@ export async function dispatchItems(
       );
     }
 
-    const postingResult = await StoreTransferPostingService.postDispatchToTransit({
-      actorId: dispatcherId,
-      destinationBranchId: dispatch.to_branch_id,
-      dispatchId,
-      dispatchNumber: dispatch.dispatch_number,
-      fromBranchId: dispatch.from_branch_id,
-      idempotencyKey: idempotencyKey || `compat-dispatch-${dispatchId}`,
-      items: dispatch.items,
-      notes: updates?.notes || dispatch.dispatch_notes || dispatch.notes || null,
-      sourceTable: 'dispatch_notes',
-      sourceTableId: dispatchId,
-      sourceType: dispatch.source_warehouse_id ? 'central_store' : 'branch_store',
-    });
+    const postingResult = deductAtSource
+      ? await StoreTransferPostingService.postDispatchToTransit({
+        actorId: dispatcherId,
+        destinationBranchId: dispatch.to_branch_id,
+        dispatchId,
+        dispatchNumber: dispatch.dispatch_number,
+        fromBranchId: dispatch.from_branch_id,
+        idempotencyKey: idempotencyKey || `compat-dispatch-${dispatchId}`,
+        items: dispatch.items,
+        notes: updates?.notes || dispatch.dispatch_notes || dispatch.notes || null,
+        sourceTable: 'dispatch_notes',
+        sourceTableId: dispatchId,
+        sourceType: dispatch.source_warehouse_id ? 'central_store' : 'branch_store',
+      })
+      : {
+        document: {
+          document_id: null,
+          document_number: null,
+          document_type: null,
+          posted_at: null,
+          posting_status: 'skipped_before_stock_count',
+          reversal_of_document_id: null,
+        },
+      };
 
     // Prepare update data
     const updateData: any = {
@@ -1914,6 +1934,13 @@ export async function confirmDelivery(
 
   if (['CONFIRMED', 'DISPUTED', 'DELIVERED', 'COMPLETED'].includes(dispatch.status)) {
     throw new AppError(`Dispatch ${dispatch.dispatch_number} has already been confirmed`, 400);
+  }
+
+  // Count guard: notes dated before the stock count are only confirmable inside the 7-day window and never for
+  // Kyogong. Confirming only ever credits the DESTINATION (the source is not touched here).
+  const confirmDecision = destinationConfirmDecision(dispatch, await getCountGuard());
+  if (!confirmDecision.allowed) {
+    throw new AppError(confirmDecision.reason || 'This dispatch note cannot be confirmed before the stock count', 409);
   }
 
   const { data: noteItems, error: noteItemsError } = await supabase

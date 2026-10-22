@@ -11,6 +11,7 @@ import {
     KYOGONG_BRANCH_STORE_CUTOVER_AT,
     shouldUseKyogongBranchCutover,
 } from '../../services/kyogong-branch-cutover.service';
+import { getCountGuard, sourceDeductionAllowed } from '../../services/central-count-guard.service';
 
 const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
 
@@ -1156,7 +1157,10 @@ export const confirmDispatch = async (
             }
         }
 
-        const postingResult = issuedItems.length > 0
+        // Count guard: a note dated before the stock count never posts a source deduction.
+        const directCountGuard = await getCountGuard();
+        const directDeductAtSource = sourceDeductionAllowed(dispatchNote?.created_at || new Date(), directCountGuard);
+        const postingResult = issuedItems.length > 0 && directDeductAtSource
             ? await StoreTransferPostingService.postDispatchToTransit({
                 actorId: userId!,
                 destinationBranchId: destBranchId,
