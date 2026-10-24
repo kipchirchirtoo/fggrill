@@ -137,6 +137,14 @@ export const getItems = async (
       query = query
         .not('category', 'eq', 'KITCHEN MENU')
         .not('sku', 'like', 'MENU-%');
+      // Master Inventory (central context, no store_type) must not load items that were auto-created from POS/bar
+      // menus: M-<id>, bard-<id> and the FGB-KPL/STK/SPR/CAN/OTH/ENR families. They stay in the database (branch
+      // stock, POS and bar links use them) and in the store-type views; they are only kept out of the master list.
+      if (isCentralContext) {
+        for (const pattern of ['M-%', 'bard-%', 'FGB-KPL-%', 'FGB-STK-%', 'FGB-SPR-%', 'FGB-CAN-%', 'FGB-OTH-%', 'FGB-ENR-%']) {
+          query = query.not('sku', 'like', pattern);
+        }
+      }
     }
 
     if (search) {
