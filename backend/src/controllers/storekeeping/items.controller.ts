@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
+import { findItemDeactivationBlockers } from '../../services/item-deactivation-guard.service';
 import { randomBytes } from 'crypto';
 import {
   generateSKU,
@@ -809,6 +810,16 @@ export const deleteItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const blockers = await findItemDeactivationBlockers(req.params.id);
+    if (blockers.length) {
+      res.status(409).json({
+        success: false,
+        message: `This item cannot be deactivated: ${blockers.join('; ')}. Clear these first, or ask your administrator.`,
+        blockers
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('inventory_items')
       .update({ is_active: false, updated_at: new Date().toISOString() })
