@@ -142,6 +142,9 @@ export const getItems = async (
       // menus: M-<id>, bard-<id> and the FGB-KPL/STK/SPR/CAN/OTH/ENR families. They stay in the database (branch
       // stock, POS and bar links use them) and in the store-type views; they are only kept out of the master list.
       if (isCentralContext) {
+        // Items an administrator marked metadata.master_hidden = true (undecided leftovers of the Central Store
+        // clean-up) are kept out of the master list too; they stay active for stock, POS and bar links.
+        query = query.or('metadata->>master_hidden.is.null,metadata->>master_hidden.neq.true');
         for (const pattern of ['M-%', 'bard-%', 'FGB-KPL-%', 'FGB-STK-%', 'FGB-SPR-%', 'FGB-CAN-%', 'FGB-OTH-%', 'FGB-ENR-%']) {
           query = query.not('sku', 'like', pattern);
         }
