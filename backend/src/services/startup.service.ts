@@ -1,7 +1,6 @@
 import { logger } from '../utils/logger';
 import schedulerService from './scheduler.service';
 import db from '../db';
-import { runGRNStockBackfill } from '../controllers/storekeeping/grn.controller';
 import { automationService } from './automation.service';
 
 /**
@@ -19,13 +18,11 @@ class StartupService {
     // Patch broken DB triggers/columns from migration 0003
     await this.applyDbPatches();
 
-    // Backfill inventory_balances from posted GRNs (handles first-run where location didn't exist yet)
-    try {
-      const backfillResult = await runGRNStockBackfill();
-      logger.info(`GRN stock backfill on startup: ${JSON.stringify(backfillResult)}`);
-    } catch (err: any) {
-      logger.warn('GRN stock backfill skipped (non-critical):', err.message);
-    }
+    // DISABLED: the GRN stock backfill used to run here on every start. It is not idempotent: when an item already has
+    // two or more NULL-batch balance rows, its .maybeSingle() lookup returns an error that the job ignores, so it
+    // inserted another balance row at every restart (1,535 duplicate rows at Kyogong's store) and it also raised
+    // balances back up to the lifetime GRN total. It stays available only as the manual, admin-triggered endpoint
+    // POST /api/procurement/grn/backfill-stock and must not be run until the duplicates are cleaned up.
 
     try {
       void automationService;
