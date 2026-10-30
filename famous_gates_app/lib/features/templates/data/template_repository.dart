@@ -67,6 +67,19 @@ class TemplateRepository {
         {'till_number': tillNumber});
   }
 
+  /// Paybill + account number (both required, or both empty to clear).
+  Future<void> updateOutletPaybill(
+      String outletId, String? paybill, String? account) async {
+    await _put('/document-templates/tills/outlet/$outletId/paybill',
+        {'paybill_number': paybill, 'paybill_account': account});
+  }
+
+  Future<void> updateBranchPaybill(
+      String branchId, String? paybill, String? account) async {
+    await _put('/document-templates/tills/branch/$branchId/paybill',
+        {'default_paybill_number': paybill, 'default_paybill_account': account});
+  }
+
   Future<void> updateBranchTill(String branchId, String? tillNumber) async {
     await _put('/document-templates/tills/branch/$branchId',
         {'default_till_number': tillNumber});
@@ -113,6 +126,8 @@ class TemplateRepository {
         key: key,
         sections: sections,
         tillNumber: data['till_number']?.toString(),
+        paybillNumber: data['paybill_number']?.toString(),
+        paybillAccount: data['paybill_account']?.toString(),
         contactPhone: contactValue('phone'),
         contactEmail: contactValue('email'),
         contactAddress: contactValue('address'),
@@ -155,6 +170,8 @@ class ResolvedDocument {
     required this.key,
     required this.sections,
     this.tillNumber,
+    this.paybillNumber,
+    this.paybillAccount,
     this.contactPhone,
     this.contactEmail,
     this.contactAddress,
@@ -162,6 +179,8 @@ class ResolvedDocument {
   final String key;
   final List<TemplateSection> sections;
   final String? tillNumber;
+  final String? paybillNumber;
+  final String? paybillAccount;
 
   /// Branch contact details set by the branch accountant (null = use the app default).
   final String? contactPhone;

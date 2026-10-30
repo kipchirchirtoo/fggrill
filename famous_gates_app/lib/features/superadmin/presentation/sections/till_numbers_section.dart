@@ -27,7 +27,7 @@ class TillNumbersSection extends ConsumerWidget {
                       color: AppColors.kTextPrimary)),
               SizedBox(height: 4),
               Text(
-                  'Set a till number per POS outlet. Branch default is used when an outlet has none. Shown on every customer bill & receipt — if neither is set, the till box is silently omitted from print.',
+                  'Set a till number, or a paybill number with its account number, per POS outlet. The branch default is used when an outlet has none. Whatever is set is shown on every customer bill & receipt — if nothing is set, the box is silently omitted from print.',
                   style:
                       TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
             ]),
@@ -46,14 +46,17 @@ class TillNumbersSection extends ConsumerWidget {
                 return const Center(child: Text('No branches found'));
               }
               final missing = branches.where((b) {
+                bool has(Object? a, Object? b) =>
+                    '${a ?? ''}'.trim().isNotEmpty ||
+                    '${b ?? ''}'.trim().isNotEmpty;
                 final branchSet =
-                    '${b['default_till_number'] ?? ''}'.trim().isNotEmpty;
+                    has(b['default_till_number'], b['default_paybill_number']);
                 final outlets = (b['outlets'] as List?) ?? [];
                 final allOutletsSet = outlets.isNotEmpty &&
-                    outlets.every((o) =>
-                        '${Map<String, dynamic>.from(o as Map)['till_number'] ?? ''}'
-                            .trim()
-                            .isNotEmpty);
+                    outlets.every((o) {
+                      final m = Map<String, dynamic>.from(o as Map);
+                      return has(m['till_number'], m['paybill_number']);
+                    });
                 return !branchSet && !allOutletsSet;
               }).length;
               return Column(
@@ -74,8 +77,8 @@ class TillNumbersSection extends ConsumerWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            '$missing branch(es) have no till number set (neither a branch default nor a till on every outlet). '
-                            'Customer bills/receipts for those branches print without a till number box.',
+                            '$missing branch(es) have no till or paybill set (neither a branch default nor one on every outlet). '
+                            'Customer bills/receipts for those branches print without a payment box.',
                             style: TextStyle(
                                 color: Colors.red.shade900,
                                 fontSize: 13,
@@ -112,6 +115,11 @@ class _BranchTillCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final outlets = (branch['outlets'] as List?) ?? [];
     final branchDefault = '${branch['default_till_number'] ?? ''}'.trim();
+    final branchPaybill = '${branch['default_paybill_number'] ?? ''}'.trim();
+    final branchPaybillAccount =
+        '${branch['default_paybill_account'] ?? ''}'.trim();
+    final branchHasDefault =
+        branchDefault.isNotEmpty || branchPaybill.isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -146,6 +154,26 @@ class _BranchTillCard extends ConsumerWidget {
             },
           ),
         ]),
+        const SizedBox(height: 10),
+        _PaybillField(
+          label: 'Branch default paybill',
+          paybill: branchPaybill,
+          account: branchPaybillAccount,
+          onSave: (p, a) async {
+            final branchId = branch['branch_id'];
+            if (branchId == null) return;
+            await ref
+                .read(templateRepositoryProvider)
+                .updateBranchPaybill('$branchId', p, a);
+            ref.invalidate(tillNumbersProvider);
+            if (context.mounted) {
+              AppNotifier.showSnackBar(
+                  context,
+                  const SnackBar(
+                      content: Text('Branch default paybill saved')));
+            }
+          },
+        ),
         const Divider(height: 24),
         if (outlets.isEmpty)
           const Padding(
@@ -157,8 +185,12 @@ class _BranchTillCard extends ConsumerWidget {
           ...outlets.map((o) {
             final outlet = Map<String, dynamic>.from(o as Map);
             final outletTill = '${outlet['till_number'] ?? ''}'.trim();
-            final hasEffectiveTill =
-                outletTill.isNotEmpty || branchDefault.isNotEmpty;
+            final outletPaybill = '${outlet['paybill_number'] ?? ''}'.trim();
+            final outletPaybillAccount =
+                '${outlet['paybill_account'] ?? ''}'.trim();
+            final outletHasOwn =
+                outletTill.isNotEmpty || outletPaybill.isNotEmpty;
+            final hasEffectiveTill = outletHasOwn || branchHasDefault;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(children: [
@@ -167,7 +199,7 @@ class _BranchTillCard extends ConsumerWidget {
                     padding: const EdgeInsets.only(right: 6),
                     child: Tooltip(
                       message:
-                          'No till number — outlet has none and branch has no default. Bills/receipts print without a till box.',
+                          'No till or paybill — outlet has none and branch has no default. Bills/receipts print without a payment box.',
                       child: Icon(Icons.error_outline,
                           color: Colors.red.shade600, size: 18),
                     ),
@@ -180,7 +212,7 @@ class _BranchTillCard extends ConsumerWidget {
                             style: const TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 13.5)),
                         Text(
-                          outletTill.isEmpty && branchDefault.isNotEmpty
+                          !outletHasOwn && branchHasDefault
                               ? '${outlet['outlet_type'] ?? ''} · using branch default'
                               : '${outlet['outlet_type'] ?? ''}',
                           style: TextStyle(
@@ -194,6 +226,7 @@ class _BranchTillCard extends ConsumerWidget {
                         ),
                       ]),
                 ),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 _TillField(
                   label: 'Till number',
                   value: outletTill,
@@ -208,6 +241,25 @@ class _BranchTillCard extends ConsumerWidget {
                     }
                   },
                 ),
+                const SizedBox(height: 6),
+                _PaybillField(
+                  label: 'Paybill',
+                  paybill: outletPaybill,
+                  account: outletPaybillAccount,
+                  onSave: (p, a) async {
+                    await ref
+                        .read(templateRepositoryProvider)
+                        .updateOutletPaybill('${outlet['outlet_id']}', p, a);
+                    ref.invalidate(tillNumbersProvider);
+                    if (context.mounted) {
+                      AppNotifier.showSnackBar(
+                          context,
+                          const SnackBar(
+                              content: Text('Outlet paybill saved')));
+                    }
+                  },
+                ),
+                ]),
               ]),
             );
           }),
@@ -308,5 +360,110 @@ class _TillFieldState extends State<_TillField> {
         ),
       ]),
     );
+  }
+}
+
+/// Paybill number + account number. Both are required together; both empty clears them.
+class _PaybillField extends StatefulWidget {
+  const _PaybillField(
+      {required this.label,
+      required this.paybill,
+      required this.account,
+      required this.onSave});
+  final String label;
+  final String paybill;
+  final String account;
+  final Future<void> Function(String? paybill, String? account) onSave;
+
+  @override
+  State<_PaybillField> createState() => _PaybillFieldState();
+}
+
+class _PaybillFieldState extends State<_PaybillField> {
+  late final _paybill = TextEditingController(text: widget.paybill);
+  late final _account = TextEditingController(text: widget.account);
+  bool _busy = false;
+
+  @override
+  void didUpdateWidget(_PaybillField old) {
+    super.didUpdateWidget(old);
+    if (old.paybill != widget.paybill) _paybill.text = widget.paybill;
+    if (old.account != widget.account) _account.text = widget.account;
+  }
+
+  @override
+  void dispose() {
+    _paybill.dispose();
+    _account.dispose();
+    super.dispose();
+  }
+
+  void _warn(String message) =>
+      AppNotifier.showSnackBar(context, SnackBar(content: Text(message)));
+
+  Future<void> _save() async {
+    final p = _paybill.text.trim();
+    final a = _account.text.trim();
+    if (p.isEmpty && a.isEmpty) {
+      // both empty clears the paybill
+    } else if (p.isEmpty) {
+      _warn('Enter the paybill number as well as the account number.');
+      return;
+    } else if (a.isEmpty) {
+      _warn('A paybill number must have an account number.');
+      return;
+    } else if (!RegExp(r'^\d{5,7}$').hasMatch(p)) {
+      _warn('Paybill number must be 5 to 7 digits.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.onSave(p.isEmpty ? null : p, a.isEmpty ? null : a);
+    } catch (e) {
+      if (mounted) _warn(apiErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(
+        width: 120,
+        child: TextField(
+          controller: _paybill,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: '${widget.label} no.',
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+      const SizedBox(width: 6),
+      SizedBox(
+        width: 150,
+        child: TextField(
+          controller: _account,
+          decoration: const InputDecoration(
+            labelText: 'Account number',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+      const SizedBox(width: 6),
+      IconButton(
+        tooltip: 'Save paybill (needs an account number)',
+        onPressed: _busy ? null : _save,
+        icon: _busy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.save, color: AppColors.kPrimary),
+      ),
+    ]);
   }
 }
