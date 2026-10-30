@@ -649,21 +649,33 @@ class TemplatePrintRenderer {
 
   pw.Widget? _renderTillCompliance(TemplatePrintData data) {
     final till = (data.values['till_number'] ?? '').trim();
-    if (till.isEmpty) return null;
+    final paybill = (data.values['paybill_number'] ?? '').trim();
+    final account = (data.values['paybill_account'] ?? '').trim();
+    final hasPaybill = paybill.isNotEmpty && account.isNotEmpty;
+    if (till.isEmpty && !hasPaybill) return null;
+    pw.Widget labelled(String label, String value) => pw.Column(children: [
+          pw.Text(label,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 1),
+          pw.Text(value.toUpperCase(),
+              textAlign: pw.TextAlign.center,
+              style:
+                  pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+        ]);
     return pw.Padding(
       padding: const pw.EdgeInsets.only(top: 2, bottom: 4),
       child: pw.Container(
         width: double.infinity,
         padding: const pw.EdgeInsets.symmetric(vertical: 2),
         child: pw.Column(children: [
-          pw.Text('TILL NUMBER',
-              textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 1),
-          pw.Text(till.toUpperCase(),
-              textAlign: pw.TextAlign.center,
-              style:
-                  pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+          if (till.isNotEmpty) labelled('TILL NUMBER', till),
+          if (till.isNotEmpty && hasPaybill) pw.SizedBox(height: 3),
+          if (hasPaybill) ...[
+            labelled('PAYBILL NUMBER', paybill),
+            pw.SizedBox(height: 3),
+            labelled('ACCOUNT NUMBER', account),
+          ],
         ]),
       ),
     );

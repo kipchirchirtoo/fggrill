@@ -133,6 +133,8 @@ class PrintService {
     num? changeGiven,
     String? companyNameOverride,
     String? tillNumber,
+    String? paybillNumber,
+    String? paybillAccount,
     String? duplicateLabel,
   }) async {
     final billCode = (publicCode ?? '').trim();
@@ -182,6 +184,8 @@ class PrintService {
             .format(_toKenyaTime(sale.createdAt)),
         'payment_method': sale.paymentMethod,
         'till_number': tillNumber,
+        'paybill_number': paybillNumber,
+        'paybill_account': paybillAccount,
         'duplicate_label': duplicateLabel,
       };
 
@@ -394,6 +398,10 @@ class PrintService {
                       fontWeight: pw.FontWeight.bold, fontSize: 10)),
               if (tillNumber != null && tillNumber.trim().isNotEmpty)
                 _tillComplianceBlock(tillNumber.trim()),
+              if ((paybillNumber ?? '').trim().isNotEmpty &&
+                  (paybillAccount ?? '').trim().isNotEmpty)
+                _paybillComplianceBlock(
+                    paybillNumber!.trim(), paybillAccount!.trim()),
               pw.Text('Please come again',
                   style: const pw.TextStyle(fontSize: 7)),
               if (klub == null)
@@ -1038,6 +1046,41 @@ class PrintService {
                 style: pw.TextStyle(fontSize: fontSize)),
           ),
         ],
+      ),
+    );
+  }
+
+  pw.Widget _paybillComplianceBlock(String paybill, String account) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 3, bottom: 4),
+      child: pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(vertical: 4),
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(
+            top: pw.BorderSide(width: 0.7),
+            bottom: pw.BorderSide(width: 0.7),
+          ),
+        ),
+        child: pw.Column(children: [
+          pw.Text('PAYBILL NUMBER',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 1),
+          pw.Text(paybill,
+              textAlign: pw.TextAlign.center,
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 3),
+          pw.Text('ACCOUNT NUMBER',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 1),
+          pw.Text(account.toUpperCase(),
+              textAlign: pw.TextAlign.center,
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        ]),
       ),
     );
   }

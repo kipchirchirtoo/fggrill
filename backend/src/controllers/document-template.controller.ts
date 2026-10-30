@@ -347,25 +347,56 @@ async function resolveTemplateRow(templateKey: string, branchId: number | null) 
   return override;
 }
 
-async function resolveTillNumber(outletId: string | null, branchId: number | null): Promise<string | null> {
+export interface PaymentTarget {
+  till_number: string | null;
+  paybill_number: string | null;
+  paybill_account: string | null;
+}
+
+/**
+ * What customers are told to pay to. The most specific level wins as a unit: an outlet that has a till or a paybill uses
+ * its own; otherwise the branch default is used. At one level a till and a paybill can both be set (both are printed).
+ */
+async function resolvePaymentTarget(outletId: string | null, branchId: number | null): Promise<PaymentTarget> {
+  const empty: PaymentTarget = { till_number: null, paybill_number: null, paybill_account: null };
+  const pick = (till: any, pb: any, acct: any): PaymentTarget | null => {
+    const t = till ? String(till).trim() : '';
+    const p = pb && acct ? String(pb).trim() : '';
+    if (!t && !p) return null;
+    return { till_number: t || null, paybill_number: p || null, paybill_account: p ? String(acct).trim() : null };
+  };
   if (outletId) {
     const { data: outlet } = await supabase
       .from('pos_outlets')
-      .select('till_number, branch_id')
+      .select('till_number, paybill_number, paybill_account, branch_id')
       .eq('id', outletId)
       .maybeSingle();
-    if (outlet?.till_number) return String(outlet.till_number);
+    const own = pick(outlet?.till_number, outlet?.paybill_number, outlet?.paybill_account);
+    if (own) return own;
     if (!branchId && outlet?.branch_id) branchId = outlet.branch_id;
   }
   if (branchId) {
     const { data: branch } = await supabase
       .from('branches')
-      .select('default_till_number')
+      .select('default_till_number, default_paybill_number, default_paybill_account')
       .eq('id', branchId)
       .maybeSingle();
-    if (branch?.default_till_number) return String(branch.default_till_number);
+    const dflt = pick(branch?.default_till_number, branch?.default_paybill_number, branch?.default_paybill_account);
+    if (dflt) return dflt;
   }
-  return null;
+  return empty;
+}
+
+/** Validates a paybill + account pair from a request. Both empty = clear. Returns an error message or the cleaned pair. */
+function cleanPaybill(body: any, numberKey: string, accountKey: string): { error?: string; number: string | null; account: string | null } {
+  const n = body?.[numberKey] == null ? '' : String(body[numberKey]).trim();
+  const a = body?.[accountKey] == null ? '' : String(body[accountKey]).trim();
+  if (!n && !a) return { number: null, account: null };
+  if (!n) return { error: 'Enter the paybill number as well as the account number.', number: null, account: null };
+  if (!a) return { error: 'A paybill number must have an account number.', number: null, account: null };
+  if (!/^\d{5,7}$/.test(n)) return { error: 'Paybill number must be 5 to 7 digits.', number: null, account: null };
+  if (!/^[A-Za-z0-9 _\-\/.]{1,30}$/.test(a)) return { error: 'Account number can have letters, digits, spaces, - _ / . (max 30).', number: null, account: null };
+  return { number: n, account: a };
 }
 
 // ── Controllers ─────────────────────────────────────────────────────────────
@@ -439,7 +470,8 @@ export const resolveDocument = async (req: Request, res: Response, next: NextFun
     const def = defaultTemplate(key);
     if (!def) { res.status(404).json({ success: false, message: 'Unknown template' }); return; }
     const override = await resolveTemplateRow(key, branchId);
-    const tillNumber = await resolveTillNumber(outletId, branchId);
+    const payment = await resolvePaymentTarget(outletId, branchId);
+    const tillNumber = payment.till_number;
     // Branch contact details printed on customer paper (null/empty = keep the app's default).
     let contact: any = null;
     let contactBranchId = branchId;
@@ -468,6 +500,8 @@ export const resolveDocument = async (req: Request, res: Response, next: NextFun
         document_type: def.document_type,
         sections: override?.sections?.length ? override.sections : def.sections,
         till_number: tillNumber,
+        paybill_number: payment.paybill_number,
+        paybill_account: payment.paybill_account,
         contact,
       },
     });
@@ -534,22 +568,26 @@ export const listTills = async (_req: Request, res: Response, next: NextFunction
   try {
     const { data: branches } = await supabase
       .from('branches')
-      .select('id, name, code, default_till_number')
+      .select('id, name, code, default_till_number, default_paybill_number, default_paybill_account')
       .order('name');
     const { data: outlets } = await supabase
       .from('pos_outlets')
-      .select('id, name, outlet_type, branch_id, till_number')
+      .select('id, name, outlet_type, branch_id, till_number, paybill_number, paybill_account')
       .order('name');
     const byBranch = (branches || []).map((b: any) => ({
       branch_id: b.id,
       branch_name: b.name,
       branch_code: b.code,
       default_till_number: b.default_till_number,
+      default_paybill_number: b.default_paybill_number,
+      default_paybill_account: b.default_paybill_account,
       outlets: (outlets || []).filter((o: any) => o.branch_id === b.id).map((o: any) => ({
         outlet_id: o.id,
         outlet_name: o.name,
         outlet_type: o.outlet_type,
         till_number: o.till_number,
+        paybill_number: o.paybill_number,
+        paybill_account: o.paybill_account,
       })),
     }));
     res.json({ success: true, data: byBranch });
@@ -583,6 +621,38 @@ export const updateBranchTill = async (req: Request, res: Response, next: NextFu
       .single();
     if (error) throw error;
     res.json({ success: true, message: 'Branch default till updated', data });
+  } catch (e) { next(e); }
+};
+
+export const updateOutletPaybill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { outletId } = req.params;
+    const pair = cleanPaybill(req.body, 'paybill_number', 'paybill_account');
+    if (pair.error) { res.status(400).json({ success: false, message: pair.error }); return; }
+    const { data, error } = await supabase
+      .from('pos_outlets')
+      .update({ paybill_number: pair.number, paybill_account: pair.account })
+      .eq('id', outletId)
+      .select('id, name, paybill_number, paybill_account')
+      .single();
+    if (error) throw error;
+    res.json({ success: true, message: 'Outlet paybill updated', data });
+  } catch (e) { next(e); }
+};
+
+export const updateBranchPaybill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branchId } = req.params;
+    const pair = cleanPaybill(req.body, 'default_paybill_number', 'default_paybill_account');
+    if (pair.error) { res.status(400).json({ success: false, message: pair.error }); return; }
+    const { data, error } = await supabase
+      .from('branches')
+      .update({ default_paybill_number: pair.number, default_paybill_account: pair.account })
+      .eq('id', branchId)
+      .select('id, name, default_paybill_number, default_paybill_account')
+      .single();
+    if (error) throw error;
+    res.json({ success: true, message: 'Branch default paybill updated', data });
   } catch (e) { next(e); }
 };
 

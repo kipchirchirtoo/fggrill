@@ -44,6 +44,8 @@ router.get('/', templateEditors, scopeToOwnBranch, ctrl.listTemplates);
 router.get('/tills', authorize([UserRole.SUPER_ADMIN]), ctrl.listTills);
 router.put('/tills/outlet/:outletId', authorize([UserRole.SUPER_ADMIN]), ctrl.updateOutletTill);
 router.put('/tills/branch/:branchId', authorize([UserRole.SUPER_ADMIN]), ctrl.updateBranchTill);
+router.put('/tills/outlet/:outletId/paybill', authorize([UserRole.SUPER_ADMIN]), ctrl.updateOutletPaybill);
+router.put('/tills/branch/:branchId/paybill', authorize([UserRole.SUPER_ADMIN]), ctrl.updateBranchPaybill);
 router.get('/:key', templateEditors, scopeToOwnBranch, ctrl.getTemplate);
 router.put('/:key', templateEditors, scopeToOwnBranch, ctrl.saveTemplate);
 router.post('/:key/reset', templateEditors, scopeToOwnBranch, ctrl.resetTemplate);
