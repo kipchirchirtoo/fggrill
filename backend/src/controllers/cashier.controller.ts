@@ -4771,6 +4771,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                             .from('conference_hall_bookings')
                             .select('*')
                             .not('payment_status', 'in', '("paid","credit_bill","corporate_credit","completed")')
+                            .or('booking_status.is.null,booking_status.neq.cancelled')
                             .order('created_at', { ascending: false });
 
                         if (effectiveBranchId) {
