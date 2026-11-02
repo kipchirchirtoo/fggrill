@@ -961,8 +961,12 @@ async function findConferenceBookingByReference(
 function buildConferenceBillResponse(booking: any): Record<string, unknown> {
     const totalAmount = Number(booking.total_amount || 0);
     const amountPaid = Number(booking.amount_paid || 0);
-    const balance = Math.max(0, totalAmount - amountPaid);
-    const paymentStatus = balance <= 0 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid');
+    const isCancelled = String(booking.booking_status || '').toLowerCase() === 'cancelled';
+    // A cancelled booking owes nothing; show it as voided so the cashier cannot collect on it.
+    const balance = isCancelled ? 0 : Math.max(0, totalAmount - amountPaid);
+    const paymentStatus = isCancelled
+        ? 'voided'
+        : (balance <= 0 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid'));
 
     return {
         success: true,
@@ -979,7 +983,7 @@ function buildConferenceBillResponse(booking: any): Record<string, unknown> {
                 email: booking.customer_email,
                 start_date: booking.start_date,
                 end_date: booking.end_date,
-                status: booking.payment_status || paymentStatus,
+                status: isCancelled ? 'voided' : (booking.payment_status || paymentStatus),
                 items: Array.isArray(booking.items) ? booking.items : []
             },
             financials: {

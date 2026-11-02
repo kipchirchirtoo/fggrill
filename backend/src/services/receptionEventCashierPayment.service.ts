@@ -144,7 +144,8 @@ async function loadConferenceBooking(client: PgClient, bookingId: string) {
           balance_amount,
           GREATEST(COALESCE(total_amount, 0) - GREATEST(COALESCE(amount_paid, 0), COALESCE(deposit_amount, 0)), 0)
         ) AS balance_amount,
-        payment_status
+        payment_status,
+        booking_status
       FROM conference_hall_bookings
       WHERE id = $1
       LIMIT 1
@@ -219,6 +220,10 @@ async function recordEventCashierPayment(
       source === 'conference'
         ? await loadConferenceBooking(client, input.bookingId)
         : await loadCateringBooking(client, input.bookingId);
+
+    if (String(booking.booking_status || '').toLowerCase() === 'cancelled') {
+      throw new AppError('This booking is cancelled/voided and cannot take payments', 409);
+    }
 
     const totalAmount = money(booking.total_amount);
     const paidBefore = money(booking.paid_amount);
