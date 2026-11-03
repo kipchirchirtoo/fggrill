@@ -2948,7 +2948,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       total: order.totalAmount,
       paymentMethod: 'pending',
     );
-    final receiptItems = _cart
+    var receiptItems = _cart
         .map((item) => CartItem(
               productId: item.item.id,
               name: item.item.hasOffer
@@ -2958,6 +2958,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               qty: item.quantity,
             ))
         .toList();
+    // The cart can already be empty by the time this runs; the order the server
+    // just saved is the source of truth, so a bill never prints with no items.
+    if (receiptItems.isEmpty) receiptItems = _activeBillItems(order);
 
     try {
       final user = ref.read(authNotifierProvider).valueOrNull;
@@ -3291,10 +3294,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
 
     try {
+      // The "mark printed" response can come back without the line items; fall
+      // back to the order already on screen so the original bill is never blank.
+      var originalItems = _activeBillItems(updatedOrder);
+      if (originalItems.isEmpty) originalItems = _activeBillItems(order);
       await _printCustomerBillFromSavedOrder(
         updatedOrder,
         fallbackTitle: 'CUSTOMER BILL',
-        itemsOverride: _activeBillItems(updatedOrder),
+        itemsOverride: originalItems,
       );
       if (mounted) {
         AppNotifier.showSnackBar(
