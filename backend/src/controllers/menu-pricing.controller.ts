@@ -258,6 +258,34 @@ const fetchBranchPricing = async (
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 };
 
+// The till reads pos_outlet_items, so a branch selling-price override must be
+// pushed there or POS keeps charging the old price.
+const syncOverrideToPos = async (
+  branchId: number,
+  entries: Array<{ item_id: any; selling_price: number | null }>
+): Promise<void> => {
+  try {
+    const priced = entries.filter((e) => e.item_id && e.selling_price != null);
+    if (!priced.length) return;
+    const { data: outlets } = await supabase.from('pos_outlets').select('id').eq('branch_id', branchId);
+    const outletIds = (outlets || []).map((o: any) => o.id);
+    if (!outletIds.length) return;
+    const now = new Date().toISOString();
+    for (const e of priced) {
+      const id = String(e.item_id);
+      let q = supabase
+        .from('pos_outlet_items')
+        .update({ selling_price: e.selling_price, updated_at: now })
+        .in('outlet_id', outletIds);
+      q = id.startsWith('pos:') ? q.eq('id', id.slice(4)) : q.eq('source_item_id', id);
+      const { error } = await q;
+      if (error) logger.warn(`syncOverrideToPos failed for ${id}: ${error.message}`);
+    }
+  } catch (err) {
+    logger.warn('syncOverrideToPos threw:', err);
+  }
+};
+
 // @desc    List every menu item for a branch with its effective cost/selling/margin
 // @route   GET /api/menu-pricing/branch/:branchId?type=restaurant|bar
 // @access  SuperAdmin, Director, Branch Manager, Accountant roles
@@ -340,6 +368,8 @@ export const upsertBranchItemPricing = async (
       .single();
     if (error) throw error;
 
+    await syncOverrideToPos(branchId, [{ item_id, selling_price: row.selling_price }]);
+
     res.status(200).json({ success: true, data });
   } catch (error) {
     logger.error('upsertBranchItemPricing failed:', error);
@@ -391,6 +421,8 @@ export const bulkUpsertBranchPricing = async (
       .upsert(rows, { onConflict: 'item_type,item_id,branch_id' })
       .select();
     if (error) throw error;
+
+    await syncOverrideToPos(branchId, rows.map((r: any) => ({ item_id: r.item_id, selling_price: r.selling_price })));
 
     res.status(200).json({ success: true, data: { saved: (data || []).length } });
   } catch (error) {

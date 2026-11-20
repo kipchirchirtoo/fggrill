@@ -368,6 +368,26 @@ export const updateMenuItem = async (
       throw error;
     }
 
+    // The till sells from pos_outlet_items, not restaurant_menu_items. Push the
+    // changed price/cost/name/availability through so POS matches the menu.
+    try {
+      const posPatch: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (updateData.selling_price !== undefined) posPatch.selling_price = updateData.selling_price;
+      if (updateData.cost_price !== undefined) posPatch.cost_price = updateData.cost_price;
+      if (updateData.name !== undefined) posPatch.name = updateData.name;
+      if (updateData.is_available !== undefined) posPatch.is_available = updateData.is_available;
+      if (Object.keys(posPatch).length > 1) {
+        const { error: posErr } = await supabase
+          .from('pos_outlet_items')
+          .update(posPatch)
+          .eq('source_table', 'restaurant_menu_items')
+          .eq('source_item_id', String(req.params.id));
+        if (posErr) logger.warn(`POS sync after menu update failed: ${posErr.message}`);
+      }
+    } catch (syncErr) {
+      logger.warn('POS sync after menu update threw:', syncErr);
+    }
+
     res.status(200).json({
       success: true,
       data: item
