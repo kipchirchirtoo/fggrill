@@ -2551,6 +2551,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       }
 
       final bill = await ref.read(cashierRepositoryProvider).getBillDetails(targetId);
+      _throwIfBillLookupFailed(bill);
       final data = _payload(bill);
       setState(() {
         _bill = data;
@@ -2647,6 +2648,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         final fetched = await ref
             .read(cashierRepositoryProvider)
             .getBillDetails(lookupRef);
+        _throwIfBillLookupFailed(fetched);
         final data = _payload(fetched);
         if (data.isNotEmpty) billData = data;
       }
@@ -3754,6 +3756,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           final fetched = await ref
               .read(cashierRepositoryProvider)
               .getBillDetails(lookupRef);
+          _throwIfBillLookupFailed(fetched);
           final data = _payload(fetched);
           if (data.isNotEmpty) bill = data;
         }
@@ -10072,6 +10075,16 @@ Future<num?> _numberDialog(BuildContext context, String title, String label) {
       ],
     ),
   ).whenComplete(controller.dispose);
+}
+
+/// getBillDetails swallows request errors and returns {success:false,message}.
+/// _payload() hands that error map back as if it were a bill, which showed as a
+/// KES 0 bill that looked "cleared" and printed as 0. Fail loudly instead.
+void _throwIfBillLookupFailed(dynamic response) {
+  final map = _asMap(response);
+  if (map['success'] == false) {
+    throw Exception((map['message'] ?? 'Bill lookup failed').toString());
+  }
 }
 
 Map<String, dynamic> _payload(dynamic data) {
