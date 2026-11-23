@@ -728,7 +728,14 @@ async function reconcileSettledOutletPosOrder(order: any): Promise<any> {
     return updated || order;
 }
 
-async function loadOutletPosShiftIdsForLookup(req: Request): Promise<string[] | null> {
+// Scope POS bill lookups by BRANCH, not by a list of every shift id the branch has
+// ever had. That list grows with each shift (Kyogong is past 640) and, put in an
+// .in('shift_id', ...) filter, makes the request URL too long: Supabase answers
+// "Bad Request" and every POS bill lookup fails. pos_shift_orders.branch_id always
+// matches its shift's branch (checked on 111k orders), so this is equivalent.
+type OutletPosLookupScope = { branchId: number | null; deny: boolean };
+
+async function loadOutletPosShiftIdsForLookup(req: Request): Promise<OutletPosLookupScope> {
     const requestedBranchId = parseBranchId(req.query.branch_id);
     const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
 
@@ -737,33 +744,19 @@ async function loadOutletPosShiftIdsForLookup(req: Request): Promise<string[] | 
             throw new AppError('Forbidden: cannot access POS bills from another branch', 403);
         }
 
-        if (!userBranchId) return [];
-
-        const { data: shifts, error } = await supabase
-            .from('pos_outlet_shifts')
-            .select('id')
-            .eq('branch_id', userBranchId);
-
-        if (error) throw new AppError(`POS shift lookup failed: ${error.message}`, 500);
-        return (shifts || []).map((shift: any) => String(shift.id));
+        if (!userBranchId) return { branchId: null, deny: true };
+        return { branchId: userBranchId, deny: false };
     }
 
-    if (!requestedBranchId) return null;
-
-    const { data: shifts, error } = await supabase
-        .from('pos_outlet_shifts')
-        .select('id')
-        .eq('branch_id', requestedBranchId);
-
-    if (error) throw new AppError(`POS shift lookup failed: ${error.message}`, 500);
-    return (shifts || []).map((shift: any) => String(shift.id));
+    return { branchId: requestedBranchId || null, deny: false };
 }
 
 async function queryOutletPosOrderByColumn(
     column: 'id' | 'order_number' | 'short_code',
     value: string,
-    shiftIds: string[] | null
+    scope: OutletPosLookupScope
 ): Promise<any | null> {
+    if (scope.deny) return null;
     let query = supabase
         .from('pos_shift_orders')
         .select('*')
@@ -772,10 +765,7 @@ async function queryOutletPosOrderByColumn(
         .not('payment_status', 'eq', 'voided')
         .limit(1);
 
-    if (shiftIds) {
-        if (!shiftIds.length) return null;
-        query = query.in('shift_id', shiftIds);
-    }
+    if (scope.branchId) query = query.eq('branch_id', scope.branchId);
 
     const { data, error } = await query;
     if (error) {
@@ -817,9 +807,8 @@ async function findOutletPosOrderByReference(
             .order('created_at', { ascending: false })
             .limit(1);
 
-        if (shiftIds && shiftIds.length > 0) {
-            suffixQuery = suffixQuery.in('shift_id', shiftIds);
-        }
+        if (shiftIds.deny) return null;
+        if (shiftIds.branchId) suffixQuery = suffixQuery.eq('branch_id', shiftIds.branchId);
 
         const { data: suffixMatches } = await suffixQuery;
         if (suffixMatches && suffixMatches.length > 0) {
