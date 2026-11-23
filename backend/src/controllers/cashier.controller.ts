@@ -8931,6 +8931,20 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         ['other', breakdown.total_other ?? shift?.total_other_sales],
     ] as const;
 
+    // The shift ledger (cashier_shift_transactions) is the authoritative record of
+    // what was taken per method — it is exactly what the shift stored at close.
+    // The merged evidence lines also contain the SAME payment again from
+    // cashier_transactions, plus later credit settlements ("paid_bill"), and the
+    // line de-duplication is a guess, so summing them double counts or drops
+    // payments. When the ledger has rows, use it for the physical methods.
+    const ledgerMethodTotals: Record<string, number> = {};
+    const hasShiftLedger = (shiftTransactions || []).length > 0;
+    (shiftTransactions || []).forEach((tx: any) => {
+        if (tx?.is_voided === true || tx?.voided_at) return;
+        const amount = logbookNumber(tx.amount);
+        if (amount > 0) addAmount(ledgerMethodTotals, tx.payment_method, amount);
+    });
+
     const payments = paymentRows.reduce<Record<string, number>>((acc, [method, explicit]) => {
         const explicitAmount = logbookNumber(explicit);
         const evidenceAmount =
@@ -8938,7 +8952,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             || logbookNumber(allLinePaymentTotals[method])
             || logbookNumber(outletOrderPaymentTotals[method]);
 
-        if (method === 'credit_bill') {
+        if (hasShiftLedger && ['cash', 'mpesa', 'card', 'bank'].includes(method)) {
+            acc[method] = logbookNumber(ledgerMethodTotals[method]);
+        } else if (method === 'credit_bill') {
             acc[method] = evidenceAmount || creditBillsTotal || explicitAmount;
         } else {
             // Prioritize actual cleared line transaction evidence over stale snapshot fields
