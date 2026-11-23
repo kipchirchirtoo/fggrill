@@ -837,6 +837,20 @@ async function findOutletPosOrderByReference(
 
     targetOrder = await reconcileSettledOutletPosOrder(targetOrder);
 
+    // Every item voided -> nothing payable. Refuse with a clear reason instead of
+    // showing a KES 0 bill that looks "cleared" and prints/reprints as 0.
+    {
+        const lineItems = Array.isArray(targetOrder.items) ? targetOrder.items : [];
+        const allItemsVoided = lineItems.length > 0 && lineItems.every((it: any) =>
+            it?.is_fully_voided === true || it?.is_voided === true ||
+            (Number(it?.voided_qty || 0) > 0 && Number(it?.voided_qty || 0) >= Number(it?.quantity || 0)));
+        const payStatus = String(targetOrder.payment_status || '').toLowerCase();
+        if (allItemsVoided && Number(targetOrder.total_amount || 0) <= 0
+            && !['paid', 'credit_bill'].includes(payStatus)) {
+            throw new AppError('This bill has no payable items — all items on it were voided', 409);
+        }
+    }
+
     const { data: shift, error: shiftError } = await supabase
         .from('pos_outlet_shifts')
         .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
@@ -10526,6 +10540,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 } else {
                     posOrdersQuery = posOrdersQuery
                         .in('payment_status', allowedStatuses)
+                        // A bill whose every item was voided keeps status open/unpaid
+                        // with total_amount 0 (void_order_item only lowers the total).
+                        // There is nothing to collect, so it must never be listed
+                        // for clearance, cleared, or reprinted as a 0 bill.
+                        .gt('total_amount', 0)
                         // Pending void approvals are stopped from payment. Once
                         // approved, they move to the cashier voided-orders view
                         // and never count as unpaid bills.
