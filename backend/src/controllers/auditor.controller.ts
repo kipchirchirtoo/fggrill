@@ -3986,9 +3986,43 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
  * G. Sold Items Analysis
  * Compare items sold against stock requested to identify patterns.
  */
+// Sold Items is expensive (thousands of orders, ~15-20 s) and the screen's Retry /
+// refresh / several accountants re-run it identically. Share one computation per
+// (role, branch, range) and reuse the result briefly so repeats cost nothing and
+// can't pile onto the connection pool.
+const SOLD_ITEMS_CACHE_MS = 2 * 60 * 1000;
+const soldItemsCache = new Map<string, { at: number; payload: any }>();
+const soldItemsInFlight = new Map<string, Promise<any>>();
+
 export const getSoldItemsAnalysis = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const payload = await buildSoldItemsAnalysisPayload(req);
+    const q = req.query as Record<string, any>;
+    const cacheKey = [
+      String(req.user?.role || ''),
+      String(req.user?.branch_id || ''),
+      String(q.branch_id || ''),
+      String(q.start_date || ''),
+      String(q.end_date || ''),
+    ].join('|');
+
+    const hit = soldItemsCache.get(cacheKey);
+    let payload: any;
+    if (hit && Date.now() - hit.at < SOLD_ITEMS_CACHE_MS) {
+      payload = hit.payload;
+    } else {
+      let pending = soldItemsInFlight.get(cacheKey);
+      if (!pending) {
+        pending = buildSoldItemsAnalysisPayload(req).finally(() => soldItemsInFlight.delete(cacheKey));
+        soldItemsInFlight.set(cacheKey, pending);
+      }
+      payload = await pending;
+      soldItemsCache.set(cacheKey, { at: Date.now(), payload });
+      // Payloads can be several MB; keep only a few so Render's memory is safe.
+      if (soldItemsCache.size > 6) {
+        const oldest = [...soldItemsCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+        if (oldest) soldItemsCache.delete(oldest[0]);
+      }
+    }
 
     res.status(200).json({
       success: true,

@@ -31,7 +31,12 @@ function getPool(): Pool | null {
   pool = new Pool({
     connectionString: connStr,
     ssl: { rejectUnauthorized: false },
-    max: 10, // Strict pool cap for Supabase pooler
+    // 10 was exhausted by till polling (kitchen orders, captain orders, unpaid
+    // lists all hold a connection ~1s each), so heavier requests like Sold Items
+    // waited the full connectionTimeoutMillis and failed with "timeout exceeded
+    // when trying to connect". The pooler (port 6543, transaction mode) accepts
+    // many client connections; override with DB_POOL_MAX if needed.
+    max: Math.max(5, Number(process.env.DB_POOL_MAX) || 25),
     idleTimeoutMillis: 5000, // Return idle connections to Supavisor quickly
     connectionTimeoutMillis: 10000,
     maxUses: 1000, // Recycle connections periodically to prevent stale state
